@@ -120,6 +120,7 @@ function Dashboard({ uid }: { uid: string }) {
           </form>
         </section>
       </main>
+      <footer className="build muted">Build {__APP_VERSION__}</footer>
     </>
   );
 }

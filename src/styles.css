@@ -184,3 +184,5 @@ button:disabled { opacity: 0.6; cursor: default; }
   justify-content: center;
 }
 .dpad button { font-size: 1.4rem; }
+
+.build { text-align: center; font-size: 0.75rem; padding: 24px 16px; }
