@@ -1,10 +1,11 @@
 import { io, type Socket } from "socket.io-client";
 import { useEffect, useState } from "react";
-import type { Ack, ClientToServer, GameState, ServerToClient } from "../shared/types.ts";
+import type { ClientToServer, GameState, ServerToClient, View } from "../shared/types.ts";
 
-export const socket: Socket<ServerToClient, ClientToServer> = io({ autoConnect: true });
+// Connects only while a table screen is open, after login, so the session cookie goes with it.
+export const socket: Socket<ServerToClient, ClientToServer> = io({ autoConnect: false });
 
-/** Latest game state pushed by the server for whatever room this screen joined. */
+/** Latest game state pushed by the server for the table this screen joined. */
 export function useGameState(): GameState | null {
   const [state, setState] = useState<GameState | null>(null);
   useEffect(() => {
@@ -16,16 +17,23 @@ export function useGameState(): GameState | null {
   return state;
 }
 
-/** Re-runs `join` on every (re)connect so screens recover after a dropped connection. */
-export function useJoin(join: (() => void) | null) {
+/** Connects, opens the game's table as the given view, and rejoins after any dropped connection. */
+export function useTable(gameId: string, view: View): string {
+  const [error, setError] = useState("");
   useEffect(() => {
-    if (!join) return;
-    if (socket.connected) join();
+    const join = () =>
+      socket.emit("joinGame", { gameId, view }, (res) => setError(res.ok ? "" : res.error));
+    const onError = (err: Error) => setError(err.message);
     socket.on("connect", join);
+    socket.on("connect_error", onError);
+    socket.connect();
     return () => {
       socket.off("connect", join);
+      socket.off("connect_error", onError);
+      socket.disconnect();
     };
-  }, [join]);
+  }, [gameId, view]);
+  return error;
 }
 
 export function useConnected(): boolean {
@@ -41,22 +49,4 @@ export function useConnected(): boolean {
     };
   }, []);
   return connected;
-}
-
-export function ackError(res: Ack<any>): string | null {
-  return res.ok ? null : res.error;
-}
-
-export function store<T>(key: string, value?: T): T | null {
-  try {
-    if (value !== undefined) localStorage.setItem(key, JSON.stringify(value));
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function query(name: string): string {
-  return new URLSearchParams(location.search).get(name) ?? "";
 }

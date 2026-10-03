@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
-import type { Resources, Token } from "../../shared/types.ts";
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import type { GameDetail, Resources, Token } from "../../shared/types.ts";
+import { api } from "../api.ts";
 import { Grid } from "../components/Grid.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
-import { socket, store, useGameState, useJoin } from "../socket.ts";
-
-interface GmSession {
-  code: string;
-  gmKey: string;
-}
+import { TableError } from "../components/TableError.tsx";
+import { socket, useGameState, useTable } from "../socket.ts";
 
 const RESOURCE_FIELDS: [keyof Resources, keyof Resources, string][] = [
   ["hp", "maxHp", "Health"],
@@ -18,43 +16,22 @@ const RESOURCE_FIELDS: [keyof Resources, keyof Resources, string][] = [
 
 /** The GM's laptop: runs the table and can override anything. */
 export function Gm() {
-  const [session, setSession] = useState<GmSession | null>(() => store<GmSession>("solp.gm"));
-  const [error, setError] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { id = "" } = useParams();
+  const error = useTable(id, "gm");
   const state = useGameState();
+  const [game, setGame] = useState<GameDetail | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const join = useCallback(() => {
-    if (!session) return;
-    socket.emit("joinGm", session, (res) => {
-      if (!res.ok) {
-        setError(res.error);
-        setSession(null);
-      }
-    });
-  }, [session]);
-  useJoin(session ? join : null);
+  useEffect(() => {
+    api<{ game: GameDetail }>(`/games/${id}`)
+      .then((r) => setGame(r.game))
+      .catch(() => {});
+  }, [id]);
 
-  const createRoom = () => {
-    socket.emit("createRoom", (res) => {
-      if (!res.ok) return setError(res.error);
-      const s = { code: res.code, gmKey: res.gmKey };
-      store("solp.gm", s);
-      setError("");
-      setSession(s);
-    });
-  };
-
-  if (!session) {
-    return (
-      <main className="center">
-        <h1>Game Master</h1>
-        {error && <p className="error">{error} Start a new room below.</p>}
-        <button className="big-button" onClick={createRoom}>Create room</button>
-      </main>
-    );
-  }
+  if (error) return <TableError error={error} gameId={id} />;
 
   const selected = selectedId ? state?.tokens[selectedId] : undefined;
+  const online = new Set(state?.online ?? []);
 
   const onCellClick = (x: number, y: number) => {
     if (selectedId) socket.emit("moveToken", { tokenId: selectedId, x, y }, () => {});
@@ -63,20 +40,10 @@ export function Gm() {
   return (
     <main className="gm">
       <header className="gm-header">
-        <h2>Room {session.code}</h2>
+        <Link to={`/games/${id}`} className="muted">← {game?.name ?? "Game"}</Link>
         <ConnectionBadge />
-        <a href={`/board?room=${session.code}`} target="_blank" rel="noreferrer">Open board</a>
-        <span className="muted">Players join at {location.host}/play with code {session.code}</span>
-        <button
-          className="link"
-          onClick={() => {
-            if (!confirm("Leave this room and start a new one?")) return;
-            localStorage.removeItem("solp.gm");
-            setSession(null);
-          }}
-        >
-          New room
-        </button>
+        <a href={`/games/${id}/board`} target="_blank" rel="noreferrer">Open board</a>
+        {game?.inviteCode && <span className="muted">Invite code: {game.inviteCode}</span>}
       </header>
 
       <section className="gm-map">
@@ -100,10 +67,11 @@ export function Gm() {
         )}
         <h3>Players</h3>
         <ul className="plain">
-          {state &&
-            Object.values(state.players).map((p) => (
-              <li key={p.id}>
-                {p.name} <span className={"dot " + (p.connected ? "ok" : "bad")} />
+          {game?.members
+            .filter((m) => m.role === "player")
+            .map((m) => (
+              <li key={m.id}>
+                {m.displayName} <span className={"dot " + (online.has(m.id) ? "ok" : "bad")} />
               </li>
             ))}
         </ul>

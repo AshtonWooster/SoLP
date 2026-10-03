@@ -1,46 +1,33 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import QRCode from "qrcode";
+import type { GameDetail } from "../../shared/types.ts";
+import { api } from "../api.ts";
 import { Grid } from "../components/Grid.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
-import { query, socket, useGameState, useJoin } from "../socket.ts";
+import { TableError } from "../components/TableError.tsx";
+import { useGameState, useTable } from "../socket.ts";
 
 /** The shared table display. View-only: players act from their phones, the GM from the laptop. */
 export function Board() {
-  const [code, setCode] = useState(query("room").toUpperCase());
-  const [input, setInput] = useState("");
-  const [error, setError] = useState("");
-  const [qr, setQr] = useState("");
+  const { id = "" } = useParams();
+  const error = useTable(id, "board");
   const state = useGameState();
-
-  const join = useCallback(() => {
-    socket.emit("joinBoard", { code }, (res) => setError(res.ok ? "" : res.error));
-  }, [code]);
-  useJoin(code ? join : null);
+  const [inviteCode, setInviteCode] = useState("");
+  const [qr, setQr] = useState("");
 
   useEffect(() => {
-    if (!code) return;
-    QRCode.toDataURL(`${location.origin}/play?room=${code}`, { margin: 1, width: 240 }).then(setQr);
-  }, [code]);
+    api<{ game: GameDetail }>(`/games/${id}`)
+      .then((r) => setInviteCode(r.game.inviteCode ?? ""))
+      .catch(() => {});
+  }, [id]);
 
-  if (!code || error) {
-    return (
-      <main className="center">
-        <h1>Game Board</h1>
-        {error && <p className="error">{error}</p>}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            history.replaceState(null, "", `/board?room=${input.toUpperCase()}`);
-            setError("");
-            setCode(input.toUpperCase());
-          }}
-        >
-          <input placeholder="Room code" value={input} onChange={(e) => setInput(e.target.value)} maxLength={4} autoFocus />
-          <button>Show board</button>
-        </form>
-      </main>
-    );
-  }
+  useEffect(() => {
+    if (!inviteCode) return;
+    QRCode.toDataURL(`${location.origin}/join/${inviteCode}`, { margin: 1, width: 240 }).then(setQr);
+  }, [inviteCode]);
+
+  if (error) return <TableError error={error} gameId={id} />;
 
   return (
     <main className="board">
@@ -49,13 +36,15 @@ export function Board() {
         <ConnectionBadge />
       </header>
       {state && <Grid state={state} />}
-      <aside className="join-card">
-        {qr && <img src={qr} alt="Scan to join" />}
-        <div>
-          <div className="muted">Join at {location.host}/play</div>
-          <div className="room-code">{code}</div>
-        </div>
-      </aside>
+      {inviteCode && (
+        <aside className="join-card">
+          {qr && <img src={qr} alt="Scan to join" />}
+          <div>
+            <div className="muted">Scan to join, or enter code</div>
+            <div className="room-code">{inviteCode}</div>
+          </div>
+        </aside>
+      )}
     </main>
   );
 }

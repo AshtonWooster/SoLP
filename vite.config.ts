@@ -4,7 +4,10 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    // In dev, the game server runs on 3001; Vite forwards live connections to it.
-    proxy: { "/socket.io": { target: "http://localhost:3001", ws: true } },
+    // In dev, the game server runs on 3001; Vite forwards API calls and live connections to it.
+    proxy: {
+      "/socket.io": { target: "http://localhost:3001", ws: true },
+      "/api": "http://localhost:3001",
+    },
   },
 });
