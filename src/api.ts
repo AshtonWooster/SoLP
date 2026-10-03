@@ -1,27 +1,10 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { doc, onSnapshot, type DocumentData } from "firebase/firestore";
 import type { User } from "../shared/types.ts";
-
-export class ApiError extends Error {
-  constructor(message: string, public status: number) {
-    super(message);
-  }
-}
-
-/** JSON request to the server's /api. Throws ApiError with the server's message on failure. */
-export async function api<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    credentials: "same-origin",
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(data.error ?? `Request failed (${res.status})`, res.status);
-  return data as T;
-}
+import { db, friendlyError } from "./firebase.ts";
 
 export interface AuthContextValue {
-  /** undefined while the session is still being checked. */
+  /** undefined while Firebase is still restoring the session. */
   user: User | null | undefined;
   setUser: (u: User | null) => void;
 }
@@ -29,3 +12,39 @@ export interface AuthContextValue {
 export const AuthContext = createContext<AuthContextValue>({ user: undefined, setUser: () => {} });
 
 export const useAuth = () => useContext(AuthContext);
+
+export interface Live<T> {
+  data: T | undefined;
+  error: string;
+  loading: boolean;
+  /** True while showing saved data because the connection to Firebase is down. */
+  offline: boolean;
+}
+
+/** Subscribes to one Firestore document; re-renders whenever anyone changes it. Pass null to skip. */
+export function useDoc<T = DocumentData>(path: string | null): Live<T> {
+  const [state, setState] = useState<Live<T>>({ data: undefined, error: "", loading: !!path, offline: false });
+  useEffect(() => {
+    if (!path) return setState({ data: undefined, error: "", loading: false, offline: false });
+    setState((s) => ({ ...s, loading: true }));
+    return onSnapshot(
+      doc(db, path),
+      { includeMetadataChanges: true },
+      (snap) =>
+        setState({
+          data: snap.exists() ? (snap.data() as T) : undefined,
+          error: "",
+          loading: false,
+          offline: snap.metadata.fromCache,
+        }),
+      (err) =>
+        setState({
+          data: undefined,
+          error: err.code === "permission-denied" ? "You don't have access to this." : friendlyError(err),
+          loading: false,
+          offline: false,
+        }),
+    );
+  }, [path]);
+  return state;
+}

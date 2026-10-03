@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api.ts";
+import { friendlyError, joinGameFn } from "../firebase.ts";
 
 /** Invite link / QR code target. Joining adds you to the game permanently. */
 export function Join() {
@@ -8,9 +8,9 @@ export function Join() {
   const navigate = useNavigate();
   const [error, setError] = useState("");
   useEffect(() => {
-    api<{ id: string }>("/games/join", { code })
-      .then(({ id }) => navigate(`/games/${id}`, { replace: true }))
-      .catch((err) => setError(err.message));
+    joinGameFn({ code })
+      .then(({ data }) => navigate(`/games/${data.id}`, { replace: true }))
+      .catch((err) => setError(friendlyError(err)));
   }, [code, navigate]);
   return (
     <main className="center">

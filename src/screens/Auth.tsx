@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import type { User } from "../../shared/types.ts";
-import { api, useAuth } from "../api.ts";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+import type { UserDoc } from "../../shared/types.ts";
+import { useAuth } from "../api.ts";
+import { auth, db, friendlyError } from "../firebase.ts";
 
 /** Only follow same-site paths after login, never another website. */
 function safeNext(next: string | null): string {
@@ -19,19 +22,28 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to={next} replace />;
+  // During signup the account exists before its display name is saved; wait for both.
+  if (user && !busy) return <Navigate to={next} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const body = mode === "signup" ? { email, displayName, password } : { email, password };
-      const res = await api<{ user: User }>(`/auth/${mode}`, body);
-      setUser(res.user);
+      if (mode === "signup") {
+        const name = displayName.trim().slice(0, 32);
+        if (!name) throw new Error("Enter a display name.");
+        if (password.length < 8) throw Object.assign(new Error(), { code: "auth/weak-password" });
+        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        await updateProfile(cred.user, { displayName: name });
+        await setDoc(doc(db, "users", cred.user.uid), { displayName: name, email: cred.user.email ?? "" } satisfies UserDoc);
+        setUser({ id: cred.user.uid, email: cred.user.email ?? "", displayName: name });
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      }
       navigate(next, { replace: true });
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
     } finally {
       setBusy(false);
     }

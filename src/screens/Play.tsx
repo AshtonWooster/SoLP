@@ -1,33 +1,41 @@
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { Token } from "../../shared/types.ts";
-import { useAuth } from "../api.ts";
+import type { TableState, Token } from "../../shared/types.ts";
+import { useAuth, useDoc } from "../api.ts";
 import { pct } from "../components/Grid.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
-import { socket, useGameState, useTable } from "../socket.ts";
+import { act, friendlyError } from "../firebase.ts";
+import { useHeartbeat } from "../table.ts";
 
 /** A player's phone: their own character, plus public info about allies. */
 export function Play() {
   const { id = "" } = useParams();
   const { user } = useAuth();
-  const error = useTable(id, "play");
-  const state = useGameState();
+  const table = useDoc<TableState>(`games/${id}/table/state`);
+  const [error, setError] = useState("");
+  useHeartbeat(id, user?.id);
 
-  if (error) return <TableError error={error} gameId={id} />;
+  // Sitting down creates this player's token the first time they open the table.
+  useEffect(() => {
+    act(id, { type: "takeSeat" }).catch((err) => setError(friendlyError(err)));
+  }, [id]);
 
-  const tokens = state ? Object.values(state.tokens) : [];
+  if (error || table.error) return <TableError error={error || table.error} gameId={id} />;
+
+  const tokens = table.data ? Object.values(table.data.tokens) : [];
   const mine = tokens.find((t) => t.ownerId === user?.id);
   const allies = tokens.filter((t) => t.side === "player" && t.ownerId !== user?.id);
 
   const move = (dx: number, dy: number) => {
-    if (mine) socket.emit("moveToken", { tokenId: mine.id, x: mine.x + dx, y: mine.y + dy }, () => {});
+    if (mine) act(id, { type: "step", tokenId: mine.id, dx, dy }).catch(() => {});
   };
 
   return (
     <main className="play">
       <header className="play-header">
         <h2>{mine?.name ?? "…"}</h2>
-        <ConnectionBadge />
+        <ConnectionBadge offline={table.offline} />
       </header>
       {mine && <ResourceBars token={mine} />}
 

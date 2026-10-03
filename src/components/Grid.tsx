@@ -1,7 +1,7 @@
-import type { GameState, Token } from "../../shared/types.ts";
+import type { TableState, Token } from "../../shared/types.ts";
 
 interface Props {
-  state: GameState;
+  state: TableState;
   selectedId?: string | null;
   onTokenClick?: (t: Token) => void;
   onCellClick?: (x: number, y: number) => void;

@@ -1,41 +1,40 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import QRCode from "qrcode";
-import type { GameDetail } from "../../shared/types.ts";
-import { api } from "../api.ts";
+import type { GameDoc, GmMeta, TableState } from "../../shared/types.ts";
+import { useAuth, useDoc } from "../api.ts";
 import { Grid } from "../components/Grid.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
-import { useGameState, useTable } from "../socket.ts";
 
-/** The shared table display. View-only: players act from their phones, the GM from the laptop. */
+/** The shared table display, run by the GM on a big screen. View-only. */
 export function Board() {
   const { id = "" } = useParams();
-  const error = useTable(id, "board");
-  const state = useGameState();
-  const [inviteCode, setInviteCode] = useState("");
+  const { user } = useAuth();
+  const game = useDoc<GameDoc>(`games/${id}`);
+  const isGm = !!user && game.data?.gmId === user.id;
+  const table = useDoc<TableState>(isGm ? `games/${id}/table/state` : null);
+  const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
+  const inviteCode = meta.data?.inviteCode;
   const [qr, setQr] = useState("");
-
-  useEffect(() => {
-    api<{ game: GameDetail }>(`/games/${id}`)
-      .then((r) => setInviteCode(r.game.inviteCode ?? ""))
-      .catch(() => {});
-  }, [id]);
 
   useEffect(() => {
     if (!inviteCode) return;
     QRCode.toDataURL(`${location.origin}/join/${inviteCode}`, { margin: 1, width: 240 }).then(setQr);
   }, [inviteCode]);
 
-  if (error) return <TableError error={error} gameId={id} />;
+  if (game.error) return <TableError error={game.error} gameId={id} />;
+  if (game.loading) return <main className="center muted">Loading…</main>;
+  if (!isGm) return <TableError error="Only the GM can open this screen." gameId={id} />;
+  if (table.error) return <TableError error={table.error} gameId={id} />;
 
   return (
     <main className="board">
       <header className="board-header">
-        <h2>{state?.map.name ?? "Loading…"}</h2>
-        <ConnectionBadge />
+        <h2>{table.data?.map.name ?? "Loading…"}</h2>
+        <ConnectionBadge offline={table.offline} />
       </header>
-      {state && <Grid state={state} />}
+      {table.data && <Grid state={table.data} />}
       {inviteCode && (
         <aside className="join-card">
           {qr && <img src={qr} alt="Scan to join" />}

@@ -1,36 +1,32 @@
-import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { GameDetail } from "../../shared/types.ts";
-import { api } from "../api.ts";
+import type { GameDoc, GmMeta } from "../../shared/types.ts";
+import { useAuth, useDoc } from "../api.ts";
 import { TopBar } from "../components/TopBar.tsx";
 
 /** A game's home: what you can open from here depends on whether you're its GM or a player. */
 export function GamePage() {
   const { id = "" } = useParams();
-  const [game, setGame] = useState<GameDetail | null>(null);
-  const [error, setError] = useState("");
+  const { user } = useAuth();
+  const game = useDoc<GameDoc>(`games/${id}`);
+  const isGm = !!user && game.data?.gmId === user.id;
+  const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
 
-  useEffect(() => {
-    api<{ game: GameDetail }>(`/games/${id}`)
-      .then((r) => setGame(r.game))
-      .catch((err) => setError(err.message));
-  }, [id]);
-
-  if (error) {
+  if (game.error || (!game.loading && !game.data)) {
     return (
       <>
         <TopBar />
         <main className="center">
-          <p className="error">{error}</p>
+          <p className="error">{game.error || "Game not found."}</p>
           <Link to="/">Back to your games</Link>
         </main>
       </>
     );
   }
-  if (!game) return <main className="center muted">Loading…</main>;
+  if (!game.data) return <main className="center muted">Loading…</main>;
 
-  const inviteUrl = game.inviteCode ? `${location.origin}/join/${game.inviteCode}` : "";
-  const players = game.members.filter((m) => m.role === "player");
+  const inviteCode = meta.data?.inviteCode;
+  const inviteUrl = inviteCode ? `${location.origin}/join/${inviteCode}` : "";
+  const players = Object.entries(game.data.members).filter(([, m]) => m.role === "player");
 
   return (
     <>
@@ -38,10 +34,10 @@ export function GamePage() {
       <main className="game-page">
         <Link to="/" className="muted">← Your games</Link>
         <h1>
-          {game.name} <span className={`role-badge role-${game.role}`}>{game.role === "gm" ? "GM" : "Player"}</span>
+          {game.data.name} <span className={`role-badge role-${isGm ? "gm" : "player"}`}>{isGm ? "GM" : "Player"}</span>
         </h1>
 
-        {game.role === "gm" ? (
+        {isGm ? (
           <>
             <div className="screen-links">
               <Link className="big-button" to={`/games/${id}/gm`}>
@@ -56,11 +52,13 @@ export function GamePage() {
             <section className="panel">
               <h3>Invite players</h3>
               <p>
-                Invite code: <strong className="invite-code">{game.inviteCode}</strong>
+                Invite code: <strong className="invite-code">{inviteCode ?? "…"}</strong>
               </p>
-              <p className="muted">
-                Or share this link: <a href={inviteUrl}>{inviteUrl}</a>
-              </p>
+              {inviteUrl && (
+                <p className="muted">
+                  Or share this link: <a href={inviteUrl}>{inviteUrl}</a>
+                </p>
+              )}
             </section>
           </>
         ) : (
@@ -76,8 +74,8 @@ export function GamePage() {
           <h3>Players ({players.length})</h3>
           {players.length === 0 && <p className="muted">No players yet.</p>}
           <ul className="plain">
-            {players.map((m) => (
-              <li key={m.id}>{m.displayName}</li>
+            {players.map(([uid, m]) => (
+              <li key={uid}>{m.displayName}</li>
             ))}
           </ul>
         </section>

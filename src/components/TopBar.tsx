@@ -1,5 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
-import { api, useAuth } from "../api.ts";
+import { signOut } from "firebase/auth";
+import { useAuth } from "../api.ts";
+import { auth } from "../firebase.ts";
 
 export function TopBar() {
   const { user, setUser } = useAuth();
@@ -13,7 +15,7 @@ export function TopBar() {
           <button
             className="link"
             onClick={async () => {
-              await api("/auth/logout", {});
+              await signOut(auth);
               setUser(null);
               navigate("/");
             }}

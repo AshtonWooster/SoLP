@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { GameSummary } from "../../shared/types.ts";
-import { api, useAuth } from "../api.ts";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import type { GameDoc, GameRole } from "../../shared/types.ts";
+import { useAuth } from "../api.ts";
+import { createGameFn, db, friendlyError } from "../firebase.ts";
 import { TopBar } from "../components/TopBar.tsx";
 
 export function Home() {
@@ -17,30 +19,62 @@ export function Home() {
       </main>
     );
   }
-  return <Dashboard />;
+  return <Dashboard uid={user.id} />;
+}
+
+interface GameSummary {
+  id: string;
+  name: string;
+  role: GameRole;
+  gmName: string;
+  playerCount: number;
+  createdAt: number;
 }
 
 /** The logged-in front page: every game you run or play in. */
-function Dashboard() {
+function Dashboard({ uid }: { uid: string }) {
   const navigate = useNavigate();
   const [games, setGames] = useState<GameSummary[] | null>(null);
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    api<{ games: GameSummary[] }>("/games")
-      .then((r) => setGames(r.games))
-      .catch((err) => setError(err.message));
-  }, []);
+  // Live list: a game you join or create on another device shows up here right away.
+  useEffect(
+    () =>
+      onSnapshot(
+        query(collection(db, "games"), where("memberIds", "array-contains", uid)),
+        (snap) =>
+          setGames(
+            snap.docs
+              .map((d) => {
+                const g = d.data() as GameDoc;
+                return {
+                  id: d.id,
+                  name: g.name,
+                  role: g.members[uid]?.role ?? "player",
+                  gmName: g.members[g.gmId]?.displayName ?? "",
+                  playerCount: Object.values(g.members).filter((m) => m.role === "player").length,
+                  createdAt: g.createdAt,
+                };
+              })
+              .sort((a, b) => b.createdAt - a.createdAt),
+          ),
+        (err) => setError(friendlyError(err)),
+      ),
+    [uid],
+  );
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
+    setBusy(true);
     try {
-      const { id } = await api<{ id: string }>("/games", { name });
-      navigate(`/games/${id}`);
+      const { data } = await createGameFn({ name });
+      navigate(`/games/${data.id}`);
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
+      setBusy(false);
     }
   };
 
@@ -77,7 +111,7 @@ function Dashboard() {
             <h3>Create a game</h3>
             <p className="muted">You'll be the GM.</p>
             <input placeholder="Game name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required />
-            <button>Create game</button>
+            <button disabled={busy}>{busy ? "Creating…" : "Create game"}</button>
           </form>
           <form className="panel stack" onSubmit={join}>
             <h3>Join a game</h3>

@@ -17,37 +17,55 @@ Everyone has one kind of account. Creating a game makes you its GM; joining one 
 | Board | GM (logged in on the table screen) | iPad / TV | `/games/:id/board` |
 | Player view | Players | Phone | `/games/:id/play` |
 
-The GM can override any token's Health, Stagger Resist, Light and Sanity, move any token, add or remove enemies, and keep notes only the GM sees. Each game's table is saved to the database, so it survives restarts.
+The GM can override any token's Health, Stagger Resist, Light and Sanity, move any token, add or remove enemies, and keep notes only the GM sees.
+
+### How it's built
+
+Everything runs on Firebase:
+
+| Piece | Firebase product | Where |
+|---|---|---|
+| Website | Hosting | `src/` (React + Vite) |
+| Accounts | Authentication (email/password) | `src/screens/Auth.tsx` |
+| Games and the live table | Firestore; every screen listens for changes in real time | `shared/types.ts` lists the layout |
+| Game actions (the "referee") | Cloud Functions; every change to a table is checked and applied here | `functions/src/index.ts` |
+| Who can read what | Security rules | `firestore.rules`, `storage.rules` |
+| Uploaded maps and art | Cloud Storage (rules ready; upload screens coming) | `storage.rules` |
+
+Clients can only read; games and tables are changed only by the Cloud Functions, so a player can't edit their own HP from the browser console.
 
 ### Run locally
 
+Needs Node 22 and Java 21+ (for the Firebase emulators).
+
 ```sh
 npm install
+npm --prefix functions install
 npm run dev
 ```
 
-Open http://localhost:5173. With no `DATABASE_URL` set, data is kept in an embedded Postgres under `./data`, so there's nothing else to install. Phones and iPads on the same Wi-Fi can open `http://<laptop-ip>:5173`.
+This starts the Firebase emulators (a local copy of Auth, Firestore, Functions and Storage) and the site at http://localhost:5173. The emulator dashboard at http://localhost:4000 shows accounts and data. Emulator data is wiped when you stop it.
 
-### LAN fallback (no internet at the venue)
+Phones and iPads on the same Wi-Fi can open `http://<laptop-ip>:5173`. This doubles as the **offline fallback** at the venue: it needs no internet once installed, but accounts there are separate from the hosted site.
+
+Security rules tests: `npm run test:rules`.
+
+### Deploy to Firebase
+
+One-time setup in the [Firebase console](https://console.firebase.google.com):
+
+1. Create a project and switch it to the **Blaze** plan (needed for Cloud Functions; your Google credits cover usage).
+2. **Authentication → Sign-in method:** enable **Email/Password**.
+3. **Firestore Database:** create a database (production mode).
+4. **Storage:** create the default bucket.
+5. **Project settings → Your apps:** add a **Web app** (no need to copy the config; Hosting serves it to the site automatically).
+
+Then from this folder:
 
 ```sh
-npm run build
-npm start
+npx firebase login
+npx firebase use --add        # pick your project
+npm run deploy
 ```
 
-The server prints its LAN address, e.g. `http://192.168.1.20:3001`. Connect every device to the same Wi-Fi or a phone hotspot and open that address. Accounts made on the hosted site don't exist on the laptop copy (it has its own database), so sign up again there.
-
-### Deploy (Railway)
-
-1. On railway.com, create a project with **Deploy from GitHub repo** and pick this repository.
-2. In the same project, add a **PostgreSQL** database.
-3. On the app service, add the variable `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`.
-4. Under the app's **Settings → Networking**, generate a domain (or attach your own).
-
-`railway.json` sets the build, start command and health check. Every push to the deployed branch redeploys.
-
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | Postgres connection string. Unset = embedded database in `./data`. |
-| `DATABASE_SSL` | Set to `true` if your Postgres requires SSL from outside its network. |
-| `PORT` | Set by the host. Defaults to 3001. |
+On the first deploy the CLI asks to let Storage rules read Firestore (used to check who's in a game); answer yes. The site is then live at `https://<project-id>.web.app`. A custom domain can be added under **Hosting** in the console.

@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Game assets (maps, token art, handouts): members can view, only the GM can upload.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function game(gameId) {
+      return firestore.get(/databases/(default)/documents/games/$(gameId)).data;
+    }
+
+    match /games/{gameId}/assets/{path=**} {
+      allow read: if request.auth != null && request.auth.uid in game(gameId).memberIds;
+      allow write: if request.auth != null && game(gameId).gmId == request.auth.uid
+        && (request.resource == null
+            || (request.resource.size < 25 * 1024 * 1024
+                && request.resource.contentType.matches("image/.*")));
+    }
+  }
+}

@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
 import type { User } from "../shared/types.ts";
-import { api, AuthContext, useAuth } from "./api.ts";
+import { AuthContext, useAuth } from "./api.ts";
+import { auth } from "./firebase.ts";
 import { Home } from "./screens/Home.tsx";
 import { Login, Signup } from "./screens/Auth.tsx";
 import { Join } from "./screens/Join.tsx";
@@ -23,11 +25,13 @@ function RequireAuth({ children }: { children: ReactNode }) {
 
 function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
-  useEffect(() => {
-    api<{ user: User | null }>("/auth/me")
-      .then((r) => setUser(r.user))
-      .catch(() => setUser(null));
-  }, []);
+  useEffect(
+    () =>
+      onAuthStateChanged(auth, (u) =>
+        setUser(u ? { id: u.uid, email: u.email ?? "", displayName: u.displayName ?? u.email ?? "" } : null),
+      ),
+    [],
+  );
 
   const authed = (el: ReactNode) => <RequireAuth>{el}</RequireAuth>;
   return (
