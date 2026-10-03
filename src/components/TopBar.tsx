@@ -8,7 +8,7 @@ export function TopBar() {
   const navigate = useNavigate();
   return (
     <header className="topbar">
-      <Link to="/" className="brand">SoLP</Link>
+      <Link to="/" className="brand" title={`Build ${__APP_VERSION__}`}>SoLP</Link>
       {user && (
         <span className="topbar-user">
           {user.displayName}
