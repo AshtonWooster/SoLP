@@ -39,8 +39,7 @@ Clients can only read; games and tables are changed only by the Cloud Functions,
 Needs Node 22 and Java 21+ (for the Firebase emulators).
 
 ```sh
-npm install
-npm --prefix functions install
+npm install          # also installs the Cloud Functions' packages
 npm run dev
 ```
 
