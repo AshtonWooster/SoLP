@@ -1,4 +1,58 @@
-// Types shared by the game server and every screen (board, GM, player).
+// Types shared by the web app and the Cloud Functions.
+//
+// Firestore layout:
+//   users/{uid}                     UserDoc            owner read/write
+//   inviteCodes/{code}              { gameId }         functions only
+//   games/{gameId}                  GameDoc            members read; functions write
+//   games/{gameId}/table/state      TableState         members read; functions write
+//   games/{gameId}/gm/meta          GmMeta             GM read; functions write
+//   games/{gameId}/gm/notes         GmNotes            GM read/write
+//   games/{gameId}/presence/{uid}   Presence           members read; owner write
+
+// ---- Accounts and games ----
+
+export interface User {
+  id: string;
+  email: string;
+  displayName: string;
+}
+
+export interface UserDoc {
+  displayName: string;
+  email: string;
+}
+
+/** Every account is the same; your role is per game. Creating a game makes you its GM. */
+export type GameRole = "gm" | "player";
+
+export interface GameDoc {
+  name: string;
+  gmId: string;
+  /** Everyone in the game, GM included. Lets the front page query "games I'm in". */
+  memberIds: string[];
+  members: Record<string, { displayName: string; role: GameRole }>;
+  createdAt: number;
+}
+
+/** Only the GM can read this, so only the GM can hand out the invite code. */
+export interface GmMeta {
+  inviteCode: string;
+}
+
+export interface GmNotes {
+  /** Notes per token id, hidden from the board and players. */
+  tokens: Record<string, string>;
+}
+
+export interface Presence {
+  lastSeen: number;
+}
+
+/** A member counts as online if their table screen checked in this recently. */
+export const PRESENCE_TIMEOUT_MS = 60_000;
+export const PRESENCE_INTERVAL_MS = 25_000;
+
+// ---- Live table ----
 
 export type Side = "player" | "enemy";
 
@@ -21,51 +75,29 @@ export interface Token {
   y: number;
   color: string;
   resources: Resources;
-  /** Player who controls this token, if any. */
+  /** User who controls this token, if any. */
   ownerId?: string;
-  /** GM-only notes. Stripped before state is sent to the board or players. */
-  gmNotes?: string;
 }
 
-export interface Player {
-  id: string;
-  name: string;
-  connected: boolean;
-}
-
-export interface GameState {
-  code: string;
+/** Everything on the table that every member may see. GM-only data lives under games/{id}/gm. */
+export interface TableState {
   map: { name: string; width: number; height: number };
   tokens: Record<string, Token>;
-  players: Record<string, Player>;
   log: string[];
 }
-
-export type Role = "gm" | "board" | "player";
 
 /** Partial resource edits the GM can apply to any token. */
 export type ResourcePatch = Partial<Resources>;
 
-// Messages sent from a screen to the server. Each one gets an Ack back.
-export interface ClientToServer {
-  createRoom: (ack: (res: Ack<{ code: string; gmKey: string }>) => void) => void;
-  joinGm: (p: { code: string; gmKey: string }, ack: (res: Ack) => void) => void;
-  joinBoard: (p: { code: string }, ack: (res: Ack) => void) => void;
-  joinPlayer: (
-    p: { code: string; name: string; playerId?: string },
-    ack: (res: Ack<{ playerId: string }>) => void,
-  ) => void;
+/** Every change to the table goes through the tableAction function, which checks who may do it. */
+export type TableAction =
+  /** A player sits down at the table: creates their token if they don't have one. */
+  | { type: "takeSeat" }
   /** Players may move only their own token; the GM may move any token. */
-  moveToken: (p: { tokenId: string; x: number; y: number }, ack: (res: Ack) => void) => void;
+  | { type: "move"; tokenId: string; x: number; y: number }
+  /** Move one tile relative to where the token is now, so quick taps on a phone all count. */
+  | { type: "step"; tokenId: string; dx: number; dy: number }
   // GM override actions
-  gmAddToken: (p: { name: string; side: Side; x: number; y: number }, ack: (res: Ack) => void) => void;
-  gmRemoveToken: (p: { tokenId: string }, ack: (res: Ack) => void) => void;
-  gmSetResources: (p: { tokenId: string; patch: ResourcePatch }, ack: (res: Ack) => void) => void;
-  gmSetNotes: (p: { tokenId: string; notes: string }, ack: (res: Ack) => void) => void;
-}
-
-export interface ServerToClient {
-  state: (s: GameState) => void;
-}
-
-export type Ack<T = {}> = ({ ok: true } & T) | { ok: false; error: string };
+  | { type: "addToken"; name: string; side: Side; x: number; y: number }
+  | { type: "removeToken"; tokenId: string }
+  | { type: "setResources"; tokenId: string; patch: ResourcePatch };

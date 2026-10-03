@@ -1,61 +1,49 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import QRCode from "qrcode";
+import type { GameDoc, GmMeta, TableState } from "../../shared/types.ts";
+import { useAuth, useDoc } from "../api.ts";
 import { Grid } from "../components/Grid.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
-import { query, socket, useGameState, useJoin } from "../socket.ts";
+import { TableError } from "../components/TableError.tsx";
 
-/** The shared table display. View-only: players act from their phones, the GM from the laptop. */
+/** The shared table display, run by the GM on a big screen. View-only. */
 export function Board() {
-  const [code, setCode] = useState(query("room").toUpperCase());
-  const [input, setInput] = useState("");
-  const [error, setError] = useState("");
+  const { id = "" } = useParams();
+  const { user } = useAuth();
+  const game = useDoc<GameDoc>(`games/${id}`);
+  const isGm = !!user && game.data?.gmId === user.id;
+  const table = useDoc<TableState>(isGm ? `games/${id}/table/state` : null);
+  const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
+  const inviteCode = meta.data?.inviteCode;
   const [qr, setQr] = useState("");
-  const state = useGameState();
-
-  const join = useCallback(() => {
-    socket.emit("joinBoard", { code }, (res) => setError(res.ok ? "" : res.error));
-  }, [code]);
-  useJoin(code ? join : null);
 
   useEffect(() => {
-    if (!code) return;
-    QRCode.toDataURL(`${location.origin}/play?room=${code}`, { margin: 1, width: 240 }).then(setQr);
-  }, [code]);
+    if (!inviteCode) return;
+    QRCode.toDataURL(`${location.origin}/join/${inviteCode}`, { margin: 1, width: 240 }).then(setQr);
+  }, [inviteCode]);
 
-  if (!code || error) {
-    return (
-      <main className="center">
-        <h1>Game Board</h1>
-        {error && <p className="error">{error}</p>}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            history.replaceState(null, "", `/board?room=${input.toUpperCase()}`);
-            setError("");
-            setCode(input.toUpperCase());
-          }}
-        >
-          <input placeholder="Room code" value={input} onChange={(e) => setInput(e.target.value)} maxLength={4} autoFocus />
-          <button>Show board</button>
-        </form>
-      </main>
-    );
-  }
+  if (game.error) return <TableError error={game.error} gameId={id} />;
+  if (game.loading) return <main className="center muted">Loading…</main>;
+  if (!isGm) return <TableError error="Only the GM can open this screen." gameId={id} />;
+  if (table.error) return <TableError error={table.error} gameId={id} />;
 
   return (
     <main className="board">
       <header className="board-header">
-        <h2>{state?.map.name ?? "Loading…"}</h2>
-        <ConnectionBadge />
+        <h2>{table.data?.map.name ?? "Loading…"}</h2>
+        <ConnectionBadge offline={table.offline} />
       </header>
-      {state && <Grid state={state} />}
-      <aside className="join-card">
-        {qr && <img src={qr} alt="Scan to join" />}
-        <div>
-          <div className="muted">Join at {location.host}/play</div>
-          <div className="room-code">{code}</div>
-        </div>
-      </aside>
+      {table.data && <Grid state={table.data} />}
+      {inviteCode && (
+        <aside className="join-card">
+          {qr && <img src={qr} alt="Scan to join" />}
+          <div>
+            <div className="muted">Scan to join, or enter code</div>
+            <div className="room-code">{inviteCode}</div>
+          </div>
+        </aside>
+      )}
     </main>
   );
 }
