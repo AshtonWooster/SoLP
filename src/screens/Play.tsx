@@ -1,42 +1,36 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { TableState, Token } from "../../shared/types.ts";
-import { useAuth, useDoc } from "../api.ts";
+import type { Token } from "../../shared/types.ts";
+import { useAuth } from "../api.ts";
 import { pct } from "../components/Grid.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
-import { TableError } from "../components/TableError.tsx";
-import { act, friendlyError } from "../firebase.ts";
-import { useHeartbeat } from "../table.ts";
+import { Waiting } from "../components/Waiting.tsx";
+import { useClient } from "../net/hooks.ts";
 
 /** A player's phone: their own character, plus public info about allies. */
 export function Play() {
   const { id = "" } = useParams();
   const { user } = useAuth();
-  const table = useDoc<TableState>(`games/${id}/table/state`);
+  const { snapshot, client } = useClient(id, user?.id, "play");
   const [error, setError] = useState("");
-  useHeartbeat(id, user?.id);
 
-  // Sitting down creates this player's token the first time they open the table.
-  useEffect(() => {
-    act(id, { type: "takeSeat" }).catch((err) => setError(friendlyError(err)));
-  }, [id]);
+  if (!snapshot.table) return <Waiting snapshot={snapshot} gameId={id} />;
 
-  if (error || table.error) return <TableError error={error || table.error} gameId={id} />;
-
-  const tokens = table.data ? Object.values(table.data.tokens) : [];
+  const tokens = Object.values(snapshot.table.tokens);
   const mine = tokens.find((t) => t.ownerId === user?.id);
   const allies = tokens.filter((t) => t.side === "player" && t.ownerId !== user?.id);
 
   const move = (dx: number, dy: number) => {
-    if (mine) act(id, { type: "step", tokenId: mine.id, dx, dy }).catch(() => {});
+    if (mine) client?.act({ type: "step", tokenId: mine.id, dx, dy }).then(() => setError(""), (e) => setError(e.message));
   };
 
   return (
     <main className="play">
       <header className="play-header">
         <h2>{mine?.name ?? "…"}</h2>
-        <ConnectionBadge offline={table.offline} />
+        <ConnectionBadge status={snapshot.status} />
       </header>
+      {error && <p className="error">{error}</p>}
       {mine && <ResourceBars token={mine} />}
 
       <section>

@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { doc, updateDoc } from "firebase/firestore";
-import type { GameDoc, GmMeta, GmNotes, Resources, TableState, Token } from "../../shared/types.ts";
+import type { GameDoc, GmMeta, Resources, TableAction, Token } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
 import { Grid } from "../components/Grid.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
-import { act, db, friendlyError } from "../firebase.ts";
-import { useHeartbeat, useOnline } from "../table.ts";
+import { useHost } from "../net/hooks.ts";
 
 const RESOURCE_FIELDS: [keyof Resources, keyof Resources, string][] = [
   ["hp", "maxHp", "Health"],
@@ -22,55 +20,67 @@ export function Gm() {
   const { user } = useAuth();
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
-  const table = useDoc<TableState>(isGm ? `games/${id}/table/state` : null);
   const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
-  const notes = useDoc<GmNotes>(isGm ? `games/${id}/gm/notes` : null);
-  const online = useOnline(id);
+  const { snapshot, host } = useHost(id, user, game.data);
+  const online = new Set(snapshot.online);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
-  useHeartbeat(id, user?.id);
 
   if (game.error) return <TableError error={game.error} gameId={id} />;
   if (game.loading) return <main className="center muted">Loading…</main>;
   if (!isGm) return <TableError error="Only the GM can open this screen." gameId={id} />;
 
-  const run = (p: Promise<unknown>) =>
-    p.then(() => setActionError("")).catch((err) => setActionError(friendlyError(err)));
+  if (snapshot.status === "replaced") {
+    return <TableError error="This game is now being run from another GM screen. Close this one, or reload to take over here." gameId={id} />;
+  }
+  if (snapshot.status === "error") return <TableError error={snapshot.error ?? "Couldn't open the table."} gameId={id} />;
 
-  const selected = selectedId ? table.data?.tokens[selectedId] : undefined;
+  /** Actions on the GM screen apply instantly in this tab; connected devices get the update. */
+  const act = (action: TableAction): boolean => {
+    try {
+      host?.act(action);
+      setActionError("");
+      return true;
+    } catch (err) {
+      setActionError((err as Error).message);
+      return false;
+    }
+  };
+
+  const table = snapshot.table;
+  const selected = selectedId ? table?.tokens[selectedId] : undefined;
   const players = Object.entries(game.data!.members).filter(([, m]) => m.role === "player");
 
   return (
     <main className="gm">
       <header className="gm-header">
         <Link to={`/games/${id}`} className="muted">← {game.data!.name}</Link>
-        <ConnectionBadge offline={table.offline} />
+        <ConnectionBadge status={snapshot.status} />
         <a href={`/games/${id}/board`} target="_blank" rel="noreferrer">Open board</a>
         {meta.data && <span className="muted">Invite code: {meta.data.inviteCode}</span>}
         {actionError && <span className="error">{actionError}</span>}
       </header>
 
       <section className="gm-map">
-        {table.data && (
+        {table && (
           <Grid
-            state={table.data}
+            state={table}
             selectedId={selectedId}
             onTokenClick={(t) => setSelectedId(t.id === selectedId ? null : t.id)}
-            onCellClick={(x, y) => selectedId && run(act(id, { type: "move", tokenId: selectedId, x, y }))}
+            onCellClick={(x, y) => selectedId && act({ type: "move", tokenId: selectedId, x, y })}
           />
         )}
         <p className="muted">Click a token to select it, then click a tile to move it.</p>
       </section>
 
       <section className="gm-side">
-        <AddEnemy onAdd={(name) => run(act(id, { type: "addToken", name, side: "enemy", x: 10, y: 5 }))} />
+        <AddEnemy onAdd={(name) => act({ type: "addToken", name, side: "enemy", x: 10, y: 5 })} />
         {selected ? (
           <Override
             key={selected.id}
-            gameId={id}
             token={selected}
-            note={notes.data?.tokens?.[selected.id] ?? ""}
-            run={run}
+            note={snapshot.notes[selected.id] ?? ""}
+            act={act}
             onRemoved={() => setSelectedId(null)}
           />
         ) : (
@@ -87,21 +97,21 @@ export function Gm() {
         </ul>
         <h3>Log</h3>
         <ol className="log">
-          {table.data?.log.slice(-15).reverse().map((line, i) => <li key={i}>{line}</li>)}
+          {table?.log.slice(-15).reverse().map((line, i) => <li key={i}>{line}</li>)}
         </ol>
       </section>
     </main>
   );
 }
 
-function AddEnemy({ onAdd }: { onAdd: (name: string) => Promise<unknown> }) {
+function AddEnemy({ onAdd }: { onAdd: (name: string) => boolean }) {
   const [name, setName] = useState("");
   return (
     <form
       className="row"
       onSubmit={(e) => {
         e.preventDefault();
-        onAdd(name || "Enemy").then(() => setName(""));
+        if (onAdd(name || "Enemy")) setName("");
       }}
     >
       <input placeholder="Enemy name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -137,23 +147,21 @@ function NumberField({ value, onCommit }: { value: number; onCommit: (n: number)
 
 /** GM override panel: set any resource on any token directly. */
 function Override({
-  gameId,
   token,
   note,
-  run,
+  act,
   onRemoved,
 }: {
-  gameId: string;
   token: Token;
   note: string;
-  run: (p: Promise<unknown>) => Promise<unknown>;
+  act: (action: TableAction) => boolean;
   onRemoved: () => void;
 }) {
   const [notes, setNotes] = useState(note);
   useEffect(() => setNotes(note), [note]);
 
   const set = (key: keyof Resources, value: number) =>
-    run(act(gameId, { type: "setResources", tokenId: token.id, patch: { [key]: value } }));
+    act({ type: "setResources", tokenId: token.id, patch: { [key]: value } });
 
   return (
     <div className="override">
@@ -175,14 +183,11 @@ function Override({
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        onBlur={() =>
-          notes !== note &&
-          run(updateDoc(doc(db, "games", gameId, "gm", "notes"), { [`tokens.${token.id}`]: notes.slice(0, 2000) }))
-        }
+        onBlur={() => notes !== note && act({ type: "setNote", tokenId: token.id, note: notes })}
       />
       <button
         className="danger"
-        onClick={() => run(act(gameId, { type: "removeToken", tokenId: token.id }).then(onRemoved))}
+        onClick={() => act({ type: "removeToken", tokenId: token.id }) && onRemoved()}
       >
         Remove token
       </button>
