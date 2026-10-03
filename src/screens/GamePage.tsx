@@ -42,7 +42,7 @@ export function GamePage() {
             <div className="screen-links">
               <Link className="big-button" to={`/games/${id}/gm`}>
                 Run the game
-                <small>GM controls, for your laptop</small>
+                <small>GM controls, for your laptop. Keep it open during play: it hosts the table.</small>
               </Link>
               <Link className="big-button secondary" to={`/games/${id}/board`}>
                 Open the board

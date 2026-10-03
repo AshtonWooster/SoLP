@@ -61,16 +61,48 @@ test("front page query only works for your own games", async () => {
   await assertFails(getDocs(collection(as("p1"), "games")));
 });
 
-test("nobody can change games, tables or invite codes directly, not even the GM", async () => {
+test("nobody can change games or invite codes directly, not even the GM", async () => {
   for (const uid of ["gm", "p1"]) {
     const db = as(uid);
     await assertFails(updateDoc(doc(db, "games", GAME), { name: "hacked" }));
     await assertFails(updateDoc(doc(db, "games", GAME), { memberIds: ["gm", "p1", "friend"] }));
-    await assertFails(setDoc(doc(db, "games", GAME, "table", "state"), { tokens: {} }));
     await assertFails(deleteDoc(doc(db, "games", GAME)));
     await assertFails(setDoc(doc(db, "games", "newgame"), { gmId: uid, memberIds: [uid] }));
     await assertFails(getDoc(doc(db, "inviteCodes", "ABC123")));
   }
+});
+
+test("only the GM's hosting tab can save the table", async () => {
+  const table = { map: { name: "m", width: 4, height: 4 }, tokens: {}, log: ["saved"] };
+  await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "table", "state"), table));
+  await assertFails(setDoc(doc(as("p1"), "games", GAME, "table", "state"), table));
+  await assertFails(setDoc(doc(as("stranger"), "games", GAME, "table", "state"), table));
+  await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "state"), { ...table, extra: 1 }));
+  await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "other"), table));
+});
+
+test("session: only the GM announces hosting; members can see it", async () => {
+  const session = { sessionId: "s1", hostUid: "gm", startedAt: 1 };
+  await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "session", "host"), session));
+  await assertFails(setDoc(doc(as("p1"), "games", GAME, "session", "host"), { ...session, hostUid: "p1" }));
+  await assertSucceeds(getDoc(doc(as("p1"), "games", GAME, "session", "host")));
+  await assertFails(getDoc(doc(as("stranger"), "games", GAME, "session", "host")));
+  await assertSucceeds(deleteDoc(doc(as("gm"), "games", GAME, "session", "host")));
+});
+
+test("signals: members ask to connect as themselves; only the GM answers", async () => {
+  const offer = { uid: "p1", sessionId: "s1", offer: "sdp", createdAt: 1 };
+  const ref = (uid: string) => doc(as(uid), "games", GAME, "signals", "sig1");
+  await assertFails(setDoc(doc(as("p1"), "games", GAME, "signals", "x"), { ...offer, uid: "gm" }));
+  await assertFails(setDoc(doc(as("stranger"), "games", GAME, "signals", "x"), { ...offer, uid: "stranger" }));
+  await assertFails(setDoc(doc(as("p1"), "games", GAME, "signals", "x"), { ...offer, answer: "forged" }));
+  await assertSucceeds(setDoc(ref("p1"), offer));
+  await assertSucceeds(getDoc(ref("p1")));
+  await assertSucceeds(getDocs(query(collection(as("gm"), "games", GAME, "signals"), where("sessionId", "==", "s1"))));
+  await assertFails(updateDoc(ref("p1"), { answer: "self-answered" }));
+  await assertFails(updateDoc(ref("gm"), { offer: "changed" }));
+  await assertSucceeds(updateDoc(ref("gm"), { answer: "sdp-answer" }));
+  await assertSucceeds(deleteDoc(ref("p1")));
 });
 
 test("only the GM sees the invite code and GM notes", async () => {
@@ -81,14 +113,6 @@ test("only the GM sees the invite code and GM notes", async () => {
   await assertSucceeds(updateDoc(doc(as("gm"), "games", GAME, "gm", "notes"), { "tokens.t1": "weak to fire" }));
   await assertFails(updateDoc(doc(as("p1"), "games", GAME, "gm", "notes"), { "tokens.t1": "x" }));
   await assertFails(updateDoc(doc(as("gm"), "games", GAME, "gm", "meta"), { inviteCode: "ZZZZZZ" }));
-});
-
-test("presence: members write only their own check-in", async () => {
-  await assertSucceeds(setDoc(doc(as("p1"), "games", GAME, "presence", "p1"), { lastSeen: 1 }));
-  await assertFails(setDoc(doc(as("p1"), "games", GAME, "presence", "gm"), { lastSeen: 1 }));
-  await assertFails(setDoc(doc(as("p1"), "games", GAME, "presence", "p1"), { lastSeen: 1, extra: true }));
-  await assertFails(setDoc(doc(as("stranger"), "games", GAME, "presence", "stranger"), { lastSeen: 1 }));
-  await assertSucceeds(getDocs(collection(as("gm"), "games", GAME, "presence")));
 });
 
 test("users: you can read and write only your own profile", async () => {

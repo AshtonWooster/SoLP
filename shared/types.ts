@@ -1,13 +1,18 @@
 // Types shared by the web app and the Cloud Functions.
 //
+// During play the GM's browser hosts the live table and every other screen (board, phones)
+// connects straight to it over WebRTC. Firestore is used for accounts, the games list,
+// saving the table between sessions, and helping devices find each other.
+//
 // Firestore layout:
 //   users/{uid}                     UserDoc            owner read/write
 //   inviteCodes/{code}              { gameId }         functions only
 //   games/{gameId}                  GameDoc            members read; functions write
-//   games/{gameId}/table/state      TableState         members read; functions write
+//   games/{gameId}/table/state      TableState         members read; GM write (host autosave)
 //   games/{gameId}/gm/meta          GmMeta             GM read; functions write
 //   games/{gameId}/gm/notes         GmNotes            GM read/write
-//   games/{gameId}/presence/{uid}   Presence           members read; owner write
+//   games/{gameId}/session/host     SessionDoc         members read; GM write
+//   games/{gameId}/signals/{id}     SignalDoc          connection handshakes (see src/net)
 
 // ---- Accounts and games ----
 
@@ -44,13 +49,21 @@ export interface GmNotes {
   tokens: Record<string, string>;
 }
 
-export interface Presence {
-  lastSeen: number;
+/** Present while a GM screen is hosting the table. Its id changes every time hosting starts. */
+export interface SessionDoc {
+  sessionId: string;
+  hostUid: string;
+  startedAt: number;
 }
 
-/** A member counts as online if their table screen checked in this recently. */
-export const PRESENCE_TIMEOUT_MS = 60_000;
-export const PRESENCE_INTERVAL_MS = 25_000;
+/** A device asking to join the hosted table, and the host's reply. */
+export interface SignalDoc {
+  uid: string;
+  sessionId: string;
+  offer: string;
+  answer?: string;
+  createdAt: number;
+}
 
 // ---- Live table ----
 
@@ -89,7 +102,7 @@ export interface TableState {
 /** Partial resource edits the GM can apply to any token. */
 export type ResourcePatch = Partial<Resources>;
 
-/** Every change to the table goes through the tableAction function, which checks who may do it. */
+/** Every change to the table goes through shared/engine.ts on the host, which checks who may do it. */
 export type TableAction =
   /** A player sits down at the table: creates their token if they don't have one. */
   | { type: "takeSeat" }
@@ -100,4 +113,25 @@ export type TableAction =
   // GM override actions
   | { type: "addToken"; name: string; side: Side; x: number; y: number }
   | { type: "removeToken"; tokenId: string }
-  | { type: "setResources"; tokenId: string; patch: ResourcePatch };
+  | { type: "setResources"; tokenId: string; patch: ResourcePatch }
+  | { type: "setNote"; tokenId: string; note: string };
+
+/** Which screen a connecting device is: a player's phone or the shared board (GM only). */
+export type View = "play" | "board";
+
+// Messages over the WebRTC data channel between a device and the host.
+export type PeerMessage =
+  | { t: "hello"; view: View }
+  | { t: "act"; id: number; action: TableAction };
+
+export type HostMessage =
+  | {
+      t: "state";
+      table: TableState;
+      /** User ids connected right now, host included. */
+      online: string[];
+      /** Only sent to the GM's own devices. */
+      notes?: Record<string, string>;
+    }
+  | { t: "ack"; id: number; error?: string }
+  | { t: "bye"; reason: string };

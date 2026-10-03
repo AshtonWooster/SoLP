@@ -21,30 +21,44 @@ The GM can override any token's Health, Stagger Resist, Light and Sanity, move a
 
 ### How it's built
 
-Everything runs on Firebase:
+**During play, the GM's browser is the game server.** When the GM opens "Run the game", that tab holds the live table. The board and every player's phone connect straight to it over WebRTC (the peer-to-peer tech video calls use), which works across the internet, not just on the same Wi-Fi. Moving tokens, changing health and adding enemies go device-to-device, with no Cloud Function call and no database write per action.
+
+Firebase handles everything around that:
 
 | Piece | Firebase product | Where |
 |---|---|---|
 | Website | Hosting | `src/` (React + Vite) |
 | Accounts | Authentication (email/password) | `src/screens/Auth.tsx` |
-| Games and the live table | Firestore; every screen listens for changes in real time | `shared/types.ts` lists the layout |
-| Game actions (the "referee") | Cloud Functions; every change to a table is checked and applied here | `functions/src/index.ts` |
+| Games list, saved tables | Firestore | `shared/types.ts` lists the layout |
+| Helping devices find the GM | Firestore (a few writes per connection) | `src/net/` |
+| Creating and joining games | Cloud Functions (once per game, not during play) | `functions/src/index.ts` |
+| Game rules | Run in the GM's browser | `shared/engine.ts` |
 | Who can read what | Security rules | `firestore.rules`, `storage.rules` |
 | Uploaded maps and art | Cloud Storage (rules ready; upload screens coming) | `storage.rules` |
 
-Clients can only read; games and tables are changed only by the Cloud Functions, so a player can't edit their own HP from the browser console.
+The GM tab saves the table to Firestore a few seconds after changes and when it closes, so the next session picks up where you left off. Players can't change anything themselves: their actions go to the GM's tab, which checks them against the rules first.
+
+Keep the GM screen open during play. If it closes, phones and the board show "Waiting for the GM" and reconnect automatically when it's opened again. Opening the GM screen on another device moves hosting there.
+
+### Players who can't connect
+
+Most networks allow direct connections. Some (many phone carriers, strict school or office Wi-Fi) block them; those players get stuck on "Reconnecting…". They need a **TURN relay**, which forwards their traffic. Firebase doesn't offer one. Options:
+
+- **Run your own on Google Cloud** (uses your credits): a small Compute Engine VM running [coturn](https://github.com/coturn/coturn), with UDP 3478 and TCP 443/5349 open.
+- **A hosted TURN service** such as Cloudflare Realtime TURN or Metered; several have free tiers (check current limits).
+
+Put its details in a `.env` file (see `.env.example`) and redeploy. TURN settings in `.env` end up in the website's code, so use credentials you're fine rotating.
 
 ### Run locally
 
 Needs Node 22 and Java 21+ (for the Firebase emulators).
 
 ```sh
-npm install
-npm --prefix functions install
+npm install          # also installs the Cloud Functions' packages
 npm run dev
 ```
 
-This starts the Firebase emulators (a local copy of Auth, Firestore, Functions and Storage) and the site at http://localhost:5173. The emulator dashboard at http://localhost:4000 shows accounts and data. Emulator data is wiped when you stop it.
+This starts the Firebase emulators (a local copy of Auth, Firestore, Functions and Storage) and the site at http://localhost:5173. Open the GM screen in one tab and the board or a player in another (use a private window for a second account). The emulator dashboard at http://localhost:4000 shows accounts and data. Emulator data is wiped when you stop it.
 
 Phones and iPads on the same Wi-Fi can open `http://<laptop-ip>:5173`. This doubles as the **offline fallback** at the venue: it needs no internet once installed, but accounts there are separate from the hosted site.
 

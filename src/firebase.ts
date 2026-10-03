@@ -1,9 +1,8 @@
 import { initializeApp, type FirebaseOptions } from "firebase/app";
 import { connectAuthEmulator, getAuth } from "firebase/auth";
-import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { connectFirestoreEmulator, initializeFirestore } from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
-import type { TableAction } from "../shared/types.ts";
 
 /** In `npm run dev` everything talks to the local Firebase emulators under a demo project. */
 const useEmulators = import.meta.env.DEV || import.meta.env.VITE_USE_EMULATORS === "true";
@@ -18,7 +17,8 @@ async function loadConfig(): Promise<FirebaseOptions> {
 
 const app = initializeApp(await loadConfig());
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Token fields like ownerId are optional; leave them out instead of rejecting the save.
+export const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
 export const functions = getFunctions(app);
 export const storage = getStorage(app);
 
@@ -33,13 +33,6 @@ if (useEmulators) {
 
 export const createGameFn = httpsCallable<{ name: string }, { id: string }>(functions, "createGame");
 export const joinGameFn = httpsCallable<{ code: string }, { id: string }>(functions, "joinGame");
-const tableActionFn = httpsCallable<{ gameId: string; action: TableAction }, { ok: true }>(functions, "tableAction");
-
-/** Sends an action to the referee function. Resolves once it's applied; everyone's screens update via Firestore. */
-export async function act(gameId: string, action: TableAction): Promise<void> {
-  await tableActionFn({ gameId, action });
-}
-
 /** Firebase errors carry codes like "auth/wrong-password"; turn the common ones into plain sentences. */
 export function friendlyError(err: unknown): string {
   const code = (err as { code?: string })?.code ?? "";

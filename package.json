@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "postinstall": "npm --prefix functions install",
     "dev": "npm --prefix functions run build && concurrently -k -n firebase,web -c yellow,green \"npm:dev:emulators\" \"npm:dev:web\"",
     "dev:emulators": "firebase emulators:start --project demo-solp",
     "dev:web": "vite --host",
