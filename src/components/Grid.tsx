@@ -70,6 +70,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
         gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
         gridTemplateRows: `repeat(${height}, minmax(0, 1fr))`,
         aspectRatio: `${width} / ${height}`,
+        ...(state.map.background ? { backgroundImage: `url("${state.map.background}")`, backgroundSize: "100% 100%" } : {}),
       }}
     >
       {cells}
@@ -112,7 +113,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
       {arrows.length > 0 && (
         <svg className="arrows" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
           <defs>
-            <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" fill="context-stroke" />
             </marker>
           </defs>

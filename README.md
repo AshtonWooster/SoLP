@@ -95,6 +95,12 @@ Opening panels and popups never clears the selection, ends the turn or changes t
 
 **Effects** are set by the GM in the token panel on the GM screen (name, count, description, duration) for now; they're shown to players but don't trigger anything automatically yet.
 
+### Maps
+
+On the GM screen, **Maps** lists the game's maps (like Roll20 pages or Foundry scenes). The GM can rename the current map, change its size (4–60 tiles each way) and upload a background image, which is stretched over the grid. **+ Create map** adds a new one; **Switch** puts it on the table for everyone.
+
+Player characters come along when the map changes, keeping their Health, Light, Effects and everything else. Each map remembers where they stood, so switching back puts them where they were (the first visit lines them up at the top-left). Enemies and other tokens stay on the map they were placed on, with their own Health and decks, until the GM switches back. Maps can't be switched during combat. Players only receive the current map; the others (and the enemies waiting on them) stay with the GM.
+
 ### Enemy templates
 
 On the game page, **Enemy templates** (GM only) lets the GM design enemies: Health, Stagger Resist, Light, Sanity, Justice, damage and Stagger resistances, notes, and a Combat Deck of Pages with any number of copies (no size limit). On the GM screen, **Place** puts a copy on the map. Each copy is its own token ("Thug", "Thug 2", ...) with its own Health, deck and so on; removing the token removes only that copy. Editing a placed enemy (token panel → Pages and deck) doesn't change its template.

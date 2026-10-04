@@ -270,8 +270,30 @@ export interface ClashFx {
 }
 
 /** Everything on the table that every member may see. GM-only data lives under games/{id}/gm. */
+/** A battle map: its name, size in tiles and optional background image. */
+export interface MapInfo {
+  /** Missing on tables saved before there were several maps. */
+  id?: string;
+  name: string;
+  width: number;
+  height: number;
+  /** Image URL stretched over the whole grid. */
+  background?: string;
+}
+
+/** A map that isn't on the table right now: its enemies wait here, and where each player stood. */
+export interface SavedMap extends MapInfo {
+  id: string;
+  /** Tokens that stay with this map (enemies, NPCs), with their Health and decks as they were. */
+  tokens: Record<string, Token>;
+  /** Where the tokens that travel between maps (player characters) last stood here. */
+  positions: Record<string, { x: number; y: number }>;
+}
+
 export interface TableState {
-  map: { name: string; width: number; height: number };
+  map: MapInfo;
+  /** The GM's other maps, by id. The current one is `map`, with its tokens in `tokens`. */
+  maps?: Record<string, SavedMap>;
   tokens: Record<string, Token>;
   log: string[];
   combat?: CombatState;
@@ -301,6 +323,10 @@ export type TableAction =
   /** Place a copy of an enemy template on the map. */
   | { type: "spawnEnemy"; templateId: string; template: EnemyTemplateData; x: number; y: number }
   // Combat (Act 8). The GM runs it; whoever's turn it is can move, use Pages and end their turn.
+  | { type: "createMap"; name: string; width: number; height: number; background?: string }
+  | { type: "updateMap"; mapId: string; name?: string; width?: number; height?: number; background?: string | null }
+  | { type: "switchMap"; mapId: string }
+  | { type: "deleteMap"; mapId: string }
   | { type: "startCombat"; tokenIds: string[] }
   | { type: "endCombat" }
   | { type: "addCombatant"; tokenId: string }
