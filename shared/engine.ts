@@ -41,6 +41,49 @@ export function newTable(): TableState {
   };
 }
 
+/** Name and max values for a player's token, from their character sheet. */
+export interface SeatProfile {
+  name: string;
+  max: Pick<Resources, "maxHp" | "maxStagger" | "maxSanity" | "maxLight">;
+}
+
+/**
+ * Gives a player a token the first time they sit at the table, and keeps an existing token's
+ * name and max values in step with their character. Called by the host, never by a device.
+ * Returns false if nothing changed.
+ */
+export function seatPlayer(table: TableState, actor: Actor, profile?: SeatProfile): boolean {
+  const existing = Object.values(table.tokens).find((t) => t.ownerId === actor.uid);
+  const name = profile?.name.trim() || actor.displayName;
+  if (!existing) {
+    const n = Object.values(table.tokens).filter((t) => t.side === "player").length;
+    const token = makeToken(name, "player", 2, clamp(2 + n, 0, table.map.height - 1), PLAYER_COLORS[n % PLAYER_COLORS.length]);
+    token.ownerId = actor.uid;
+    if (profile) {
+      const m = profile.max;
+      token.resources = { ...token.resources, ...m, hp: m.maxHp, stagger: m.maxStagger, light: m.maxLight };
+    }
+    table.tokens[token.id] = token;
+    table.log.push(`${name} took a seat.`);
+    return true;
+  }
+  if (!profile) return false;
+  const r = existing.resources;
+  const m = profile.max;
+  const next: Resources = {
+    ...r,
+    ...m,
+    hp: Math.min(r.hp, m.maxHp),
+    stagger: Math.min(r.stagger, m.maxStagger),
+    light: Math.min(r.light, m.maxLight),
+    sanity: Math.min(r.sanity, m.maxSanity),
+  };
+  const changed = existing.name !== name || (Object.keys(next) as (keyof Resources)[]).some((k) => next[k] !== r[k]);
+  existing.name = name;
+  existing.resources = next;
+  return changed;
+}
+
 /**
  * Applies one action to the table in place. Returns false if nothing changed.
  * Throws ActionError with a message for the person if they aren't allowed to do it.
@@ -66,16 +109,6 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
   const { width, height } = table.map;
 
   switch (action.type) {
-    case "takeSeat": {
-      if (isGm) throw new ActionError("You're the GM of this game. Use the GM screen.");
-      if (Object.values(table.tokens).some((t) => t.ownerId === actor.uid)) return false;
-      const n = Object.values(table.tokens).filter((t) => t.side === "player").length;
-      const token = makeToken(actor.displayName, "player", 2, clamp(2 + n, 0, height - 1), PLAYER_COLORS[n % PLAYER_COLORS.length]);
-      token.ownerId = actor.uid;
-      table.tokens[token.id] = token;
-      log(`${actor.displayName} took a seat.`);
-      return true;
-    }
     case "move": {
       const token = tokenOf(action.tokenId);
       mayMove(token);

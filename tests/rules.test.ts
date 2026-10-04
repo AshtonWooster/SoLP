@@ -105,6 +105,22 @@ test("signals: members ask to connect as themselves; only the GM answers", async
   await assertSucceeds(deleteDoc(ref("p1")));
 });
 
+test("characters: players edit their own, the GM edits any and sets Rank", async () => {
+  const sheet = { ownerId: "p1", name: "Roland", rank: 9 };
+  const ref = (who: string, owner = "p1") => doc(as(who), "games", GAME, "characters", owner);
+  await assertFails(setDoc(ref("p1"), { ...sheet, rank: 1 }));
+  await assertFails(setDoc(ref("p1", "gm"), { ...sheet, ownerId: "gm" }));
+  await assertFails(setDoc(ref("stranger", "stranger"), { ...sheet, ownerId: "stranger" }));
+  await assertSucceeds(setDoc(ref("p1"), sheet));
+  await assertSucceeds(updateDoc(ref("p1"), { name: "Roland the Black Silence" }));
+  await assertFails(updateDoc(ref("p1"), { rank: 8 }));
+  await assertFails(updateDoc(ref("p1"), { ownerId: "gm" }));
+  await assertSucceeds(updateDoc(ref("gm"), { rank: 8 }));
+  await assertSucceeds(getDoc(ref("gm")));
+  await assertFails(getDoc(ref("stranger")));
+  await assertSucceeds(deleteDoc(ref("p1")));
+});
+
 test("only the GM sees the invite code and GM notes", async () => {
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "meta")));
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "notes")));

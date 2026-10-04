@@ -1,0 +1,182 @@
+// Numbers and checks from the ruleset (github.com/AshtonWooster/LoR_PMTTRPG, Rules.md).
+//
+// The ruleset doesn't have its tables yet ("Stats table", "Max Costs table", and
+// Effects_Passives_Proficiencies.md are empty). Every value marked PLACEHOLDER below stands in
+// for one of those; replace it here when the table is written and the whole app follows.
+import { newId } from "./engine.ts";
+import type { Armor, Character, Dice, Equipment, Page, Passive, PrimaryStat, Weapon } from "./character.ts";
+import type { Resources } from "./types.ts";
+
+/** Act 5, Step 1: "For most campaigns, it is encouraged to start at Rank 9." */
+export const STARTING_RANK = 9;
+/** Fixer Grades run from 9 (newest) to 1. */
+export const RANKS = [9, 8, 7, 6, 5, 4, 3, 2, 1];
+
+export const PRIMARY_STATS: { key: PrimaryStat; label: string; effect: string }[] = [
+  { key: "fortitude", label: "Fortitude", effect: "Raises max Health" },
+  { key: "prudence", label: "Prudence", effect: "Raises max Sanity" },
+  { key: "justice", label: "Justice", effect: "Added to Speed rolls" },
+  { key: "temperance", label: "Temperance", effect: "Raises max Stagger Resist" },
+];
+
+/** Act 2 lists Insight plus two unnamed placeholders. Rename them here when the ruleset does. */
+export const SECONDARY_STATS: { key: string; label: string; effect: string }[] = [
+  { key: "insight", label: "Insight", effect: "Added to Perception Story Rolls" },
+  { key: "other", label: "Other", effect: "Not yet defined in the ruleset" },
+  { key: "placeholder", label: "Placeholder", effect: "Not yet defined in the ruleset" },
+];
+
+export interface RankTable {
+  primaryPoints: number;
+  secondaryPoints: number;
+  baseHp: number;
+  baseStagger: number;
+  baseSanity: number;
+  baseLight: number;
+  /** Max total Passive Cost on the Augment. */
+  augmentMaxCost: number;
+  /** Max total Passive Cost on each piece of Equipment. */
+  equipmentMaxCost: number;
+}
+
+/** PLACEHOLDER for the "Stats table" and "Max Costs table": grows as rank improves (9 → 1). */
+export function rankTable(rank: number): RankTable {
+  const step = Math.max(0, STARTING_RANK - rank);
+  return {
+    primaryPoints: 4 + step * 2,
+    secondaryPoints: 3 + step,
+    baseHp: 30 + step * 6,
+    baseStagger: 20 + step * 4,
+    baseSanity: 15,
+    baseLight: 3,
+    augmentMaxCost: 3 + step,
+    equipmentMaxCost: 3 + step,
+  };
+}
+
+/**
+ * Act 5, Step 3: "choose a number of Proficiencies equal to Rank*2".
+ * Read literally, a Rank 9 character starts with 18. Act 2 says each Rank Up adds 2.
+ */
+export function proficiencyCount(rank: number): number {
+  return rank * 2;
+}
+
+/** Act 2: Fortitude raises max Health, Prudence max Sanity, Temperance max Stagger Resist. */
+export function maxResources(c: Pick<Character, "rank" | "primary">): Pick<Resources, "maxHp" | "maxStagger" | "maxSanity" | "maxLight"> {
+  const t = rankTable(c.rank);
+  return {
+    maxHp: t.baseHp + c.primary.fortitude,
+    maxStagger: t.baseStagger + c.primary.temperance,
+    maxSanity: t.baseSanity + c.primary.prudence,
+    maxLight: t.baseLight,
+  };
+}
+
+// ---- Blank pieces for the editor ----
+
+export function blankCharacter(ownerId: string, name: string): Character {
+  return {
+    ownerId,
+    name,
+    rank: STARTING_RANK,
+    primary: { fortitude: 0, prudence: 0, justice: 0, temperance: 0 },
+    secondary: Object.fromEntries(SECONDARY_STATS.map((s) => [s.key, 0])),
+    proficiencies: [],
+    augment: { name: "", description: "", passives: [] },
+    weapons: [],
+    armor: null,
+    details: {
+      age: "",
+      height: "",
+      occupation: "",
+      birthplace: "",
+      residence: "",
+      appearance: "",
+      personality: "",
+      relationships: "",
+    },
+    ahn: 0,
+    updatedAt: Date.now(),
+  };
+}
+
+export const blankPassive = (): Passive => ({ id: newId(), name: "", cost: 1, description: "" });
+export const blankDice = (): Dice => ({ id: newId(), kind: "slash", counter: false, sides: 4, basePower: 2 });
+export const blankPage = (kind: Page["kind"]): Page => ({
+  id: newId(),
+  name: "",
+  kind,
+  cost: kind === "basic" ? 1 : 2,
+  type: "melee",
+  dice: [blankDice()],
+  effect: "",
+});
+function blankEquipment(): Equipment {
+  // Step 5: one Basic Page and one Special Page for each piece of Equipment.
+  return { id: newId(), name: "", description: "", passives: [], pages: [blankPage("basic"), blankPage("special")] };
+}
+export const blankWeapon = (): Weapon => ({ ...blankEquipment(), hands: 1 });
+export const blankArmor = (): Armor => ({ ...blankEquipment(), resistances: { slash: 1, pierce: 1, blunt: 1 } });
+
+// ---- Checks ----
+
+export interface Check {
+  step: string;
+  ok: boolean;
+  text: string;
+}
+
+const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
+
+/** Passive costs on one Augment or piece of Equipment against its max (Act 7, "Passives"). */
+function passiveChecks(step: string, label: string, passives: Passive[], max: number): Check[] {
+  const positive = sum(passives.filter((p) => p.cost > 0).map((p) => p.cost));
+  const negative = -sum(passives.filter((p) => p.cost < 0).map((p) => p.cost));
+  const net = positive - negative;
+  const checks: Check[] = [{ step, ok: net <= max, text: `${label}: Passive Cost ${net} of ${max}` }];
+  if (negative > 0) {
+    checks.push({ step, ok: negative <= max, text: `${label}: Negative Passives ${negative} of ${max} allowed` });
+  }
+  return checks;
+}
+
+function equipmentChecks(step: string, label: string, e: Equipment, rank: number): Check[] {
+  const name = e.name.trim() || label;
+  const pagesOk = e.pages.some((p) => p.kind === "basic") && e.pages.some((p) => p.kind === "special");
+  return [
+    { step, ok: !!e.name.trim(), text: `${label} has a name` },
+    ...passiveChecks(step, name, e.passives, rankTable(rank).equipmentMaxCost),
+    { step, ok: pagesOk, text: `${name} has a Basic Page and a Special Page` },
+    {
+      step,
+      ok: e.pages.every((p) => p.name.trim() && p.dice.length > 0),
+      text: `${name}: every Page has a name and at least one Dice`,
+    },
+  ];
+}
+
+/** Everything Act 5 asks for, as a checklist. A character is ready when every check passes. */
+export function characterChecks(c: Character): Check[] {
+  const t = rankTable(c.rank);
+  const primarySpent = sum(Object.values(c.primary));
+  const secondarySpent = sum(Object.values(c.secondary));
+  const hands = sum(c.weapons.map((w) => w.hands));
+  return [
+    { step: "Stats", ok: primarySpent === t.primaryPoints, text: `Primary Stat Points: ${primarySpent} of ${t.primaryPoints} spent` },
+    { step: "Stats", ok: secondarySpent === t.secondaryPoints, text: `Secondary Stat Points: ${secondarySpent} of ${t.secondaryPoints} spent` },
+    {
+      step: "Proficiencies",
+      ok: c.proficiencies.length === proficiencyCount(c.rank) && c.proficiencies.every((p) => p.name.trim()),
+      text: `Proficiencies: ${c.proficiencies.length} of ${proficiencyCount(c.rank)} chosen`,
+    },
+    { step: "Augment", ok: !!c.augment.name.trim(), text: "Augment has a name" },
+    ...passiveChecks("Augment", "Augment", c.augment.passives, t.augmentMaxCost),
+    { step: "Equipment", ok: c.weapons.length > 0, text: "At least one Weapon" },
+    { step: "Equipment", ok: hands <= 2, text: `Weapons use ${hands} of 2 hands` },
+    { step: "Equipment", ok: !!c.armor, text: "One Armor" },
+    ...c.weapons.flatMap((w, i) => equipmentChecks("Equipment", `Weapon ${i + 1}`, w, c.rank)),
+    ...(c.armor ? equipmentChecks("Equipment", "Armor", c.armor, c.rank) : []),
+    { step: "Finishing Touches", ok: !!c.name.trim(), text: "Character has a name" },
+  ];
+}

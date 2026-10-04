@@ -58,6 +58,20 @@ service cloud.firestore {
           && request.resource.data.answer.size() < 20000;
       }
 
+      // One character per player. Party members can read it (allies' public info).
+      // The player edits their own; the GM can edit any and is the only one who changes Rank.
+      match /characters/{uid} {
+        allow read: if isMember(gameId);
+        allow create: if isMember(gameId) && request.auth.uid == uid
+          && request.resource.data.ownerId == uid
+          && request.resource.data.rank == 9;
+        allow update: if isGm(gameId)
+          || (request.auth.uid == uid
+              && request.resource.data.ownerId == uid
+              && request.resource.data.rank == resource.data.rank);
+        allow delete: if isGm(gameId) || (signedIn() && request.auth.uid == uid);
+      }
+
       match /gm/meta {
         allow read: if isGm(gameId);
       }

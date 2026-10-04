@@ -13,7 +13,9 @@ import {
   where,
   type DocumentChange,
 } from "firebase/firestore";
-import { ActionError, applyAction, newId, newTable, type Actor } from "../../shared/engine.ts";
+import type { Character } from "../../shared/character.ts";
+import { ActionError, applyAction, newId, newTable, seatPlayer, type Actor, type SeatProfile } from "../../shared/engine.ts";
+import { maxResources } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
   GmNotes,
@@ -50,6 +52,8 @@ export class Host {
   private sessionId = newId();
   private table?: TableState;
   private notes: Record<string, string> = {};
+  /** Characters by owner, kept live so tokens follow edits to a character sheet. */
+  private characters = new Map<string, Character>();
   private peers = new Set<Peer>();
   private handled = new Set<string>();
   private unsubs: (() => void)[] = [];
@@ -85,6 +89,22 @@ export class Host {
       if (this.stopped) return;
       this.table = (tableSnap.data() as TableState | undefined) ?? newTable();
       this.notes = (notesSnap.data() as GmNotes | undefined)?.tokens ?? {};
+
+      // Load characters before anyone sits down, then follow edits to them.
+      await new Promise<void>((resolve) => {
+        this.unsubs.push(
+          onSnapshot(
+            collection(db, "games", this.gameId, "characters"),
+            (snap) => {
+              this.characters = new Map(snap.docs.map((d) => [d.id, d.data() as Character]));
+              this.syncSeatedPlayers();
+              resolve();
+            },
+            () => resolve(),
+          ),
+        );
+      });
+      if (this.stopped) return;
 
       // Announce this tab as the host. Opening the GM screen elsewhere takes over.
       const session: SessionDoc = { sessionId: this.sessionId, hostUid: this.me.uid, startedAt: Date.now() };
@@ -228,13 +248,33 @@ export class Host {
       return this.refuse(peer, "You're the GM of this game. Use the GM screen.");
     }
     peer.view = view;
-    // A player's first visit gives them a token.
-    if (view === "play") {
-      try {
-        this.apply({ type: "takeSeat" }, peer.actor);
-      } catch {}
+    // A player's first visit gives them a token, built from their character if they have one.
+    if (view === "play" && this.table && seatPlayer(this.table, peer.actor, this.profileOf(peer.actor.uid))) {
+      this.changed();
     }
     this.publish();
+  }
+
+  private profileOf(uid: string): SeatProfile | undefined {
+    const c = this.characters.get(uid);
+    return c ? { name: c.name, max: maxResources(c) } : undefined;
+  }
+
+  /** Brings every seated player's token in line with their character sheet. */
+  private syncSeatedPlayers() {
+    if (!this.table) return;
+    let changed = false;
+    for (const token of Object.values(this.table.tokens)) {
+      const member = token.ownerId ? this.game.members[token.ownerId] : undefined;
+      const profile = token.ownerId ? this.profileOf(token.ownerId) : undefined;
+      if (member && profile) {
+        changed = seatPlayer(this.table, { uid: token.ownerId!, role: member.role, displayName: member.displayName }, profile) || changed;
+      }
+    }
+    if (changed) {
+      this.changed();
+      this.publish();
+    }
   }
 
   /** Tells the device why, then hangs up once the message has had time to arrive. */
@@ -260,11 +300,16 @@ export class Host {
       changed = applyAction(this.table, action, actor);
     }
     if (changed) {
-      this.dirty = true;
-      clearTimeout(this.saveTimer);
-      this.saveTimer = setTimeout(() => this.flush(), SAVE_DELAY_MS);
+      this.changed();
       this.publish();
     }
+  }
+
+  /** Marks the table unsaved and schedules an autosave. */
+  private changed() {
+    this.dirty = true;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => this.flush(), SAVE_DELAY_MS);
   }
 
   /** Sends the current table to every device (GM-only notes go to GM devices only). */

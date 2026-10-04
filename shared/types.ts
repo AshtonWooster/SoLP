@@ -13,6 +13,7 @@
 //   games/{gameId}/gm/notes         GmNotes            GM read/write
 //   games/{gameId}/session/host     SessionDoc         members read; GM write
 //   games/{gameId}/signals/{id}     SignalDoc          connection handshakes (see src/net)
+//   games/{gameId}/characters/{uid} Character          members read; owner or GM write (shared/character.ts)
 
 // ---- Accounts and games ----
 
@@ -104,8 +105,6 @@ export type ResourcePatch = Partial<Resources>;
 
 /** Every change to the table goes through shared/engine.ts on the host, which checks who may do it. */
 export type TableAction =
-  /** A player sits down at the table: creates their token if they don't have one. */
-  | { type: "takeSeat" }
   /** Players may move only their own token; the GM may move any token. */
   | { type: "move"; tokenId: string; x: number; y: number }
   /** Move one tile relative to where the token is now, so quick taps on a phone all count. */
