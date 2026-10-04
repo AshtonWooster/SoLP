@@ -14,7 +14,7 @@ Everyone has one kind of account. Creating a game makes you its GM; joining one 
 | Front page | Everyone | Any | `/` |
 | Game page | Members | Any | `/games/:id` |
 | GM controls | GM | Laptop | `/games/:id/gm` |
-| Board | GM (logged in on the table screen) | iPad / TV | `/games/:id/board` |
+| Board | Anyone in the game | iPad / TV / any screen | `/games/:id/board` |
 | Player view | Players | Phone | `/games/:id/play` |
 
 The GM can override any token's Health, Stagger Resist, Light and Sanity, move any token, add or remove enemies, and keep notes only the GM sees.
@@ -64,7 +64,27 @@ At the start of each turn the active character gets Movement Points (3 + Justice
 
 The GM can move and edit anything at any time, press **Next turn** (e.g. after an enemy's turn), add or remove combatants, re-roll Speed, and **End combat**. Enemies' Justice is set in the GM's token panel; players' comes from their character sheet.
 
-`npm run test:engine` runs the combat rules tests.
+**Turn phases** follow Act 8 exactly and pass on their own when nothing is needed from the player: **Resolve Slotted Pages** → **Upkeep** (draw 1 Page, +1 Light; Counter Dice expire) → **Combat Actions** (waits for the player) → **Endstep** → next character. The phase logic is in `shared/combat.ts` (`runPhases`), ready for Effects and Passives to hook into later.
+
+**Pages in combat** (Act 3):
+- Players start combat with 3 Pages from their shuffled Combat Deck and draw 1 each Upkeep; an empty deck reshuffles the discard pile. The Auxiliary Deck is available from the start; a used Auxiliary Page is gone until combat ends. Hands are visible to the party; draw piles are hidden.
+- On your turn, pick a Page on your phone; valid targets (within Weapon Range) light up on the board. Tap one on the board or phone to pay its Light and slot it on a Speed Die. It resolves at the start of your next turn.
+- Slotting against a Speed Die that already holds a Page starts a **Clash**, shown as an orange arrow. Dice clash top to bottom: higher Final Power wins, ties are Draws, Clash Win/Lose give ±1 Sanity. Block and Evade, Recycling, Melee vs Ranged, leftover dice, and Counter Dice all work as written. **Mass Attacks** (Summation and Individual) and **Instant** Pages are in too.
+- Offensive dice deal damage × the target's Type Resistance, and the same amount × their Stagger Resistance as Stagger damage. Armor has both sets; the GM sets enemies'. Health 0 = Knocked Out (turns skipped), Stagger 0 = Staggered, Sanity at its minimum = Panic. A character targeted by an enemy's non-Mass Page can't move. **Dash** turns Light into Movement.
+- Enemies have decks too: they draw 3 to start and 1 each Upkeep, and the GM plays their hand from the GM screen. Enemy hands are hidden from players.
+- Placeholders (not in the ruleset yet) are in `shared/ruleset.ts`: 1 Speed Die each, Weapon Range (Melee 1, Ranged 6, Mass 3), Dash (1 Light → 2 Movement).
+
+Anyone in the game can open the board, not just the GM.
+
+### Enemy templates
+
+On the game page, **Enemy templates** (GM only) lets the GM design enemies: Health, Stagger Resist, Light, Sanity, Justice, damage and Stagger resistances, notes, and a Combat Deck of Pages with any number of copies (no size limit). On the GM screen, **Place** puts a copy on the map. Each copy is its own token ("Thug", "Thug 2", ...) with its own Health, deck and so on; removing the token removes only that copy. Editing a placed enemy (token panel → Pages and deck) doesn't change its template.
+
+### Usable items
+
+The GM can mark any inventory item **Usable**, and usable items **Consumable** with a number of uses. Players tap **Use** on their sheet or phone; when a consumable's uses run out, one item of the stack is used up (or the item is gone). Tools are used through the Auxiliary Deck in combat and count down the same way when consumable.
+
+`npm run test:engine` runs the rules tests (combat, decks, clashes).
 
 ### Players who can't connect
 

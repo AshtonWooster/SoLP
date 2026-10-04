@@ -14,6 +14,9 @@
 //   games/{gameId}/session/host     SessionDoc         members read; GM write
 //   games/{gameId}/signals/{id}     SignalDoc          connection handshakes (see src/net)
 //   games/{gameId}/characters/{uid} Character          members read; owner or GM write (shared/character.ts)
+//   games/{gameId}/enemies/{id}     EnemyTemplate      GM only (shared/character.ts)
+
+import type { DeckEntry, Dice, Page, ResistanceSet } from "./character.ts";
 
 // ---- Accounts and games ----
 
@@ -93,6 +96,25 @@ export interface Token {
   ownerId?: string;
   /** Added to Speed rolls and Movement Points. Players' comes from their character; the GM sets enemies'. */
   justice?: number;
+  /** Damage multipliers. Players' come from their Armor; the GM sets enemies'. Missing = 1. */
+  resistances?: ResistanceSet;
+  /** Stagger damage multipliers, the same way. */
+  staggerResistances?: ResistanceSet;
+  /** An enemy's Pages and Combat Deck (players' come from their character sheet). */
+  pages?: Page[];
+  deck?: DeckEntry[];
+  /** The enemy template this token was copied from. */
+  templateId?: string;
+  status?: TokenStatus;
+}
+
+export interface TokenStatus {
+  /** Health reached 0. */
+  knockedOut?: boolean;
+  /** Stagger Resist reached 0. */
+  staggered?: boolean;
+  /** Sanity reached its minimum. */
+  panic?: boolean;
 }
 
 /** One character in the turn order. */
@@ -102,7 +124,75 @@ export interface Combatant {
   roll: number;
   bonus: number;
   speed: number;
+  /** How many Speed Dice (Page slots) they have. */
+  dice: number;
 }
+
+/**
+ * A turn's phases, in order (Act 8, "On Your Turn"). Phases that need nothing from the player
+ * pass automatically; only Combat Actions waits for them.
+ */
+export type TurnPhase = "resolve" | "upkeep" | "actions" | "endstep";
+
+/** One copy of a Page in a deck, hand or discard pile. */
+export interface Card {
+  id: string;
+  pageId: string;
+  /** For Auxiliary Pages: the inventory Tool it comes from. */
+  itemId?: string;
+}
+
+/** A player's Pages during combat. The draw pile's order is hidden from other players. */
+export interface DeckState {
+  draw: Card[];
+  hand: Card[];
+  /** Top of the pile is the end of the list. */
+  discard: Card[];
+  /** Auxiliary Deck: available from the start of combat. */
+  aux: Card[];
+  /** Auxiliary Pages already used this combat. */
+  auxUsed: Card[];
+}
+
+export interface TargetRef {
+  tokenId: string;
+  /** Which of the target's Speed Dice. */
+  die: number;
+}
+
+/** A Page slotted on one of a character's Speed Dice, waiting to resolve at the start of their next turn. */
+export interface SlottedPage {
+  id: string;
+  ownerId: string;
+  die: number;
+  pageId: string;
+  /** The card it came from (players), so it can go to the discard pile. */
+  card?: Card;
+  fromAux?: boolean;
+  targets: TargetRef[];
+  /** The page this one is clashing with, if any. */
+  clashWith?: string;
+}
+
+/** A Counter Die waiting on a character, used automatically against One-Sided attacks. */
+export interface CounterDie {
+  id: string;
+  die: Dice;
+  pageId: string;
+}
+
+/** The Page a player is picking targets for, so the board can light up valid targets. */
+export interface Aim {
+  tokenId: string;
+  pageId: string;
+  source: PageSource;
+  cardId?: string;
+  /** Picked so far (Mass Attacks pick several). */
+  targets: string[];
+}
+
+/** Where a Page being used comes from: the hand or the Auxiliary Deck. */
+export type PageSource = "hand" | "aux";
 
 /** Present while combat is running (Act 8). */
 export interface CombatState {
@@ -111,8 +201,17 @@ export interface CombatState {
   order: Combatant[];
   /** Index into order of whoever's turn it is. */
   turn: number;
+  phase: TurnPhase;
   /** Movement Points the active character has left this turn. */
   movementLeft: number;
+  /** Every Page in play, by id, copied from character sheets and enemy page lists. */
+  pages: Record<string, Page>;
+  /** Everyone's decks in this combat, by token id. */
+  decks: Record<string, DeckState>;
+  slots: SlottedPage[];
+  /** Counter Dice waiting on each character, by token id, in the order they were made. */
+  counters: Record<string, CounterDie[]>;
+  aim?: Aim;
 }
 
 /** Everything on the table that every member may see. GM-only data lives under games/{id}/gm. */
@@ -122,6 +221,9 @@ export interface TableState {
   log: string[];
   combat?: CombatState;
 }
+
+/** What a placed enemy copies from its template. */
+export type EnemyTemplateData = Omit<import("./character.ts").EnemyTemplate, "updatedAt" | "notes">;
 
 /** Partial resource edits the GM can apply to any token. */
 export type ResourcePatch = Partial<Resources>;
@@ -138,7 +240,12 @@ export type TableAction =
   | { type: "setResources"; tokenId: string; patch: ResourcePatch }
   | { type: "setNote"; tokenId: string; note: string }
   | { type: "setJustice"; tokenId: string; justice: number }
-  // Combat (Act 8). The GM runs it; whoever's turn it is can move and end their turn.
+  | { type: "setResistances"; tokenId: string; resistances: ResistanceSet; staggerResistances?: ResistanceSet }
+  /** Replace an enemy token's Pages and deck. */
+  | { type: "setEnemyDeck"; tokenId: string; pages: Page[]; deck: DeckEntry[] }
+  /** Place a copy of an enemy template on the map. */
+  | { type: "spawnEnemy"; templateId: string; template: EnemyTemplateData; x: number; y: number }
+  // Combat (Act 8). The GM runs it; whoever's turn it is can move, use Pages and end their turn.
   | { type: "startCombat"; tokenIds: string[] }
   | { type: "endCombat" }
   | { type: "addCombatant"; tokenId: string }
@@ -148,9 +255,18 @@ export type TableAction =
   | { type: "rerollSpeed" }
   | { type: "endTurn" }
   /** Move the active character to a tile, spending Movement Points. Used from the board and phones. */
-  | { type: "turnMove"; x: number; y: number };
+  | { type: "turnMove"; x: number; y: number }
+  /** Convert Light into Movement Points. */
+  | { type: "dash" }
+  /** Pick a Page to use, so the board can show its valid targets. */
+  | { type: "aim"; source: PageSource; cardId?: string; pageId?: string }
+  /** Add or remove a target while aiming a Mass Attack. */
+  | { type: "aimTarget"; tokenId: string }
+  | { type: "clearAim" }
+  /** Pay the Light and slot the aimed Page against the given targets (or the ones picked while aiming). */
+  | { type: "slot"; targets?: string[] };
 
-/** Which screen a connecting device is: a player's phone or the shared board (GM only). */
+/** Which screen a connecting device is: a player's phone or the shared board. */
 export type View = "play" | "board";
 
 // Messages over the WebRTC data channel between a device and the host.

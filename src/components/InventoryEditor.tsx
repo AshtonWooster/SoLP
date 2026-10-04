@@ -1,5 +1,5 @@
 import type { Character, InventoryItem } from "../../shared/character.ts";
-import { blankItem } from "../../shared/ruleset.ts";
+import { blankItem, isUsable, useItemIn } from "../../shared/ruleset.ts";
 import { PageEditor } from "./EquipmentEditor.tsx";
 import { NumberInput, Stepper, TextField } from "./Fields.tsx";
 
@@ -9,16 +9,70 @@ const KINDS: { value: InventoryItem["kind"]; label: string; hint: string }[] = [
   { value: "trinket", label: "Trinket", hint: "Only active in the Trinket Slot" },
 ];
 
+/** Usable / Consumable / Max uses: set by the GM, shown to the player. */
+function UseControls({ item, isGm, onChange, onUse }: { item: InventoryItem; isGm: boolean; onChange: (i: InventoryItem) => void; onUse?: () => void }) {
+  const usable = isUsable(item);
+  const max = Math.max(1, item.maxUses ?? 1);
+  const left = item.uses ?? max;
+  return (
+    <div className="row wrap use-controls">
+      {isGm ? (
+        <>
+          {item.kind !== "tool" && (
+            <label className="inline check">
+              <input type="checkbox" checked={!!item.usable} onChange={(e) => onChange({ ...item, usable: e.target.checked })} />
+              Usable
+            </label>
+          )}
+          {usable && (
+            <label className="inline check">
+              <input
+                type="checkbox"
+                checked={!!item.consumable}
+                onChange={(e) => onChange({ ...item, consumable: e.target.checked, maxUses: max, uses: max })}
+              />
+              Consumable
+            </label>
+          )}
+          {usable && item.consumable && (
+            <label className="inline">
+              Max uses
+              <NumberInput label="Max uses" value={max} min={1} onChange={(n) => onChange({ ...item, maxUses: Math.max(1, Math.round(n)), uses: Math.max(1, Math.round(n)) })} />
+            </label>
+          )}
+          <span className="muted small">(GM only)</span>
+        </>
+      ) : (
+        usable && <span className="badge-soft">{item.kind === "tool" ? "Used from the Auxiliary Deck" : "Usable"}</span>
+      )}
+      {usable && item.consumable && (
+        <span className="muted small">
+          {left} of {max} use{max === 1 ? "" : "s"} left{item.stacking ? ` on this one (×${item.count})` : ""}
+        </span>
+      )}
+      {onUse && (
+        <button type="button" onClick={onUse}>
+          Use
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ItemCard({
   item,
+  isGm,
   onChange,
   onRemove,
   onEquip,
+  onUse,
 }: {
   item: InventoryItem;
+  isGm: boolean;
   onChange: (i: InventoryItem) => void;
   onRemove: () => void;
   onEquip?: () => void;
+  onUse?: () => void;
 }) {
   return (
     <div className={`item-card ${item.kind}`}>
@@ -61,18 +115,13 @@ function ItemCard({
             </label>
           </>
         )}
-        {item.kind === "tool" && (
-          <label className="inline check">
-            <input type="checkbox" checked={!!item.consumable} onChange={(e) => onChange({ ...item, consumable: e.target.checked })} />
-            Consumed on use
-          </label>
-        )}
         {onEquip && (
           <button type="button" onClick={onEquip}>
             Equip as Trinket
           </button>
         )}
       </div>
+      <UseControls item={item} isGm={isGm} onChange={onChange} onUse={onUse} />
       {item.kind === "tool" && item.page && (
         <>
           <h5>Tool Page</h5>
@@ -140,8 +189,10 @@ export function InventoryEditor({
         <ItemCard
           key={item.id}
           item={item}
+          isGm={canSetSlots}
           onChange={(ni) => update((d) => void (d.inventory.items[i] = ni))}
           onRemove={() => update((d) => void d.inventory.items.splice(i, 1))}
+          onUse={item.kind !== "tool" && isUsable(item) ? () => update((d) => void (d.inventory.items = useItemIn(d.inventory.items, item.id))) : undefined}
           onEquip={
             item.kind === "trinket"
               ? () =>

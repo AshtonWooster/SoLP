@@ -188,22 +188,34 @@ export function EquipmentEditor<T extends Weapon | Armor>({
       )}
       {"resistances" in item && (
         <div>
-          <h4>Resistances</h4>
-          <p className="muted small">Damage taken is multiplied by these. Lower is tougher.</p>
-          <div className="row wrap">
-            {(["slash", "pierce", "blunt"] as const).map((k) => (
-              <label className="inline" key={k}>
-                {k[0].toUpperCase() + k.slice(1)} ×
-                <NumberInput
-                  label={`${k} resistance`}
-                  value={item.resistances[k]}
-                  step={0.1}
-                  min={0}
-                  onChange={(v) => onChange({ ...item, resistances: { ...item.resistances, [k]: Math.max(0, v) } })}
-                />
-              </label>
-            ))}
-          </div>
+          {(
+            [
+              ["resistances", "Resistances", "Damage taken is multiplied by these. Lower is tougher."],
+              ["staggerResistances", "Stagger resistances", "Stagger damage taken is multiplied by these, the same way."],
+            ] as const
+          ).map(([field, title, hint]) => (
+            <div key={field}>
+              <h4>{title}</h4>
+              <p className="muted small">{hint}</p>
+              <div className="row wrap">
+                {(["slash", "pierce", "blunt"] as const).map((k) => {
+                  const set = item[field] ?? { slash: 1, pierce: 1, blunt: 1 };
+                  return (
+                    <label className="inline" key={k}>
+                      {k[0].toUpperCase() + k.slice(1)} ×
+                      <NumberInput
+                        label={`${field === "resistances" ? "" : "stagger "}${k} resistance`}
+                        value={set[k]}
+                        step={0.1}
+                        min={0}
+                        onChange={(v) => onChange({ ...item, [field]: { ...set, [k]: Math.max(0, v) } })}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
       <TextField label="Description" value={item.description} onChange={(description) => set({ description })} multiline />

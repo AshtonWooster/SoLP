@@ -80,6 +80,11 @@ service cloud.firestore {
         allow delete: if isGm(gameId) || (signedIn() && request.auth.uid == uid);
       }
 
+      // Enemy templates: only the GM sees or edits them.
+      match /enemies/{templateId} {
+        allow read, write: if isGm(gameId);
+      }
+
       match /gm/meta {
         allow read: if isGm(gameId);
       }

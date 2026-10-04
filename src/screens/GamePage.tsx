@@ -51,6 +51,10 @@ export function GamePage() {
                 Open the board
                 <small>Shared map, for the iPad or TV. Log in there as yourself.</small>
               </Link>
+              <Link className="big-button secondary" to={`/games/${id}/enemies`}>
+                Enemy templates
+                <small>Design enemies and their decks</small>
+              </Link>
             </div>
             <section className="panel">
               <h3>Invite players</h3>
@@ -69,6 +73,10 @@ export function GamePage() {
             <Link className="big-button" to={`/games/${id}/play`}>
               Open my table view
               <small>Your character, hand and party, on your phone</small>
+            </Link>
+            <Link className="big-button secondary" to={`/games/${id}/board`}>
+              Open the board
+              <small>The shared map, on any screen</small>
             </Link>
             <Link className="big-button secondary" to={`/games/${id}/characters/${user!.id}`}>
               {characters?.[user!.id] ? "My character" : "Create my character"}

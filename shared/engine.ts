@@ -1,19 +1,32 @@
 // The game rules. Runs in the GM's browser, which hosts the live table, and in the
 // createGame function (for the starting table). Every action from a player or the GM
 // goes through applyAction, which checks whether that person may do it.
+// Combat turns, decks, Pages and clashes live in combat.ts.
+import type { DeckEntry, Page, ResistanceSet } from "./character.ts";
+import {
+  activeToken,
+  actingToken,
+  addCombatant,
+  aim,
+  aimTarget,
+  dash,
+  dropCombatant,
+  endTurn,
+  pinnedBy,
+  slot,
+  sortOrder,
+  speedText,
+  startCombat,
+  type EngineContext,
+} from "./combat.ts";
+import { ActionError, clamp, log, occupied, type Actor } from "./core.ts";
 import { newId, rollDie } from "./id.ts";
-import { moveCost, movementPoints, SPEED_DIE, UPKEEP_LIGHT } from "./ruleset.ts";
-import type { Combatant, GameRole, Resources, Side, TableAction, TableState, Token } from "./types.ts";
+import { moveCost, SPEED_DIE } from "./ruleset.ts";
+import type { Resources, Side, TableAction, TableState, Token } from "./types.ts";
 
-export { newId };
-
-export class ActionError extends Error {}
-
-export interface Actor {
-  uid: string;
-  role: GameRole;
-  displayName: string;
-}
+export { activeToken, ActionError, newId, type Actor, type EngineContext };
+export { pinnedBy, validTargets } from "./combat.ts";
+export type { Loadout } from "./combat.ts";
 
 const PLAYER_COLORS = ["#4fb3bf", "#e0b04f", "#9b7ede", "#6cc070", "#e07a9b", "#5c8fe0"];
 
@@ -26,10 +39,6 @@ function makeToken(name: string, side: Side, x: number, y: number, color: string
   return { id: newId(), name, side, x, y, color, resources: defaultResources() };
 }
 
-function clamp(n: unknown, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, Math.round(Number(n) || 0)));
-}
-
 export function newTable(): TableState {
   const enemy = makeToken("Sweeper", "enemy", 12, 4, "#d9534f");
   return {
@@ -39,11 +48,13 @@ export function newTable(): TableState {
   };
 }
 
-/** Name and max values for a player's token, from their character sheet. */
+/** Name, max values and combat stats for a player's token, from their character sheet. */
 export interface SeatProfile {
   name: string;
   max: Pick<Resources, "maxHp" | "maxStagger" | "maxSanity" | "maxLight">;
   justice: number;
+  resistances?: ResistanceSet;
+  staggerResistances?: ResistanceSet;
 }
 
 /**
@@ -62,9 +73,11 @@ export function seatPlayer(table: TableState, actor: Actor, profile?: SeatProfil
       const m = profile.max;
       token.resources = { ...token.resources, ...m, hp: m.maxHp, stagger: m.maxStagger, light: m.maxLight };
       token.justice = profile.justice;
+      if (profile.resistances) token.resistances = profile.resistances;
+      if (profile.staggerResistances) token.staggerResistances = profile.staggerResistances;
     }
     table.tokens[token.id] = token;
-    table.log.push(`${name} took a seat.`);
+    log(table, `${name} took a seat.`);
     return true;
   }
   if (!profile) return false;
@@ -78,99 +91,30 @@ export function seatPlayer(table: TableState, actor: Actor, profile?: SeatProfil
     light: Math.min(r.light, m.maxLight),
     sanity: Math.min(r.sanity, m.maxSanity),
   };
+  const sameRes =
+    JSON.stringify([existing.resistances ?? null, existing.staggerResistances ?? null]) ===
+    JSON.stringify([profile.resistances ?? null, profile.staggerResistances ?? null]);
   const changed =
     existing.name !== name ||
     existing.justice !== profile.justice ||
+    !sameRes ||
     (Object.keys(next) as (keyof Resources)[]).some((k) => next[k] !== r[k]);
   existing.name = name;
   existing.resources = next;
   existing.justice = profile.justice;
+  if (profile.resistances) existing.resistances = profile.resistances;
+  else delete existing.resistances;
+  if (profile.staggerResistances) existing.staggerResistances = profile.staggerResistances;
+  else delete existing.staggerResistances;
   return changed;
 }
-
-// ---- Combat (Act 8) ----
-
-function log(table: TableState, line: string) {
-  table.log.push(line);
-  if (table.log.length > 100) table.log.splice(0, table.log.length - 100);
-}
-
-function rollSpeed(token: Token): Combatant {
-  const bonus = token.justice ?? 0;
-  const roll = rollDie(SPEED_DIE);
-  return { tokenId: token.id, roll, bonus, speed: roll + bonus };
-}
-
-function speedText(t: Token, c: Combatant) {
-  return `${t.name} ${c.speed} (${c.roll}${c.bonus >= 0 ? "+" : ""}${c.bonus})`;
-}
-
-/** Highest Speed first. On a tie players go before enemies; other ties keep their order (the GM can swap them). */
-function sortOrder(table: TableState, order: Combatant[]): Combatant[] {
-  const sideRank = (c: Combatant) => (table.tokens[c.tokenId]?.side === "player" ? 0 : 1);
-  return [...order].sort((a, b) => b.speed - a.speed || sideRank(a) - sideRank(b));
-}
-
-/** The token whose turn it is, if combat is running. */
-export function activeToken(table: TableState): Token | undefined {
-  const c = table.combat;
-  return c ? table.tokens[c.order[c.turn]?.tokenId] : undefined;
-}
-
-/** Start of a turn: fresh Movement Points, then Upkeep restores Light. */
-function beginTurn(table: TableState) {
-  const c = table.combat!;
-  const token = activeToken(table);
-  if (!token) return;
-  c.movementLeft = movementPoints(token.justice ?? 0);
-  const r = token.resources;
-  const gained = Math.min(UPKEEP_LIGHT, Math.max(0, r.maxLight - r.light));
-  r.light += gained;
-  log(table, `Round ${c.round}: ${token.name}'s turn.${gained ? ` +${gained} Light.` : ""}`);
-}
-
-/** Moves to the next character in the order, starting a new round after the last. */
-function nextTurn(table: TableState) {
-  const c = table.combat!;
-  c.turn += 1;
-  if (c.turn >= c.order.length) {
-    c.turn = 0;
-    c.round += 1;
-  }
-  beginTurn(table);
-}
-
-/** Takes a character out of the order, keeping the turn on the right person. */
-function dropCombatant(table: TableState, tokenId: string) {
-  const c = table.combat;
-  if (!c) return;
-  const i = c.order.findIndex((x) => x.tokenId === tokenId);
-  if (i < 0) return;
-  c.order.splice(i, 1);
-  if (c.order.length === 0) {
-    delete table.combat;
-    log(table, "Combat ended: no one left in the turn order.");
-    return;
-  }
-  if (i < c.turn) c.turn -= 1;
-  else if (i === c.turn) {
-    // It was their turn: the next person goes.
-    if (c.turn >= c.order.length) {
-      c.turn = 0;
-      c.round += 1;
-    }
-    beginTurn(table);
-  }
-}
-
-const occupied = (table: TableState, x: number, y: number, except: string) =>
-  Object.values(table.tokens).some((t) => t.id !== except && t.x === x && t.y === y);
 
 /**
  * Applies one action to the table in place. Returns false if nothing changed.
  * Throws ActionError with a message for the person if they aren't allowed to do it.
+ * The host passes ctx so combat can read players' decks from their character sheets.
  */
-export function applyAction(table: TableState, action: TableAction, actor: Actor): boolean {
+export function applyAction(table: TableState, action: TableAction, actor: Actor, ctx?: EngineContext): boolean {
   if (!action || typeof action !== "object") throw new ActionError("Bad request.");
   const isGm = actor.role === "gm";
   const gmOnly = () => {
@@ -188,16 +132,17 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
     if (!combat) throw new ActionError("Combat hasn't started.");
     return combat;
   };
-  /** Whoever's turn it is: the GM, or the player who owns the active token. */
-  const mayActNow = () => {
-    const active = activeToken(table);
-    if (!active) throw new ActionError("Combat hasn't started.");
-    if (!isGm && active.ownerId !== actor.uid) throw new ActionError("It isn't your turn.");
-    return active;
+  /** In combat, a player's movement spends Movement Points and is blocked while an enemy's Page targets them. */
+  const spendMovement = (token: Token, cost: number) => {
+    const c = inCombat();
+    const by = pinnedBy(table, token);
+    if (by) throw new ActionError(`${token.name} is targeted by ${by.name}'s attack and can't move.`);
+    if (cost > c.movementLeft) throw new ActionError(`That's ${cost} tiles; ${token.name} has ${c.movementLeft} Movement left.`);
+    c.movementLeft -= cost;
   };
   /**
    * Moves a token. The GM moves anything, any time, for free. Players move their own token
-   * freely outside combat; in combat only on their turn, spending Movement Points.
+   * freely outside combat; in combat only during their own Combat Actions, spending Movement.
    */
   const moveToken = (token: Token, x: number, y: number) => {
     const to = { x: clamp(x, 0, width - 1), y: clamp(y, 0, height - 1) };
@@ -205,11 +150,9 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
     if (!isGm) {
       if (token.ownerId !== actor.uid) throw new ActionError("You can't move that token.");
       if (combat) {
-        if (activeToken(table)?.id !== token.id) throw new ActionError("It isn't your turn.");
-        const cost = moveCost(token, to);
-        if (cost > combat.movementLeft) throw new ActionError(`That's ${cost} tiles; you have ${combat.movementLeft} Movement left.`);
+        if (actingToken(table, actor).id !== token.id) throw new ActionError("It isn't your turn.");
         if (occupied(table, to.x, to.y, token.id)) throw new ActionError("Someone is already there.");
-        combat.movementLeft -= cost;
+        spendMovement(token, moveCost(token, to));
       }
     }
     token.x = to.x;
@@ -227,15 +170,13 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       return moveToken(token, token.x + clamp(action.dx, -1, 1), token.y + clamp(action.dy, -1, 1));
     }
     case "turnMove": {
-      // From the board (run by the GM) or the active player's phone: always within Movement Points.
-      const c = inCombat();
-      const token = mayActNow();
+      // From the board or the active player's phone: always within Movement Points.
+      const token = actingToken(table, actor);
       const to = { x: clamp(action.x, 0, width - 1), y: clamp(action.y, 0, height - 1) };
       const cost = moveCost(token, to);
       if (cost === 0) return false;
-      if (cost > c.movementLeft) throw new ActionError(`That's ${cost} tiles; ${token.name} has ${c.movementLeft} Movement left.`);
       if (occupied(table, to.x, to.y, token.id)) throw new ActionError("Someone is already there.");
-      c.movementLeft -= cost;
+      spendMovement(token, cost);
       token.x = to.x;
       token.y = to.y;
       return true;
@@ -267,6 +208,9 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
           applied.push(`${key}=${Math.round(value)}`);
         }
       }
+      // Overrides can bring a character back (or knock them out).
+      const r = token.resources;
+      token.status = { ...token.status, knockedOut: r.hp <= 0, staggered: r.stagger <= 0, panic: r.sanity <= -r.maxSanity };
       if (applied.length) say(`GM override: ${token.name} ${applied.join(", ")}`);
       return applied.length > 0;
     }
@@ -282,15 +226,55 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       token.justice = clamp(action.justice, -20, 50);
       return true;
     }
+    case "setResistances": {
+      gmOnly();
+      const token = tokenOf(action.tokenId);
+      token.resistances = cleanResistances(action.resistances);
+      if (action.staggerResistances) token.staggerResistances = cleanResistances(action.staggerResistances);
+      return true;
+    }
+    case "setEnemyDeck": {
+      gmOnly();
+      const token = tokenOf(action.tokenId);
+      if (token.side !== "enemy") throw new ActionError("Players use their character's decks.");
+      token.pages = (Array.isArray(action.pages) ? action.pages : []).slice(0, 60) as Page[];
+      token.deck = cleanDeckEntries(action.deck);
+      return true;
+    }
+    case "spawnEnemy": {
+      gmOnly();
+      const t = action.template;
+      // Each copy is its own token with its own Health and so on; it shares only the starting values.
+      const same = Object.values(table.tokens).filter((x) => x.templateId === action.templateId).length;
+      const name = (String(t.name ?? "").trim().slice(0, 24) || "Enemy") + (same ? ` ${same + 1}` : "");
+      const token = makeToken(name, "enemy", clamp(action.x, 0, width - 1), clamp(action.y, 0, height - 1), String(t.color || "#d9534f"));
+      const n = (v: unknown, d: number) => Math.max(1, Math.round(Number(v) || d));
+      const maxHp = n(t.maxHp, 30);
+      const maxStagger = n(t.maxStagger, 20);
+      const maxLight = n(t.maxLight, 3);
+      const maxSanity = n(t.maxSanity, 15);
+      token.resources = { hp: maxHp, maxHp, stagger: maxStagger, maxStagger, light: maxLight, maxLight, sanity: 0, maxSanity };
+      token.justice = clamp(t.justice, -20, 50);
+      token.resistances = cleanResistances(t.resistances);
+      token.staggerResistances = cleanResistances(t.staggerResistances);
+      token.pages = (Array.isArray(t.pages) ? t.pages : []).slice(0, 60) as Page[];
+      token.deck = cleanDeckEntries(t.deck);
+      token.templateId = String(action.templateId);
+      // Find a free tile near where it was asked for.
+      for (let r = 0; occupied(table, token.x, token.y, token.id) && r < Math.max(width, height); r++) {
+        const spot = reachableTiles(table, token, r + 1).values().next().value;
+        if (spot) [token.x, token.y] = spot.split(",").map(Number);
+      }
+      table.tokens[token.id] = token;
+      say(`GM placed ${token.name}.`);
+      return true;
+    }
     case "startCombat": {
       gmOnly();
       if (combat) throw new ActionError("Combat is already running.");
       const ids = [...new Set((action.tokenIds ?? []).map(String))].filter((id) => table.tokens[id]);
       if (!ids.length) throw new ActionError("Pick at least one character for the turn order.");
-      const order = sortOrder(table, ids.map((id) => rollSpeed(table.tokens[id])));
-      table.combat = { round: 1, order, turn: 0, movementLeft: 0 };
-      say(`Combat started. Speed: ${order.map((c) => speedText(table.tokens[c.tokenId], c)).join(", ")}.`);
-      beginTurn(table);
+      startCombat(table, ids, ctx);
       return true;
     }
     case "endCombat": {
@@ -305,11 +289,7 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       const c = inCombat();
       const token = tokenOf(action.tokenId);
       if (c.order.some((x) => x.tokenId === token.id)) throw new ActionError(`${token.name} is already in the turn order.`);
-      const entry = rollSpeed(token);
-      const activeId = c.order[c.turn].tokenId;
-      c.order = sortOrder(table, [...c.order, entry]);
-      c.turn = c.order.findIndex((x) => x.tokenId === activeId);
-      say(`${speedText(token, entry)} joined the turn order.`);
+      addCombatant(table, token, ctx);
       return true;
     }
     case "removeCombatant": {
@@ -337,21 +317,60 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       const activeId = c.order[c.turn].tokenId;
       c.order = sortOrder(
         table,
-        c.order.filter((x) => table.tokens[x.tokenId]).map((x) => rollSpeed(table.tokens[x.tokenId])),
+        c.order
+          .filter((x) => table.tokens[x.tokenId])
+          .map((x) => {
+            const roll = rollDie(SPEED_DIE);
+            const bonus = table.tokens[x.tokenId].justice ?? 0;
+            return { ...x, roll, bonus, speed: roll + bonus };
+          }),
       );
       c.turn = Math.max(0, c.order.findIndex((x) => x.tokenId === activeId));
       say(`Speed re-rolled: ${c.order.map((x) => speedText(table.tokens[x.tokenId], x)).join(", ")}.`);
       return true;
     }
     case "endTurn": {
-      const active = mayActNow();
+      inCombat();
+      const active = activeToken(table)!;
+      // The GM can end any turn (e.g. to skip someone); a player ends their own during Combat Actions.
+      if (!isGm) actingToken(table, actor);
       say(`${active.name} ended their turn.`);
-      nextTurn(table);
+      endTurn(table);
       return true;
     }
+    case "dash":
+      dash(table, actor);
+      return true;
+    case "aim":
+      aim(table, actor, action.source, action.cardId);
+      return true;
+    case "aimTarget":
+      aimTarget(table, actor, String(action.tokenId));
+      return true;
+    case "clearAim": {
+      const c = inCombat();
+      if (!c.aim) return false;
+      actingToken(table, actor);
+      delete c.aim;
+      return true;
+    }
+    case "slot":
+      slot(table, actor, action.targets?.map(String), ctx);
+      return true;
     default:
       throw new ActionError("Unknown action.");
   }
+}
+
+function cleanResistances(r: Partial<ResistanceSet> | undefined): ResistanceSet {
+  const num = (v: unknown) => Math.max(0, Math.min(10, Number(v ?? 1)));
+  return { slash: num(r?.slash), pierce: num(r?.pierce), blunt: num(r?.blunt) };
+}
+
+function cleanDeckEntries(deck: unknown): DeckEntry[] {
+  return (Array.isArray(deck) ? deck : [])
+    .map((e) => ({ pageId: String(e?.pageId ?? ""), copies: Math.max(0, Math.min(99, Math.round(Number(e?.copies) || 0))) }))
+    .filter((e) => e.pageId && e.copies > 0);
 }
 
 /** Free tiles the token can reach with the given Movement Points, as "x,y". */

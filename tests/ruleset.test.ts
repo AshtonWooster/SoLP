@@ -105,3 +105,18 @@ test("the character checklist includes the deck and inventory", () => {
   assert.ok(steps.has("Decks") && steps.has("Inventory"));
   void blankPage;
 });
+
+test("usable items: consumable ones count down, then one of the stack is used up, then they're gone", async () => {
+  const { useItem, useItemIn, isUsable } = await import("../shared/ruleset.ts");
+  const salve = { ...blankItem("item"), id: "s", usable: true, consumable: true, maxUses: 2, uses: 2, stacking: true, count: 2, maxStack: 5 };
+  assert.ok(isUsable(salve) && isUsable(blankItem("tool")) && !isUsable(blankItem("item")));
+  const a = useItem(salve)!;
+  assert.deepEqual([a.count, a.uses], [2, 1]);
+  const b = useItem(a)!;
+  assert.deepEqual([b.count, b.uses], [1, 2], "one used up; the next starts fresh");
+  const c = useItem(useItem(b)!);
+  assert.equal(c, null, "last one gone");
+  const lamp = { ...blankItem("item"), usable: true };
+  assert.equal(useItem(lamp), lamp, "not consumable: never runs out");
+  assert.deepEqual(useItemIn([salve, lamp], "s").map((i) => i.uses), [1, undefined]);
+});
