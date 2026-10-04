@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Armor, Dice, DiceKind, Equipment, Page, PageType, Passive, Weapon } from "../../shared/character.ts";
-import { blankArmor, blankPage, blankPassive, blankWeapon } from "../../shared/ruleset.ts";
+import { blankArmor, blankPage, blankPassive, blankWeapon, equipmentMaxCost, RANKS } from "../../shared/ruleset.ts";
 import { NumberInput, TextField } from "./Fields.tsx";
 import { PageCardEditor, PvCard } from "./player/LorCard.tsx";
 
@@ -83,15 +83,49 @@ export function PageEditor(props: { page: Page; onChange: (p: Page) => void; onR
   return <PageCardEditor {...props} />;
 }
 
-/** Hands, resistances, description and Passives of one piece of equipment. */
-function EquipmentDetails<T extends Weapon | Armor>({ item, maxCost, onChange, onRemove }: { item: T; maxCost: number; onChange: (item: T) => void; onRemove: () => void }) {
+/**
+ * A weapon or armor on the left of the studio, edited like a Page card: name, its own Rank (which
+ * sets the max Passive Cost), hands or resistances, description, and Passives one by one.
+ */
+function EquipmentCardEditor<T extends Weapon | Armor>({
+  item,
+  characterRank,
+  onChange,
+  onRemove,
+}: {
+  item: T;
+  characterRank: number;
+  onChange: (item: T) => void;
+  onRemove: () => void;
+}) {
   const set = (patch: Partial<Equipment>) => onChange({ ...item, ...patch });
+  const isWeapon = "hands" in item;
+  const label = isWeapon ? "Weapon" : "Armor";
+  const rank = item.rank ?? characterRank;
+  const max = equipmentMaxCost(item, characterRank);
   return (
-    <div className="equip-details">
-      {"hands" in item && (
+    <div className={`pv-card edit full equip-card ${isWeapon ? "weapon" : "armor"}`}>
+      <div className="pv-top">
+        <span className="equip-kind">{label}</span>
+        <label className="equip-rank">
+          Rank
+          <select aria-label={`${label} rank`} value={rank} onChange={(e) => set({ rank: Number(e.target.value) })}>
+            {RANKS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <input className="pv-name pv-name-input" aria-label={`${label} name`} placeholder={`${label} name`} value={item.name} onChange={(e) => set({ name: e.target.value })} />
+      <p className="muted small equip-rank-note">
+        Rank {rank}: Passives up to {max} Passive Cost, plus Negative Passives up to {max}.
+      </p>
+      {isWeapon && (
         <label className="inline">
           Hands
-          <select value={item.hands} onChange={(e) => onChange({ ...item, hands: Number(e.target.value) as 1 | 2 })}>
+          <select aria-label="Hands" value={(item as Weapon).hands} onChange={(e) => onChange({ ...item, hands: Number(e.target.value) as 1 | 2 })}>
             <option value={1}>One-handed</option>
             <option value={2}>Two-handed</option>
           </select>
@@ -104,9 +138,8 @@ function EquipmentDetails<T extends Weapon | Armor>({ item, maxCost, onChange, o
             ["staggerResistances", "Stagger resistances", "Stagger damage taken is multiplied by these, the same way."],
           ] as const
         ).map(([field, title, hint]) => (
-          <div key={field}>
-            <h4>{title}</h4>
-            <p className="muted small">{hint}</p>
+          <div key={field} className="equip-res">
+            <h4 title={hint}>{title}</h4>
             <div className="row wrap">
               {(["slash", "pierce", "blunt"] as const).map((k) => {
                 const r = item[field] ?? { slash: 1, pierce: 1, blunt: 1 };
@@ -126,50 +159,57 @@ function EquipmentDetails<T extends Weapon | Armor>({ item, maxCost, onChange, o
             </div>
           </div>
         ))}
-      <TextField label="Description" value={item.description} onChange={(description) => set({ description })} multiline />
-      <PassiveList passives={item.passives} max={maxCost} onChange={(passives) => set({ passives })} />
-      <button type="button" className="danger" onClick={onRemove}>
-        Remove {"hands" in item ? "weapon" : "armor"}
-      </button>
+      <textarea className="pv-effect-in" aria-label={`${label} description`} placeholder="Description" value={item.description} onChange={(e) => set({ description: e.target.value })} />
+      <PassiveList passives={item.passives} max={max} onChange={(passives) => set({ passives })} />
+      <div className="pv-edit-foot">
+        <span className="muted small">
+          {item.pages.length} Page{item.pages.length === 1 ? "" : "s"}: tap one on the right to edit it
+        </span>
+        <button type="button" className="danger" onClick={onRemove}>
+          Remove {label.toLowerCase()}
+        </button>
+      </div>
     </div>
   );
 }
 
-/** One weapon or armor on the right of the studio: its name, Passives, and its Pages as cards with a + to add one. */
+/** One weapon or armor on the right of the studio: tap it to edit it; its Pages as cards (tap to edit, + to add). */
 function EquipmentBox<T extends Weapon | Armor>({
   item,
-  maxCost,
+  characterRank,
+  selected,
   selectedPageId,
+  onSelect,
   onSelectPage,
   onChange,
-  onRemove,
 }: {
   item: T;
-  maxCost: number;
+  characterRank: number;
+  /** The equipment itself is open in the editor. */
+  selected: boolean;
   selectedPageId?: string;
+  onSelect: () => void;
   onSelectPage: (pageId: string) => void;
   onChange: (item: T) => void;
-  onRemove: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const isWeapon = "hands" in item;
   const label = isWeapon ? "Weapon" : "Armor";
+  const max = equipmentMaxCost(item, characterRank);
   const passiveCost = item.passives.reduce((a, p) => a + p.cost, 0);
   return (
-    <section className={`equip-box ${isWeapon ? "weapon" : "armor"}`}>
-      <header className="equip-head">
+    <section className={`equip-box ${isWeapon ? "weapon" : "armor"}${selected ? " selected" : ""}`}>
+      <button type="button" className="equip-head" aria-pressed={selected} aria-label={`Edit ${item.name || `this ${label.toLowerCase()}`}`} onClick={onSelect}>
         <span className="equip-kind">{label}</span>
-        <input aria-label={`${label} name`} placeholder={`${label} name`} value={item.name} onChange={(e) => onChange({ ...item, name: e.target.value })} />
-      </header>
-      <button type="button" className="equip-passives" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <strong className="equip-name">{item.name || "Unnamed"}</strong>
+        <span className="muted small">Rank {item.rank ?? characterRank}</span>
+      </button>
+      <button type="button" className="equip-passives" onClick={onSelect}>
         <strong>Passives</strong>{" "}
         <span className="muted small">
-          {item.passives.length ? item.passives.map((p) => p.name || "Unnamed").join(", ") : "none"} · cost {passiveCost}/{maxCost}
+          {item.passives.length ? item.passives.map((p) => p.name || "Unnamed").join(", ") : "none"} · cost {passiveCost}/{max}
           {isWeapon ? ` · ${(item as Weapon).hands === 2 ? "two" : "one"}-handed` : ""}
         </span>
-        <span className="equip-toggle">{open ? "▴" : "▾ Details"}</span>
       </button>
-      {open && <EquipmentDetails item={item} maxCost={maxCost} onChange={onChange} onRemove={onRemove} />}
       <div className="equip-pages">
         {item.pages.map((p) => (
           <PvCard key={p.id} page={p} size="thumb" selected={p.id === selectedPageId} onClick={() => onSelectPage(p.id)} />
@@ -199,7 +239,7 @@ function EquipmentBox<T extends Weapon | Armor>({
 export function EquipmentStudio({
   weapons,
   armor,
-  maxCost,
+  characterRank,
   artFolder,
   canAddWeapon,
   onWeapons,
@@ -207,21 +247,25 @@ export function EquipmentStudio({
 }: {
   weapons: Weapon[];
   armor: Armor | null;
-  maxCost: number;
+  /** Equipment without its own Rank uses this. */
+  characterRank: number;
   artFolder?: string;
   canAddWeapon: boolean;
   onWeapons: (w: Weapon[]) => void;
   onArmor: (a: Armor | null) => void;
 }) {
   const all: (Weapon | Armor)[] = [...weapons, ...(armor ? [armor] : [])];
-  const [picked, setPicked] = useState<{ equipId: string; pageId: string } | null>(null);
+  // What's open on the left: a piece of equipment itself, or one of its Pages.
+  const [picked, setPicked] = useState<{ equipId: string; pageId?: string } | null>(null);
   const [adding, setAdding] = useState(false);
-  // Default to the first Page there is; drop a selection whose Page was removed.
-  const current =
-    (picked && all.find((e) => e.id === picked.equipId)?.pages.some((p) => p.id === picked.pageId) ? picked : null) ??
-    (all.find((e) => e.pages.length) ? { equipId: all.find((e) => e.pages.length)!.id, pageId: all.find((e) => e.pages.length)!.pages[0].id } : null);
+  const valid = (sel: { equipId: string; pageId?: string } | null) => {
+    const e = sel && all.find((x) => x.id === sel.equipId);
+    return !!e && (!sel!.pageId || e.pages.some((p) => p.id === sel!.pageId));
+  };
+  // Default to the first piece of equipment; drop a selection that was removed.
+  const current = valid(picked) ? picked : all[0] ? { equipId: all[0].id } : null;
   const owner = current ? all.find((e) => e.id === current.equipId) : undefined;
-  const page = owner?.pages.find((p) => p.id === current!.pageId);
+  const page = current?.pageId ? owner?.pages.find((p) => p.id === current.pageId) : undefined;
 
   const change = (item: Weapon | Armor) => {
     if (armor && item.id === armor.id) onArmor(item as Armor);
@@ -243,8 +287,10 @@ export function EquipmentStudio({
             onChange={(np) => change({ ...owner, pages: owner.pages.map((p) => (p.id === np.id ? np : p)) })}
             onRemove={() => change({ ...owner, pages: owner.pages.filter((p) => p.id !== page.id) })}
           />
+        ) : owner ? (
+          <EquipmentCardEditor key={owner.id} item={owner} characterRank={characterRank} onChange={change} onRemove={() => remove(owner)} />
         ) : (
-          <p className="muted equip-empty">Add a weapon or armor, then tap + to give it a Page.</p>
+          <p className="muted equip-empty">Tap the + below to add a weapon or armor.</p>
         )}
       </div>
       <div className="equip-list">
@@ -253,11 +299,12 @@ export function EquipmentStudio({
             <EquipmentBox
               key={item.id}
               item={item}
-              maxCost={maxCost}
+              characterRank={characterRank}
+              selected={current?.equipId === item.id && !current.pageId}
               selectedPageId={current?.equipId === item.id ? current.pageId : undefined}
+              onSelect={() => setPicked({ equipId: item.id })}
               onSelectPage={(pageId) => setPicked({ equipId: item.id, pageId })}
               onChange={change}
-              onRemove={() => remove(item)}
             />
           ))}
           {all.length === 0 && <p className="muted">No equipment yet.</p>}
@@ -272,7 +319,7 @@ export function EquipmentStudio({
                 onClick={() => {
                   const w = blankWeapon();
                   onWeapons([...weapons, w]);
-                  setPicked({ equipId: w.id, pageId: w.pages[0].id });
+                  setPicked({ equipId: w.id });
                   setAdding(false);
                 }}
               >
@@ -285,7 +332,7 @@ export function EquipmentStudio({
                 onClick={() => {
                   const a = blankArmor();
                   onArmor(a);
-                  setPicked({ equipId: a.id, pageId: a.pages[0].id });
+                  setPicked({ equipId: a.id });
                   setAdding(false);
                 }}
               >

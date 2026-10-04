@@ -404,7 +404,7 @@ export function CharacterSheet() {
             <EquipmentStudio
               weapons={c.weapons}
               armor={c.armor}
-              maxCost={t.equipmentMaxCost}
+              characterRank={c.rank}
               artFolder={`games/${id}/users/${uid}/art`}
               canAddWeapon={hands < 2}
               onWeapons={(w) => update((d) => void (d.weapons = w))}

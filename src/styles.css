@@ -639,8 +639,9 @@ button.pv-card:hover { filter: brightness(1.12); }
 .equip-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .equip-scroll { display: flex; flex-direction: column; gap: 10px; max-height: 70vh; overflow-y: auto; padding-right: 2px; }
 .equip-box { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
-.equip-head { display: flex; align-items: center; gap: 8px; }
-.equip-head input { flex: 1; min-width: 0; font-weight: 700; }
+.equip-head { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; background: none; border: none; padding: 2px 0; }
+.equip-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 1rem; }
+.equip-box.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .equip-kind { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
 .equip-box.armor .equip-kind { color: var(--sanity); }
 .equip-passives { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; text-align: left; background: none; border: 1px dashed var(--line); }
@@ -656,3 +657,14 @@ button.pv-card:hover { filter: brightness(1.12); }
   .equip-studio { grid-template-columns: 1fr; }
   .equip-editor { position: static; }
 }
+
+/* Editing a weapon or armor on its card */
+.equip-card.weapon { --pv-frame: var(--accent); }
+.equip-card.armor { --pv-frame: var(--sanity); }
+.equip-card .equip-kind { font-weight: 800; }
+.equip-rank { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+.equip-rank select { padding: 0.2rem 0.4rem; }
+.equip-rank-note { margin: 0; }
+.equip-card .equip-res h4 { margin: 4px 0; font-size: 0.85rem; }
+.equip-card .passives h4 { margin: 0; }
+.equip-card .passive { background: #0b0f18; }
