@@ -31,7 +31,8 @@ export function Gm() {
   const isGm = !!user && game.data?.gmId === user.id;
   const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
   const { snapshot, host } = useHost(id, user, game.data);
-  const fx = useClashPlayback(snapshot.table);
+  // The map shows clash damage once its die has played; the panels show the live values.
+  const { step: fx, table: mapTable } = useClashPlayback(snapshot.table);
   const online = new Set(snapshot.online);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
@@ -74,7 +75,7 @@ export function Gm() {
       <section className="gm-map">
         {table && (
           <Grid
-            state={table}
+            state={mapTable ?? table}
             fx={fx}
             selectedId={selectedId}
             activeId={table.combat ? activeToken(table)?.id : undefined}

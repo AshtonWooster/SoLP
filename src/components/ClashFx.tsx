@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ClashFx, FxDie, TableState } from "../../shared/types.ts";
+import type { ClashFx, FxDie, FxState, TableState } from "../../shared/types.ts";
 
 type Stage = "intro" | "roll" | "reveal" | "result";
 /** What the clash animation is showing right now. */
@@ -19,11 +19,36 @@ function next(step: FxStep): FxStep | null {
   return step.round + 1 < step.fx.rounds.length ? { ...step, round: step.round + 1, stage: "roll" } : null;
 }
 
+/** The characters' state at this point of the animation: before the first die, or after the last one shown. */
+function stateAt(step: FxStep): FxState | undefined {
+  const { fx, round, stage } = step;
+  if (stage === "result") return fx.rounds[round]?.after;
+  if (stage === "intro" || round === 0) return fx.before;
+  return fx.rounds[round - 1]?.after;
+}
+
+/**
+ * The table as it should look right now: characters in a resolution that hasn't finished playing
+ * show the Health, Stagger and Sanity they had at that point, so damage lands when its die does.
+ */
+function shownTable(table: TableState, step: FxStep | null, waiting: ClashFx[]): TableState {
+  const at: FxState = {};
+  // The earliest waiting resolution's "before" wins; the one playing now wins over all of them.
+  for (const fx of [...waiting].reverse()) Object.assign(at, fx.before ?? {});
+  if (step) Object.assign(at, stateAt(step) ?? {});
+  if (Object.keys(at).length === 0) return table;
+  const tokens = Object.fromEntries(
+    Object.entries(table.tokens).map(([id, t]) => [id, at[id] ? { ...t, resources: at[id].resources, status: at[id].status } : t]),
+  );
+  return { ...table, tokens };
+}
+
 /**
  * Plays each new Page resolution from the table, one die at a time: the dice roll, show their
  * Final Power, then win, lose or Draw. Resolutions that happened before this screen opened are skipped.
+ * Returns the step to draw, and the table to show (damage held back until its die has played).
  */
-export function useClashPlayback(table: TableState | undefined): FxStep | null {
+export function useClashPlayback<T extends TableState | undefined>(table: T): { step: FxStep | null; table: T } {
   const c = table?.combat;
   const seq = c?.fxSeq ?? 0;
   const seen = useRef<number | null>(null);
@@ -57,7 +82,11 @@ export function useClashPlayback(table: TableState | undefined): FxStep | null {
     return () => clearTimeout(t);
   }, [step, queue]);
 
-  return step;
+  // Resolutions that just arrived (this render, before the effect above queues them) also hold back their damage.
+  const unseen = seen.current === null || !c ? [] : (c.fx ?? []).filter((f) => f.id > seen.current!);
+  const waiting = [...queue, ...unseen];
+  const shown = table && (step || waiting.length) ? shownTable(table, step, waiting) : table;
+  return { step, table: shown as T };
 }
 
 const KIND_LABELS: Record<FxDie["kind"], string> = { slash: "Slash", pierce: "Pierce", blunt: "Blunt", block: "Block", evade: "Evade" };

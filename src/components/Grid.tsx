@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { validTargets } from "../../shared/engine.ts";
 import type { TableState, Token } from "../../shared/types.ts";
 import { FxBubble, type FxStep } from "./ClashFx.tsx";
@@ -29,6 +30,31 @@ export function aimTargets(table: TableState): { targetable: Set<string>; picked
 export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx }: Props) {
   const { width, height } = state.map;
   const { targetable, picked } = aimTargets(state);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const tokenEls = useRef(new Map<string, HTMLButtonElement>());
+  const last = useRef<{ mapId?: string; at: Map<string, { x: number; y: number }> }>({ at: new Map() });
+
+  // Moving tokens slide in a straight line from their old tile to the new one.
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    const sameMap = last.current.mapId === state.map.id;
+    const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (grid && sameMap && !still) {
+      const cw = grid.clientWidth / width;
+      const ch = grid.clientHeight / height;
+      for (const t of Object.values(state.tokens)) {
+        const was = last.current.at.get(t.id);
+        const el = tokenEls.current.get(t.id);
+        if (!was || !el || (was.x === t.x && was.y === t.y)) continue;
+        const tiles = Math.max(Math.abs(was.x - t.x), Math.abs(was.y - t.y));
+        el.animate([{ translate: `${(was.x - t.x) * cw}px ${(was.y - t.y) * ch}px` }, { translate: "0 0" }], {
+          duration: Math.min(450, 120 + tiles * 70),
+          easing: "linear",
+        });
+      }
+    }
+    last.current = { mapId: state.map.id, at: new Map(Object.values(state.tokens).map((t) => [t.id, { x: t.x, y: t.y }])) };
+  });
   const cells = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -65,6 +91,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
     : [];
   return (
     <div
+      ref={gridRef}
       className="grid"
       style={{
         gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
@@ -89,6 +116,10 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
         return (
           <button
             key={t.id}
+            ref={(el) => {
+              if (el) tokenEls.current.set(t.id, el);
+              else tokenEls.current.delete(t.id);
+            }}
             className={classes.join(" ")}
             style={{
               gridColumn: t.x + 1,

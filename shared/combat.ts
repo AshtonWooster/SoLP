@@ -30,6 +30,7 @@ import type {
   DeckState,
   FxDie,
   FxRound,
+  FxState,
   PageSource,
   SlottedPage,
   TableState,
@@ -313,6 +314,10 @@ function clashDice(table: TableState, a: LiveDie, b: LiveDie, fa = finalPower(a.
 
 const fxDie = (d: Dice, power: number): FxDie => ({ kind: d.kind, sides: d.sides, basePower: d.basePower, power, ...(d.counter ? { counter: true } : {}) });
 
+/** Resources and statuses of these tokens right now, for the animation to show at the right moment. */
+const fxState = (...tokens: Token[]): FxState =>
+  Object.fromEntries(tokens.map((t) => [t.id, { resources: { ...t.resources }, ...(t.status ? { status: { ...t.status } } : {}) }]));
+
 /** Remember a resolution for the clash animation; only the latest few are kept. */
 function recordFx(c: CombatState, fx: Omit<ClashFx, "id">) {
   if (fx.rounds.length === 0) return;
@@ -335,6 +340,7 @@ function oneSided(table: TableState, attacker: Token, target: Token, page: Page,
   const c = table.combat!;
   const used = new Set<string>();
   const rounds: FxRound[] = [];
+  const before = fxState(attacker, target);
   dice.forEach((die, i) => {
     if (knockedOut(target) || down(attacker)) return;
     const fp = powers?.[i] ?? finalPower(die);
@@ -343,20 +349,20 @@ function oneSided(table: TableState, attacker: Token, target: Token, page: Page,
     if (counter) {
       used.add(counter.id);
       const out = clashDice(table, { die, owner: attacker, pageType: page.type }, { die: counter.die, owner: target, pageType: c.pages[counter.pageId]?.type ?? "melee" }, fp);
-      rounds.push({ a: fxDie(die, out.fa), b: fxDie(counter.die, out.fb), result: out.winner });
+      rounds.push({ a: fxDie(die, out.fa), b: fxDie(counter.die, out.fb), result: out.winner, after: fxState(attacker, target) });
       // "On Clash Win, Counter Dice are Recycled": it answers the next die too. Otherwise it's spent.
       if (out.winner !== "b") c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => x.id !== counter.id);
       return;
     }
     if (isOffensive(die.kind)) {
       log(table, ` ${attacker.name}'s ${diceText(die)} (${fp}) hits ${target.name}.`);
-      rounds.push({ a: fxDie(die, fp), result: "hit" });
       dealDamage(table, target, fp, die.kind);
+      rounds.push({ a: fxDie(die, fp), result: "hit", after: fxState(attacker, target) });
     } else storeCounter(c, attacker, die, page.id);
   });
   // Counter Dice used against this page are lost at the end of its resolution.
   if (used.size) c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => !used.has(x.id));
-  if (animate) recordFx(c, { a: attacker.id, b: target.id, pageA: page.name, rounds });
+  if (animate) recordFx(c, { a: attacker.id, b: target.id, pageA: page.name, rounds, before });
 }
 
 /** Two Pages clash: their dice clash top to bottom until one side runs out. */
@@ -371,6 +377,7 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
   const qa = pa.dice.filter((d) => !d.counter).map((die) => ({ die, owner: ta, pageType: pa.type }));
   const qb = pb.dice.filter((d) => !d.counter).map((die) => ({ die, owner: tb, pageType: pb.type }));
   const rounds: FxRound[] = [];
+  const before = fxState(ta, tb);
 
   /** A Ranged Page with no Offensive Dice left, out of the Melee target's range, Negates the target's Offensive Dice. */
   const rangedEscape = () => {
@@ -392,7 +399,7 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
   for (let guard = 0; qa.length && qb.length && guard < 200; guard++) {
     if (down(ta) || down(tb)) break;
     const out = clashDice(table, qa[0], qb[0]);
-    rounds.push({ a: fxDie(qa[0].die, out.fa), b: fxDie(qb[0].die, out.fb), result: out.winner });
+    rounds.push({ a: fxDie(qa[0].die, out.fa), b: fxDie(qb[0].die, out.fb), result: out.winner, after: fxState(ta, tb) });
     for (const [q, fate] of [
       [qa, out.a],
       [qb, out.b],
@@ -413,12 +420,12 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
       if (isOffensive(d.die.kind)) {
         const fp = finalPower(d.die);
         log(table, ` ${me.name}'s ${diceText(d.die)} (${fp}) hits ${them.name} unopposed.`);
-        rounds.push({ [me === ta ? "a" : "b"]: fxDie(d.die, fp), result: "hit" });
         dealDamage(table, them, fp, d.die.kind);
+        rounds.push({ [me === ta ? "a" : "b"]: fxDie(d.die, fp), result: "hit", after: fxState(ta, tb) });
       } else storeCounter(c, me, d.die, page.id);
     }
   }
-  recordFx(c, { a: ta.id, b: tb.id, pageA: pa.name, pageB: pb.name, rounds });
+  recordFx(c, { a: ta.id, b: tb.id, pageA: pa.name, pageB: pb.name, rounds, before });
 }
 
 /** The page on a target's chosen Speed Die, or one clashing with this Mass Attack. */

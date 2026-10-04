@@ -30,10 +30,10 @@ export function Board() {
   // Outside combat: the token picked up to move anywhere (your own, or any on the GM's account).
   const [carrying, setCarrying] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const table = snapshot.table;
+  // Damage from a clash shows once its die has played on the board.
+  const { step: fx, table } = useClashPlayback(snapshot.table);
   const active = table ? activeToken(table) : undefined;
   const combat = table?.combat;
-  const fx = useClashPlayback(table);
   // Players take their turns at the board; the GM runs enemies from the GM screen.
   const playerTurn = active?.side === "player" && combat?.phase === "actions" ? active : undefined;
   // The GM's account can act for whoever's turn it is; a player only for themselves.

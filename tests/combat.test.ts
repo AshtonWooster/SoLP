@@ -556,3 +556,19 @@ test("Staggered on someone else's turn: their slotted Page is discarded and the 
   assert.equal(activeToken(s.table)!.id, "rat");
   assert.equal(s.hp("roland"), hp - 18);
 });
+
+test("each recorded die carries both characters' state after it, so damage can be shown when the animation reaches it", () => {
+  const s = setup([page("slash", "melee", [die("slash", 5), die("pierce", 4)])], [page("bite", "melee", [die("pierce", 2)])]);
+  play(s, "slash", ["rat"]);
+  endTurn(s, p1);
+  enemyPlay(s, "bite", ["roland"]);
+  endTurn(s);
+  const fx = s.c().fx!.at(-1)!;
+  assert.equal(fx.before!.rat.resources.hp, 30);
+  // Die 1 wins the clash (5 vs 2), die 2 lands unopposed (4).
+  assert.deepEqual(fx.rounds.map((r) => r.result), ["a", "hit"]);
+  assert.equal(fx.rounds[0].after!.rat.resources.hp, 25);
+  assert.equal(fx.rounds[1].after!.rat.resources.hp, 21);
+  assert.equal(fx.rounds[1].after!.rat.resources.hp, s.hp("rat"));
+  assert.equal(fx.rounds[0].after!.roland.resources.sanity, 1, "Clash Win +1 Sanity");
+});

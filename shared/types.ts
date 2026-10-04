@@ -256,7 +256,12 @@ export interface FxRound {
   a?: FxDie;
   b?: FxDie;
   result: "a" | "b" | "draw" | "hit";
+  /** Both characters' resources and statuses right after this step, so screens can apply the damage when the animation gets here. */
+  after?: FxState;
 }
+
+/** Resources and statuses of the characters in a resolution, by token id. */
+export type FxState = Record<string, { resources: Resources; status?: TokenStatus }>;
 
 /** A Page resolving against a character: a Clash between two Pages, or a One-Sided Attack (b only answers with Counter Dice). */
 export interface ClashFx {
@@ -267,6 +272,8 @@ export interface ClashFx {
   pageA: string;
   pageB?: string;
   rounds: FxRound[];
+  /** Both characters as they were before the first die. */
+  before?: FxState;
 }
 
 /** Everything on the table that every member may see. GM-only data lives under games/{id}/gm. */
