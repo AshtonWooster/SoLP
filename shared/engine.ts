@@ -21,6 +21,7 @@ import {
   type EngineContext,
 } from "./combat.ts";
 import { ActionError, clamp, log, occupied, type Actor } from "./core.ts";
+import { createMap, deleteMap, switchMap, updateMap } from "./maps.ts";
 import { newId, rollDie } from "./id.ts";
 import { moveCost, SPEED_DIE } from "./ruleset.ts";
 import type { Resources, Side, TableAction, TableState, Token } from "./types.ts";
@@ -43,7 +44,7 @@ function makeToken(name: string, side: Side, x: number, y: number, color: string
 export function newTable(): TableState {
   const enemy = makeToken("Sweeper", "enemy", 12, 4, "#d9534f");
   return {
-    map: { name: "Training Floor", width: 16, height: 10 },
+    map: { id: newId(), name: "Training Floor", width: 16, height: 10 },
     tokens: { [enemy.id]: enemy },
     log: ["Table created."],
   };
@@ -287,6 +288,21 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       startCombat(table, ids, ctx);
       return true;
     }
+    case "createMap":
+      gmOnly();
+      createMap(table, action);
+      return true;
+    case "updateMap":
+      gmOnly();
+      updateMap(table, action);
+      return true;
+    case "switchMap":
+      gmOnly();
+      return switchMap(table, action.mapId);
+    case "deleteMap":
+      gmOnly();
+      deleteMap(table, action.mapId);
+      return true;
     case "endCombat": {
       gmOnly();
       if (!combat) return false;

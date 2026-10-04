@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { GameDoc, GmMeta, Resources, TableAction, TableState, Token } from "../../shared/types.ts";
+import type { GameDoc, GmMeta, MapInfo, Resources, TableAction, TableState, Token } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { activeToken, newId } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
@@ -10,6 +10,8 @@ import { EnemyDeckEditor } from "../components/EnemyDeckEditor.tsx";
 import { blankEnemy, isMassAttack } from "../../shared/ruleset.ts";
 import type { EnemyTemplate } from "../../shared/character.ts";
 import { TurnOrder } from "../components/TurnOrder.tsx";
+import { ImageUpload } from "../components/ImageUpload.tsx";
+import { MAP_MAX, MAP_MIN } from "../../shared/maps.ts";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
 import { useHost } from "../net/hooks.ts";
@@ -93,6 +95,7 @@ export function Gm() {
       </section>
 
       <section className="gm-side">
+        {table && <MapsPanel gameId={id} table={table} act={act} />}
         {table && <CombatPanel table={table} act={act} />}
         {table && <TemplatePanel gameId={id} table={table} act={act} />}
         <AddEnemy onAdd={(name) => act({ type: "addToken", name, side: "enemy", x: 10, y: 5 })} />
@@ -462,6 +465,108 @@ function EffectsEditor({ token, act }: { token: Token; act: (action: TableAction
       <button type="button" onClick={() => save([...effects, { id: newId(), name: "", count: 1, description: "" }])}>
         + Add effect
       </button>
+    </details>
+  );
+}
+
+/** Name, size and background of one map. */
+function MapEditor({ gameId, map, act }: { gameId: string; map: MapInfo & { id: string }; act: (a: TableAction) => boolean }) {
+  const [name, setName] = useState(map.name);
+  useEffect(() => setName(map.name), [map.name]);
+  const commitName = () => (name.trim() && name !== map.name ? act({ type: "updateMap", mapId: map.id, name }) : setName(map.name));
+  return (
+    <div className="map-editor">
+      <label className="field">
+        <span>Name</span>
+        <input aria-label="Map name" value={name} onChange={(e) => setName(e.target.value)} onBlur={commitName} onKeyDown={(e) => e.key === "Enter" && commitName()} />
+      </label>
+      <div className="row map-size">
+        <label className="inline">
+          Width <NumberField value={map.width} onCommit={(n) => act({ type: "updateMap", mapId: map.id, width: n })} />
+        </label>
+        <label className="inline">
+          Height <NumberField value={map.height} onCommit={(n) => act({ type: "updateMap", mapId: map.id, height: n })} />
+        </label>
+        <span className="muted small">
+          {MAP_MIN}–{MAP_MAX} tiles
+        </span>
+      </div>
+      <ImageUpload
+        folder={`games/${gameId}/assets/maps`}
+        label="Background"
+        value={map.background}
+        onChange={(url) => act({ type: "updateMap", mapId: map.id, background: url ?? null })}
+      />
+    </div>
+  );
+}
+
+/** The GM's maps: edit the current one, switch to another (players come along; positions are remembered), or make a new one. */
+function MapsPanel({ gameId, table, act }: { gameId: string; table: TableState; act: (a: TableAction) => boolean }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ name: "", width: 16, height: 10 });
+  const current = { ...table.map, id: table.map.id ?? "" };
+  const others = Object.values(table.maps ?? {}).sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <details className="panel maps-panel">
+      <summary>
+        Maps <span className="muted small">· {table.map.name}</span>
+      </summary>
+      <h4>
+        {current.name} <span className="badge-soft">On the table</span>
+      </h4>
+      <MapEditor gameId={gameId} map={current} act={act} />
+      {others.length > 0 && <h4>Other maps</h4>}
+      <ul className="plain map-list">
+        {others.map((m) => (
+          <li key={m.id}>
+            <div className="row-between">
+              <span>
+                <strong>{m.name}</strong>{" "}
+                <span className="muted small">
+                  {m.width}×{m.height}
+                  {Object.keys(m.tokens).length ? ` · ${Object.keys(m.tokens).length} token${Object.keys(m.tokens).length === 1 ? "" : "s"} waiting` : ""}
+                </span>
+              </span>
+              <span className="row">
+                <button
+                  disabled={!!table.combat}
+                  title={table.combat ? "End combat before changing maps" : "Players come along; everyone else stays on their map"}
+                  onClick={() => act({ type: "switchMap", mapId: m.id })}
+                >
+                  Switch
+                </button>
+                <button onClick={() => setEditing(editing === m.id ? null : m.id)}>{editing === m.id ? "Done" : "Edit"}</button>
+                <button
+                  className="danger"
+                  aria-label={`Delete ${m.name}`}
+                  onClick={() => confirm(`Delete ${m.name} and the tokens waiting on it?`) && act({ type: "deleteMap", mapId: m.id })}
+                >
+                  ✕
+                </button>
+              </span>
+            </div>
+            {editing === m.id && <MapEditor gameId={gameId} map={m} act={act} />}
+          </li>
+        ))}
+      </ul>
+      <form
+        className="new-map"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (act({ type: "createMap", name: draft.name || "New map", width: draft.width, height: draft.height })) setDraft({ name: "", width: 16, height: 10 });
+        }}
+      >
+        <h4>New map</h4>
+        <input aria-label="New map name" placeholder="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+        <label className="inline">
+          W <input aria-label="New map width" type="number" min={MAP_MIN} max={MAP_MAX} value={draft.width} onChange={(e) => setDraft({ ...draft, width: Number(e.target.value) })} />
+        </label>
+        <label className="inline">
+          H <input aria-label="New map height" type="number" min={MAP_MIN} max={MAP_MAX} value={draft.height} onChange={(e) => setDraft({ ...draft, height: Number(e.target.value) })} />
+        </label>
+        <button type="submit">+ Create map</button>
+      </form>
     </details>
   );
 }

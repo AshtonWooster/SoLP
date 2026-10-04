@@ -25,6 +25,7 @@ import {
   type Loadout,
   type SeatProfile,
 } from "../../shared/engine.ts";
+import { currentMapId } from "../../shared/maps.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
@@ -392,6 +393,7 @@ function upgradeTable(t: TableState): TableState {
   t.tokens ??= {};
   t.log ??= [];
   t.map ??= newTable().map;
+  currentMapId(t);
   const c = t.combat;
   if (c) {
     c.order ??= [];
@@ -414,8 +416,12 @@ function upgradeTable(t: TableState): TableState {
   return t;
 }
 
-/** What players may see: draw piles keep their size but not their order, and enemies' hands are hidden. */
-function hideDrawPiles(table: TableState): TableState {
+/**
+ * What players may see: draw piles keep their size but not their order, enemies' hands are hidden,
+ * and the GM's other maps (with the enemies waiting on them) aren't sent at all.
+ */
+function hideDrawPiles(full: TableState): TableState {
+  const { maps: _maps, ...table } = full;
   const c = table.combat;
   if (!c) return table;
   const hidden = () => ({ id: "hidden", pageId: "hidden" });
