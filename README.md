@@ -48,6 +48,8 @@ The ruleset's tables aren't written yet, so the numbers they'd provide (points p
 
 ### Inventory and decks
 
+**Weapons and Armor** (step 5) work like a card editor: the selected Page sits on the left as a Library of Ruina-style card you type on directly (cost, name, type, each die's type, range and effect, the Page effect); tap its art to upload an image. On the right, each weapon and armor shows its Passives and its Pages as small cards: tap one to edit it, or **+** to add a Page. The big **+** at the bottom adds a blank weapon or armor, which opens on the left as its own card: name, its own **Rank** (which sets its max Passive Cost; the Max Costs table is a placeholder in `shared/ruleset.ts` until the ruleset fills it in), hands or resistances, description, and Passives added one at a time (name, cost, description). Negative Passives can add up to the same max. Tap a weapon or armor on the right to edit it again. A die's range (e.g. 2-7) sets its size and Base Power (1d6+1). E.G.O. Pages, Tools and enemy Pages use the same card editor.
+
 The character sheet has **Inventory** and **Decks** tabs (Acts 6 and 7):
 
 - **Inventory:** 9 Slots (the GM can change the count), each holding an Item or a Tool. Stacking items hold several in one Slot up to a max. Tools carry a Page. The **Trinket Slot** holds one Trinket, which is always active while equipped.

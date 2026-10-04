@@ -19,7 +19,7 @@ import {
 import type { GameDoc, TableState } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
 import { DeckEditor } from "../components/DeckEditor.tsx";
-import { EquipmentEditor, PageEditor, PassiveList } from "../components/EquipmentEditor.tsx";
+import { EquipmentStudio, PageEditor, PassiveList } from "../components/EquipmentEditor.tsx";
 import { ImageUpload } from "../components/ImageUpload.tsx";
 import { InventoryEditor } from "../components/InventoryEditor.tsx";
 import { NumberInput, Section, Stepper, TextField } from "../components/Fields.tsx";
@@ -398,37 +398,18 @@ export function CharacterSheet() {
             title="5 · Weapons and Armor"
             intro="Up to two hands of Weapons and one Armor. Each gets Passives up to the max cost, plus one Basic Page and one Special Page made with your GM. Start weaker than your ideal gear to leave room for upgrades."
           >
-            <h3>
-              Weapons <span className={hands > 2 ? "error" : "muted"}>· {hands} of 2 hands</span>
-            </h3>
-            {c.weapons.map((w, i) => (
-              <EquipmentEditor
-                key={w.id}
-                artFolder={`games/${id}/users/${uid}/art`}
-                item={w}
-                maxCost={t.equipmentMaxCost}
-                onChange={(nw) => update((d) => void (d.weapons[i] = nw))}
-                onRemove={() => update((d) => void d.weapons.splice(i, 1))}
-              />
-            ))}
-            <button type="button" disabled={hands >= 2} onClick={() => update((d) => void d.weapons.push(blankWeapon()))}>
-              + Add weapon
-            </button>
-
-            <h3>Armor</h3>
-            {c.armor ? (
-              <EquipmentEditor
-                artFolder={`games/${id}/users/${uid}/art`}
-                item={c.armor}
-                maxCost={t.equipmentMaxCost}
-                onChange={(na) => update((d) => void (d.armor = na))}
-                onRemove={() => update((d) => void (d.armor = null))}
-              />
-            ) : (
-              <button type="button" onClick={() => update((d) => void (d.armor = blankArmor()))}>
-                + Add armor
-              </button>
-            )}
+            <p className={hands > 2 ? "error" : "muted"}>
+              Weapons use {hands} of 2 hands{c.armor ? "" : " · no armor yet"}.
+            </p>
+            <EquipmentStudio
+              weapons={c.weapons}
+              armor={c.armor}
+              characterRank={c.rank}
+              artFolder={`games/${id}/users/${uid}/art`}
+              canAddWeapon={hands < 2}
+              onWeapons={(w) => update((d) => void (d.weapons = w))}
+              onArmor={(a) => update((d) => void (d.armor = a))}
+            />
           </Section>
 
           <Section id="details" title="6 · Finishing Touches" intro="Who your character is. These help your GM weave you into the City.">

@@ -45,6 +45,8 @@ export interface Page {
 export interface Equipment {
   id: string;
   name: string;
+  /** The Equipment's own Rank (9 to 1), which sets its max Passive Cost. Missing: the character's Rank. */
+  rank?: number;
   description: string;
   passives: Passive[];
   pages: Page[];

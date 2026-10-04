@@ -345,12 +345,17 @@ function passiveChecks(step: string, label: string, passives: Passive[], max: nu
   return checks;
 }
 
+/** Max Passive Cost on a piece of Equipment, from its own Rank (or the character's, if it has none). */
+export function equipmentMaxCost(e: Equipment, characterRank: number): number {
+  return rankTable(e.rank ?? characterRank).equipmentMaxCost;
+}
+
 function equipmentChecks(step: string, label: string, e: Equipment, rank: number): Check[] {
   const name = e.name.trim() || label;
   const pagesOk = e.pages.some((p) => p.kind === "basic") && e.pages.some((p) => p.kind === "special");
   return [
     { step, ok: !!e.name.trim(), text: `${label} has a name` },
-    ...passiveChecks(step, name, e.passives, rankTable(rank).equipmentMaxCost),
+    ...passiveChecks(step, name, e.passives, equipmentMaxCost(e, rank)),
     { step, ok: pagesOk, text: `${name} has a Basic Page and a Special Page` },
     {
       step,
