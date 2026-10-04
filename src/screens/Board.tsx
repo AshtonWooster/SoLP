@@ -7,6 +7,7 @@ import { activeToken, reachableTiles } from "../../shared/engine.ts";
 import { isMassAttack } from "../../shared/ruleset.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { aimTargets, Grid } from "../components/Grid.tsx";
+import { useClashPlayback } from "../components/ClashFx.tsx";
 import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
@@ -32,6 +33,7 @@ export function Board() {
   const table = snapshot.table;
   const active = table ? activeToken(table) : undefined;
   const combat = table?.combat;
+  const fx = useClashPlayback(table);
   // Players take their turns at the board; the GM runs enemies from the GM screen.
   const playerTurn = active?.side === "player" && combat?.phase === "actions" ? active : undefined;
   // The GM's account can act for whoever's turn it is; a player only for themselves.
@@ -85,6 +87,7 @@ export function Board() {
           activeId={active?.id}
           selectedId={moving ? playerTurn?.id : carrying}
           reachable={reachable}
+          fx={fx}
           onTokenClick={(t) => {
             if (aiming && targetable.has(t.id)) {
               send(mass ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });

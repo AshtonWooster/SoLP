@@ -233,6 +233,38 @@ export interface CombatState {
   /** Counter Dice waiting on each character, by token id, in the order they were made. */
   counters: Record<string, CounterDie[]>;
   aim?: Aim;
+  /** The latest Page resolutions, die by die, so screens can animate them. Newest last. */
+  fx?: ClashFx[];
+  /** Id of the newest entry in fx. */
+  fxSeq?: number;
+}
+
+/** One die as it was rolled, for the clash animation. */
+export interface FxDie {
+  kind: import("./character.ts").DiceKind;
+  sides: number;
+  basePower: number;
+  counter?: boolean;
+  /** Final Power: the roll plus the base. */
+  power: number;
+}
+
+/** One step of a resolution: two dice clashing, or one die landing unopposed ("hit"). */
+export interface FxRound {
+  a?: FxDie;
+  b?: FxDie;
+  result: "a" | "b" | "draw" | "hit";
+}
+
+/** A Page resolving against a character: a Clash between two Pages, or a One-Sided Attack (b only answers with Counter Dice). */
+export interface ClashFx {
+  id: number;
+  /** Token ids: a is the side whose Page resolved first. */
+  a: string;
+  b: string;
+  pageA: string;
+  pageB?: string;
+  rounds: FxRound[];
 }
 
 /** Everything on the table that every member may see. GM-only data lives under games/{id}/gm. */

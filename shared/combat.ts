@@ -22,9 +22,12 @@ import {
 } from "./ruleset.ts";
 import type {
   Card,
+  ClashFx,
   Combatant,
   CombatState,
   DeckState,
+  FxDie,
+  FxRound,
   PageSource,
   SlottedPage,
   TableState,
@@ -227,6 +230,9 @@ const finalPower = (d: Dice) => rollDie(d.sides) + d.basePower;
 
 interface ClashOutcome {
   winner: "a" | "b" | "draw";
+  /** The Final Powers rolled. */
+  fa: number;
+  fb: number;
   /** What happens to each die afterwards: gone, reused as the current die, or moved to the bottom of its page. */
   a: "gone" | "recycle" | "bottom";
   b: "gone" | "recycle" | "bottom";
@@ -240,7 +246,7 @@ function clashDice(table: TableState, a: LiveDie, b: LiveDie, fa = finalPower(a.
   const desc = `${a.owner.name}'s ${diceText(a.die)} (${fa}) vs ${b.owner.name}'s ${diceText(b.die)} (${fb})`;
   if (fa === fb || (a.die.kind === "evade" && b.die.kind === "evade")) {
     log(table, ` ${desc}: Draw, both Negated.`);
-    return { winner: "draw", a: "gone", b: "gone" };
+    return { winner: "draw", a: "gone", b: "gone", fa, fb };
   }
   const aWins = fa > fb;
   const [w, l, fw, fl] = aWins ? [a, b, fa, fb] : [b, a, fb, fa];
@@ -271,7 +277,16 @@ function clashDice(table: TableState, a: LiveDie, b: LiveDie, fa = finalPower(a.
     recoverStagger(table, w.owner, fw);
     if (isOffensive(l.die.kind)) wKeep = "recycle";
   }
-  return aWins ? { winner: "a", a: wKeep, b: "gone" } : { winner: "b", a: "gone", b: wKeep };
+  return aWins ? { winner: "a", a: wKeep, b: "gone", fa, fb } : { winner: "b", a: "gone", b: wKeep, fa, fb };
+}
+
+const fxDie = (d: Dice, power: number): FxDie => ({ kind: d.kind, sides: d.sides, basePower: d.basePower, power, ...(d.counter ? { counter: true } : {}) });
+
+/** Remember a resolution for the clash animation; only the latest few are kept. */
+function recordFx(c: CombatState, fx: Omit<ClashFx, "id">) {
+  if (fx.rounds.length === 0) return;
+  c.fxSeq = (c.fxSeq ?? 0) + 1;
+  c.fx = [...(c.fx ?? []), { ...fx, id: c.fxSeq }].slice(-8);
 }
 
 /** Unused Defensive Dice become Counter Dice on their owner. */
@@ -285,9 +300,10 @@ function storeCounter(c: CombatState, owner: Token, die: Dice, pageId: string) {
  * A One-Sided Attack: each die hits the target top to bottom. The target's Counter Dice answer
  * automatically, in the order they were made; any used are lost when the page finishes.
  */
-function oneSided(table: TableState, attacker: Token, target: Token, page: Page, dice: Dice[], powers?: number[]) {
+function oneSided(table: TableState, attacker: Token, target: Token, page: Page, dice: Dice[], powers?: number[], animate = true) {
   const c = table.combat!;
   const used = new Set<string>();
+  const rounds: FxRound[] = [];
   dice.forEach((die, i) => {
     if (knockedOut(target) || knockedOut(attacker)) return;
     const fp = powers?.[i] ?? finalPower(die);
@@ -296,17 +312,20 @@ function oneSided(table: TableState, attacker: Token, target: Token, page: Page,
     if (counter) {
       used.add(counter.id);
       const out = clashDice(table, { die, owner: attacker, pageType: page.type }, { die: counter.die, owner: target, pageType: c.pages[counter.pageId]?.type ?? "melee" }, fp);
+      rounds.push({ a: fxDie(die, out.fa), b: fxDie(counter.die, out.fb), result: out.winner });
       // "On Clash Win, Counter Dice are Recycled": it answers the next die too. Otherwise it's spent.
       if (out.winner !== "b") c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => x.id !== counter.id);
       return;
     }
     if (isOffensive(die.kind)) {
       log(table, ` ${attacker.name}'s ${diceText(die)} (${fp}) hits ${target.name}.`);
+      rounds.push({ a: fxDie(die, fp), result: "hit" });
       dealDamage(table, target, fp, die.kind);
     } else storeCounter(c, attacker, die, page.id);
   });
   // Counter Dice used against this page are lost at the end of its resolution.
   if (used.size) c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => !used.has(x.id));
+  if (animate) recordFx(c, { a: attacker.id, b: target.id, pageA: page.name, rounds });
 }
 
 /** Two Pages clash: their dice clash top to bottom until one side runs out. */
@@ -320,6 +339,7 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
   log(table, `Clash: ${ta.name}'s ${pa.name} vs ${tb.name}'s ${pb.name}.`);
   const qa = pa.dice.filter((d) => !d.counter).map((die) => ({ die, owner: ta, pageType: pa.type }));
   const qb = pb.dice.filter((d) => !d.counter).map((die) => ({ die, owner: tb, pageType: pb.type }));
+  const rounds: FxRound[] = [];
 
   /** A Ranged Page with no Offensive Dice left, out of the Melee target's range, Negates the target's Offensive Dice. */
   const rangedEscape = () => {
@@ -341,6 +361,7 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
   for (let guard = 0; qa.length && qb.length && guard < 200; guard++) {
     if (knockedOut(ta) || knockedOut(tb)) break;
     const out = clashDice(table, qa[0], qb[0]);
+    rounds.push({ a: fxDie(qa[0].die, out.fa), b: fxDie(qb[0].die, out.fb), result: out.winner });
     for (const [q, fate] of [
       [qa, out.a],
       [qb, out.b],
@@ -361,10 +382,12 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
       if (isOffensive(d.die.kind)) {
         const fp = finalPower(d.die);
         log(table, ` ${me.name}'s ${diceText(d.die)} (${fp}) hits ${them.name} unopposed.`);
+        rounds.push({ [me === ta ? "a" : "b"]: fxDie(d.die, fp), result: "hit" });
         dealDamage(table, them, fp, d.die.kind);
       } else storeCounter(c, me, d.die, page.id);
     }
   }
+  recordFx(c, { a: ta.id, b: tb.id, pageA: pa.name, pageB: pb.name, rounds });
 }
 
 /** The page on a target's chosen Speed Die, or one clashing with this Mass Attack. */
@@ -427,7 +450,7 @@ function resolveMass(table: TableState, slot: SlottedPage) {
           if (tf >= powers[i]) continue;
           log(table, `  ${token.name}'s die is Negated.`);
         }
-        oneSided(table, owner, token, page, [die], [powers[i]]);
+        oneSided(table, owner, token, page, [die], [powers[i]], false);
       }
     });
     for (const q of queues.values()) if (q.defence) removeSlot(c, q.defence);
@@ -737,7 +760,16 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
     const clashes = other && (!isMassAttack(otherPage!.type) || other.targets.some((t) => t.tokenId === token.id));
     if (other && clashes) {
       entry.clashWith = other.id;
-      if (!isMassAttack(otherPage!.type)) other.clashWith = entry.id;
+      if (!isMassAttack(otherPage!.type)) {
+        other.clashWith = entry.id;
+        // Redirect: the Page on that die now faces whoever clashed with it.
+        const was = other.targets[0]?.tokenId;
+        other.targets = [{ tokenId: token.id, die: entry.die }];
+        if (was && was !== token.id) {
+          log(table, `${token.name} redirects ${names}'s ${otherPage!.name} (aimed at ${table.tokens[was]?.name ?? "someone"}) with ${page.name}: Clash!`);
+          return;
+        }
+      }
       log(table, `${token.name} slots ${page.name} against ${names}: Clash with ${otherPage!.name}!`);
       return;
     }

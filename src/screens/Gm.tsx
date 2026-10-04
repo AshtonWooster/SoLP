@@ -4,6 +4,7 @@ import type { GameDoc, GmMeta, Resources, TableAction, TableState, Token } from 
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { activeToken, newId } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
+import { useClashPlayback } from "../components/ClashFx.tsx";
 import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { EnemyDeckEditor } from "../components/EnemyDeckEditor.tsx";
 import { blankEnemy, isMassAttack } from "../../shared/ruleset.ts";
@@ -28,6 +29,7 @@ export function Gm() {
   const isGm = !!user && game.data?.gmId === user.id;
   const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
   const { snapshot, host } = useHost(id, user, game.data);
+  const fx = useClashPlayback(snapshot.table);
   const online = new Set(snapshot.online);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
@@ -71,6 +73,7 @@ export function Gm() {
         {table && (
           <Grid
             state={table}
+            fx={fx}
             selectedId={selectedId}
             activeId={table.combat ? activeToken(table)?.id : undefined}
             onTokenClick={(t) => {

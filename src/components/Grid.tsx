@@ -1,5 +1,6 @@
 import { validTargets } from "../../shared/engine.ts";
 import type { TableState, Token } from "../../shared/types.ts";
+import { FxBubble, type FxStep } from "./ClashFx.tsx";
 
 interface Props {
   state: TableState;
@@ -10,6 +11,8 @@ interface Props {
   reachable?: Set<string>;
   onTokenClick?: (t: Token) => void;
   onCellClick?: (x: number, y: number) => void;
+  /** The clash animation step to draw above the characters, if any. */
+  fx?: FxStep | null;
 }
 
 /** Tokens the Page being aimed can target, and those already picked (Mass Attacks). */
@@ -23,7 +26,7 @@ export function aimTargets(table: TableState): { targetable: Set<string>; picked
 }
 
 /** The battle map: a tile grid with tokens on it. Used full-screen on the board, smaller on the GM screen. */
-export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick }: Props) {
+export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx }: Props) {
   const { width, height } = state.map;
   const { targetable, picked } = aimTargets(state);
   const cells = [];
@@ -39,12 +42,27 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
       );
     }
   }
-  // An arrow from each slotted Page's owner to its target(s); clashing Pages are drawn in orange.
-  const arrows = (state.combat?.slots ?? []).flatMap((s) =>
-    s.targets
-      .map((t) => ({ id: `${s.id}-${t.tokenId}`, from: state.tokens[s.ownerId], to: state.tokens[t.tokenId], clash: !!s.clashWith }))
-      .filter((a) => a.from && a.to),
-  );
+  // An arrow from each slotted Page's owner to its target(s). Two Pages clashing with each other
+  // are one orange arrow with a head at each end.
+  const slots = state.combat?.slots ?? [];
+  const arrows = slots.flatMap((s) => {
+    const partner = s.clashWith ? slots.find((x) => x.id === s.clashWith) : undefined;
+    const mutual = partner?.clashWith === s.id;
+    if (mutual && partner) {
+      if (s.id > partner.id) return [];
+      const a = { id: `${s.id}-${partner.id}`, from: state.tokens[s.ownerId], to: state.tokens[partner.ownerId], clash: true, both: true };
+      return a.from && a.to ? [a] : [];
+    }
+    return s.targets
+      .map((t) => ({ id: `${s.id}-${t.tokenId}`, from: state.tokens[s.ownerId], to: state.tokens[t.tokenId], clash: !!s.clashWith, both: false }))
+      .filter((a) => a.from && a.to);
+  });
+  const fxSides = fx
+    ? ([
+        ["a", state.tokens[fx.fx.a]],
+        ["b", state.tokens[fx.fx.b]],
+      ] as const).filter(([, t]) => t)
+    : [];
   return (
     <div
       className="grid"
@@ -107,10 +125,19 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
               x2={a.to.x + 0.5}
               y2={a.to.y + 0.5}
               markerEnd="url(#head)"
+              markerStart={a.both ? "url(#head)" : undefined}
             />
           ))}
         </svg>
       )}
+      {fx &&
+        fxSides.map(([side, t]) => (
+          <div key={`${fx.fx.id}-${side}`} className={"fx-anchor" + (t!.y < 2 ? " below" : "")} style={{ gridColumn: t!.x + 1, gridRow: t!.y + 1 }} aria-hidden="true">
+            <div className="fx-float">
+              <FxBubble step={fx} side={side} />
+            </div>
+          </div>
+        ))}
     </div>
   );
 }
