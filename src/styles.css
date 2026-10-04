@@ -500,3 +500,44 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .target-pick.far { opacity: 0.55; }
 .story-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; }
 .story-grid button { display: flex; justify-content: space-between; }
+
+/* ---- Clash animation (above the characters on the map) ---- */
+.fx-anchor { position: relative; pointer-events: none; z-index: 6; }
+.fx-float { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -6px); display: flex; flex-direction: column; align-items: center; }
+.fx-anchor.below .fx-float { bottom: auto; top: 100%; transform: translate(-50%, 6px); }
+.fx-stack { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.fx-page { background: #000c; color: var(--text); border: 1px solid var(--accent); border-radius: 6px; padding: 2px 8px; font-weight: 700; white-space: nowrap; font-size: 0.85rem; max-width: 104px; overflow: hidden; text-overflow: ellipsis; animation: fx-pop 0.25s ease-out; }
+.fx-page.small { font-size: 0.7rem; font-weight: 600; border-color: var(--line); }
+.fx-die { width: 56px; height: 56px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; border: 2px solid #fff6; box-shadow: 0 4px 14px #000a; transition: transform 0.25s, opacity 0.35s, filter 0.35s; }
+.fx-die.slash, .fx-die.pierce, .fx-die.blunt { background: linear-gradient(160deg, #c0392b, #6d1a12); }
+.fx-die.block { background: linear-gradient(160deg, #3a6fd0, #1a2f66); }
+.fx-die.evade { background: linear-gradient(160deg, #2f9e57, #134a28); }
+.fx-num { font-size: 1.6rem; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 2px 3px #0008; }
+.fx-kind { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.9; }
+.fx-die.rolling { animation: fx-roll 0.35s linear infinite; }
+.fx-die.win { transform: scale(1.25); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent), 0 0 24px 6px color-mix(in srgb, var(--accent) 70%, transparent); }
+.fx-die.lose { animation: fx-shatter 0.6s ease-in forwards; }
+.fx-die.draw { opacity: 0.45; filter: grayscale(1); transform: scale(0.9); }
+.fx-die.hit { transform: scale(1.2); border-color: #fff; box-shadow: 0 0 22px 6px #e74c3caa; }
+.fx-tag { background: #000c; color: var(--muted); font-size: 0.7rem; padding: 0 6px; border-radius: 4px; }
+.fx-impact { font-size: 2.6rem; color: #ff6b4a; text-shadow: 0 0 12px #ff3b1f; animation: fx-impact 0.6s ease-out forwards; }
+@keyframes fx-roll {
+  0% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-14deg) scale(1.06) translateY(-3px); }
+  50% { transform: rotate(0deg) scale(1); }
+  75% { transform: rotate(14deg) scale(1.06) translateY(-3px); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+@keyframes fx-shatter {
+  0% { transform: scale(1); opacity: 1; }
+  30% { transform: scale(0.95) translateX(-3px) rotate(-6deg); }
+  60% { transform: scale(0.85) translateX(3px) rotate(8deg); opacity: 0.7; }
+  100% { transform: scale(0.6) translateY(10px) rotate(20deg); opacity: 0.15; filter: grayscale(1); }
+}
+@keyframes fx-impact { 0% { transform: scale(0.3); opacity: 0; } 40% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 0.9; } }
+@keyframes fx-pop { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .fx-die.rolling, .fx-die.lose, .fx-impact, .fx-page { animation: none; }
+}
+.player-msg.staggered { border-color: var(--p-stagger); color: var(--p-stagger); }
+.stagger-badge { color: var(--p-stagger); border-color: var(--p-stagger); }

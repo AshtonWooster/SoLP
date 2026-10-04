@@ -100,6 +100,10 @@ export function movementPoints(justice: number): number {
 }
 
 /** Upkeep: "characters restore, by default, 1 Light." */
+/** A Staggered character recovers (full Stagger Resist) at the Upkeep that makes this many while Staggered. */
+export const STAGGER_UPKEEPS = 2;
+/** While Staggered, every Resistance (damage and Stagger) is this. */
+export const STAGGERED_RESISTANCE = 2;
 export const UPKEEP_LIGHT = 1;
 
 /** You asked for players to start combat with 3 Pages in hand. */

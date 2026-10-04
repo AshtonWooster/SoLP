@@ -23,12 +23,13 @@ function token(id: string, side: Token["side"], x: number, y: number, extra: Par
 }
 
 /** Roland (player, always first) next to a Rat (enemy). */
-function setup(playerPages: Page[], enemyPages: Page[] = [], deck?: string[]) {
+function setup(playerPages: Page[], enemyPages: Page[] = [], deck?: string[], extra: Token[] = []) {
   const table: TableState = {
     map: { name: "m", width: 16, height: 10 },
     tokens: {
       roland: token("roland", "player", 2, 2, { ownerId: "p1", justice: 100 }),
       rat: token("rat", "enemy", 3, 2, { justice: -100, pages: enemyPages }),
+      ...Object.fromEntries(extra.map((t) => [t.id, t])),
     },
     log: [],
   };
@@ -39,7 +40,7 @@ function setup(playerPages: Page[], enemyPages: Page[] = [], deck?: string[]) {
   };
   const ctx: EngineContext = { loadout: (id) => (id === "roland" ? loadout : undefined) };
   const act = (a: TableAction, who: Actor = p1) => applyAction(table, a, who, ctx);
-  act({ type: "startCombat", tokenIds: ["roland", "rat"] }, gm);
+  act({ type: "startCombat", tokenIds: ["roland", "rat", ...extra.map((t) => t.id)] }, gm);
   return { table, act, c: () => table.combat!, hp: (id: string) => table.tokens[id].resources.hp };
 }
 
@@ -460,4 +461,98 @@ test("the GM sets Effects on any token; players can't", () => {
   applyAction(table, { type: "setEffects", tokenId: "roland", effects: [{ id: "e1", name: "Bleed", count: 3, description: "Lose 1 HP per die", duration: "2 turns" }] }, gm);
   assert.deepEqual(table.tokens.roland.effects, [{ id: "e1", name: "Bleed", count: 3, description: "Lose 1 HP per die", duration: "2 turns" }]);
   assert.throws(() => applyAction(table, { type: "setEffects", tokenId: "roland", effects: [] }, p1), /GM only/);
+});
+
+test("clashing with a Page aimed at someone else redirects it to the clasher", () => {
+  const olivier = token("olivier", "player", 3, 3, { justice: -50 });
+  const s = setup([page("slash", "melee", [die("slash", 5)])], [page("bite", "melee", [die("pierce", 2)])], undefined, [olivier]);
+  endTurn(s, p1); // Roland
+  endTurn(s); // Olivier
+  enemyPlay(s, "bite", ["olivier"]);
+  endTurn(s); // Rat
+  play(s, "slash", ["rat"]);
+  const bite = s.c().slots.find((x) => x.ownerId === "rat")!;
+  const slash = s.c().slots.find((x) => x.ownerId === "roland")!;
+  assert.equal(bite.clashWith, slash.id);
+  assert.equal(slash.clashWith, bite.id);
+  assert.deepEqual(bite.targets.map((t) => t.tokenId), ["roland"]);
+  assert.ok(s.table.log.some((l) => l.includes("roland redirects rat's bite")));
+});
+
+test("each resolution is recorded die by die for the clash animation", () => {
+  const s = setup([page("slash", "melee", [die("slash", 5), die("block", 3)])], [page("bite", "melee", [die("pierce", 2)])]);
+  play(s, "slash", ["rat"]);
+  endTurn(s, p1);
+  enemyPlay(s, "bite", ["roland"]); // clashes with Roland's die
+  endTurn(s);
+  // Roland's turn: his Page resolves first, so he's side a.
+  const fx = s.c().fx!.at(-1)!;
+  assert.equal(fx.a, "roland");
+  assert.equal(fx.b, "rat");
+  assert.equal(fx.pageA, "slash");
+  assert.equal(fx.pageB, "bite");
+  assert.deepEqual(
+    fx.rounds.map((r) => [r.a?.power, r.b?.power, r.result]),
+    [[5, 2, "a"]],
+  );
+  assert.equal(s.c().fxSeq, fx.id);
+  // A One-Sided hit is recorded too.
+  play(s, "slash", ["rat"]);
+  endTurn(s, p1);
+  endTurn(s);
+  const hit = s.c().fx!.at(-1)!;
+  assert.equal(hit.pageB, undefined);
+  assert.deepEqual(hit.rounds.map((r) => [r.a?.power, r.result]), [[5, "hit"]]);
+});
+
+test("Staggered: Pages discarded, can't act, Resistances 2x; recovers at the second Upkeep with full Stagger Resist", () => {
+  const s = setup([page("poke", "melee", [die("slash", 1)])], [page("smash", "melee", [die("blunt", 9)]), page("jab", "instant", [die("slash", 3)])]);
+  const roland = s.table.tokens.roland;
+  roland.resources.stagger = 3;
+  play(s, "poke", ["rat"]);
+  endTurn(s, p1);
+  enemyPlay(s, "smash", ["roland"]); // clashes with Roland's die
+  endTurn(s);
+  // Roland's turn: his Page loses the clash in Resolve, he's Staggered, his Upkeep counts 1 and he can't act.
+  assert.equal(roland.status?.staggered, true);
+  assert.equal(roland.status?.staggerUpkeeps, 1);
+  assert.equal(activeToken(s.table)!.id, "rat");
+  assert.equal(s.c().phase, "actions");
+  assert.ok(s.table.log.some((l) => l.includes("roland is Staggered and can't act")));
+  // Resistances are 2x while Staggered.
+  const hp = s.hp("roland");
+  enemyPlay(s, "jab", ["roland"]);
+  assert.equal(s.hp("roland"), hp - 6);
+  endTurn(s);
+  // Second Upkeep: recovered, Stagger Resist full, and it's his turn to act.
+  assert.equal(roland.status?.staggered, false);
+  assert.equal(roland.resources.stagger, roland.resources.maxStagger);
+  assert.equal(activeToken(s.table)!.id, "roland");
+  assert.equal(s.c().phase, "actions");
+  endTurn(s, p1);
+  const hp2 = s.hp("roland");
+  enemyPlay(s, "jab", ["roland"]);
+  assert.equal(s.hp("roland"), hp2 - 3);
+});
+
+test("Staggered on someone else's turn: their slotted Page is discarded and the Clash becomes One-Sided", () => {
+  const s = setup([page("poke", "melee", [die("slash", 1)])], [page("smash", "melee", [die("blunt", 9)]), page("jab", "instant", [die("slash", 3)])]);
+  const roland = s.table.tokens.roland;
+  play(s, "poke", ["rat"]);
+  endTurn(s, p1);
+  enemyPlay(s, "smash", ["roland"]);
+  roland.resources.stagger = 2;
+  enemyPlay(s, "jab", ["roland"]); // Staggers Roland now
+  assert.equal(roland.status?.staggered, true);
+  assert.equal(s.c().slots.filter((x) => x.ownerId === "roland").length, 0);
+  const smash = s.c().slots.find((x) => x.ownerId === "rat")!;
+  assert.equal(smash.clashWith, undefined);
+  const discards = s.c().decks.roland.discard.length;
+  const hp = s.hp("roland");
+  endTurn(s);
+  // Roland's first Upkeep while Staggered: skipped, straight to the Rat's turn, where Smash lands One-Sided at 2x.
+  assert.equal(roland.status?.staggerUpkeeps, 1);
+  assert.equal(s.c().decks.roland.discard.length, discards);
+  assert.equal(activeToken(s.table)!.id, "rat");
+  assert.equal(s.hp("roland"), hp - 18);
 });

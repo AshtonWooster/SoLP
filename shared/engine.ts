@@ -217,7 +217,9 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       }
       // Overrides can bring a character back (or knock them out).
       const r = token.resources;
-      token.status = { ...token.status, knockedOut: r.hp <= 0, staggered: r.stagger <= 0, panic: r.sanity <= -r.maxSanity };
+      const nowStaggered = r.stagger <= 0;
+      const upkeeps = nowStaggered && token.status?.staggered ? (token.status.staggerUpkeeps ?? 0) : 0;
+      token.status = { ...token.status, knockedOut: r.hp <= 0, staggered: nowStaggered, staggerUpkeeps: upkeeps, panic: r.sanity <= -r.maxSanity };
       if (applied.length) say(`GM override: ${token.name} ${applied.join(", ")}`);
       return applied.length > 0;
     }
