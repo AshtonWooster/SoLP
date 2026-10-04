@@ -77,7 +77,7 @@ The GM can move and edit anything at any time, press **Next turn** (e.g. after a
 
 Anyone in the game can open the board, not just the GM.
 
-When Pages resolve, the board and the GM's map animate it above the characters: the Page names appear, each pair of dice rolls, shows its Final Power, and the winner grows while the loser shatters (Draws grey out), then the next pair. One-Sided hits show the die and an impact on the target. The full detail stays in the log.
+When Pages resolve, the board and the GM's map animate it above the characters: the Page names appear, each pair of dice rolls, shows its Final Power, and the winner grows while the loser shatters (Draws grey out), then the next pair. One-Sided hits show the die and an impact on the target. The full detail stays in the log. Health, Stagger and Sanity change on the board, GM map and phones when each die's result plays, not before (the log shows results straight away). Tokens slide to their new tile when they move.
 
 ### The player screen
 

@@ -9,6 +9,7 @@ import { useAuth, useDoc } from "../api.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { Waiting } from "../components/Waiting.tsx";
+import { useClashPlayback } from "../components/ClashFx.tsx";
 import { CycleCharacters, EffectsView, Portrait } from "../components/player/CombatViews.tsx";
 import { InfoPanel, PANELS, type PanelKey } from "../components/player/InfoPanels.tsx";
 import { Overlay } from "../components/player/Overlay.tsx";
@@ -60,7 +61,8 @@ export function Play() {
   // The start of the log line we're waiting for after a Story Roll.
   const [awaitingRoll, setAwaitingRoll] = useState<{ prefix: string; tail: string } | null>(null);
 
-  const table = snapshot.table;
+  // Clash damage shows once its die has played on the board.
+  const { table } = useClashPlayback(snapshot.table);
   const combat = table?.combat;
   const mine = table ? Object.values(table.tokens).find((t) => t.ownerId === user?.id) : undefined;
   const c: Character | undefined = characterDoc.data && user ? { ...blankCharacter(user.id, ""), ...characterDoc.data } : undefined;
