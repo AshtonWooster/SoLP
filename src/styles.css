@@ -555,3 +555,4 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .new-map { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border-top: 1px solid var(--line); padding-top: 6px; }
 .new-map h4 { width: 100%; margin: 4px 0 0; }
 .new-map input[type="number"] { width: 4rem; }
+.map-editor .field { flex: none; }
