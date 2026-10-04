@@ -17,6 +17,8 @@ import {
   STARTING_HAND,
   STORY_DIE,
   UPKEEP_DRAW,
+  STAGGER_UPKEEPS,
+  STAGGERED_RESISTANCE,
   UPKEEP_LIGHT,
   WEAPON_RANGE,
 } from "./ruleset.ts";
@@ -91,6 +93,9 @@ export function sortOrder(table: TableState, order: Combatant[]): Combatant[] {
 }
 
 const knockedOut = (t: Token | undefined) => !t || !!t.status?.knockedOut;
+const staggered = (t: Token | undefined) => !!t?.status?.staggered;
+/** Out of the fight for now: Knocked Out, or Staggered (can't act or use dice). */
+const down = (t: Token | undefined) => knockedOut(t) || staggered(t);
 const distance = (a: Token, b: Token) => moveCost(a, b);
 const diceText = (d: Dice) => `${d.counter ? "Counter " : ""}${d.kind[0].toUpperCase()}${d.kind.slice(1)} 1d${d.sides}${d.basePower >= 0 ? "+" : ""}${d.basePower}`;
 
@@ -154,8 +159,9 @@ const SOURCE_NAMES: Record<PageSource, string> = { hand: "the hand", aux: "the A
 
 // ---- Resources and statuses ----
 
-function resistance(set: ResistanceSet | undefined, kind: Dice["kind"]): number {
+function resistance(t: Token, set: ResistanceSet | undefined, kind: Dice["kind"]): number {
   if (!isOffensive(kind)) return 1;
+  if (staggered(t)) return STAGGERED_RESISTANCE;
   return set?.[kind as keyof ResistanceSet] ?? 1;
 }
 
@@ -164,8 +170,8 @@ function resistance(set: ResistanceSet | undefined, kind: Dice["kind"]): number 
  * their Stagger Resistance as Stagger damage. Both round down.
  */
 function dealDamage(table: TableState, target: Token, amount: number, kind: Dice["kind"]) {
-  const dmg = Math.max(0, Math.floor(amount * resistance(target.resistances, kind)));
-  const stagger = Math.max(0, Math.floor(amount * resistance(target.staggerResistances, kind)));
+  const dmg = Math.max(0, Math.floor(amount * resistance(target, target.resistances, kind)));
+  const stagger = Math.max(0, Math.floor(amount * resistance(target, target.staggerResistances, kind)));
   const r = target.resources;
   r.hp = Math.max(0, r.hp - dmg);
   log(table, `  ${target.name} takes ${dmg} ${kind} damage (${r.hp}/${r.maxHp} Health).`);
@@ -183,8 +189,31 @@ function staggerDamage(table: TableState, target: Token, amount: number) {
   r.stagger = Math.max(0, r.stagger - amount);
   log(table, `  ${target.name} takes ${amount} Stagger damage (${r.stagger}/${r.maxStagger}).`);
   if (r.stagger === 0 && !target.status?.staggered) {
-    target.status = { ...target.status, staggered: true };
-    log(table, `  ${target.name} is Staggered!`);
+    target.status = { ...target.status, staggered: true, staggerUpkeeps: 0 };
+    log(table, `  ${target.name} is Staggered! Their Pages are discarded and their Resistances are ${STAGGERED_RESISTANCE}x until they recover.`);
+    onStaggered(table, target);
+  }
+}
+
+/** A Staggered character can't use dice: their slotted Pages go to the discard pile and their Counter Dice are lost. */
+function onStaggered(table: TableState, t: Token) {
+  const c = table.combat;
+  if (!c) return;
+  for (const s of c.slots.filter((x) => x.ownerId === t.id)) removeSlot(c, s);
+  c.counters[t.id] = [];
+}
+
+/** At the character's Upkeep: count it, and recover once they've passed enough while Staggered. */
+function staggerUpkeep(table: TableState, t: Token) {
+  if (!staggered(t)) return;
+  const passed = (t.status?.staggerUpkeeps ?? 0) + 1;
+  if (passed >= STAGGER_UPKEEPS) {
+    t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
+    t.resources.stagger = t.resources.maxStagger;
+    log(table, `  ${t.name} recovers from Stagger (${t.resources.stagger}/${t.resources.maxStagger}); Resistances are back to normal.`);
+  } else {
+    t.status = { ...t.status, staggerUpkeeps: passed };
+    log(table, `  ${t.name} is Staggered and can't act (recovers in ${STAGGER_UPKEEPS - passed} more Upkeep${STAGGER_UPKEEPS - passed === 1 ? "" : "s"}).`);
   }
 }
 
@@ -192,7 +221,7 @@ function recoverStagger(table: TableState, t: Token, amount: number) {
   const r = t.resources;
   const before = r.stagger;
   r.stagger = Math.min(r.maxStagger, r.stagger + amount);
-  if (r.stagger > 0 && t.status?.staggered) t.status = { ...t.status, staggered: false };
+  if (r.stagger > 0 && t.status?.staggered) t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
   if (r.stagger > before) log(table, `  ${t.name} recovers ${r.stagger - before} Stagger Resist.`);
 }
 
@@ -213,6 +242,8 @@ function onKnockedOut(table: TableState, t: Token) {
 }
 
 function removeSlot(c: CombatState, slot: SlottedPage) {
+  // Already gone (e.g. its owner was Knocked Out or Staggered mid-clash): don't discard it twice.
+  if (!c.slots.some((s) => s.id === slot.id)) return;
   c.slots = c.slots.filter((s) => s.id !== slot.id);
   for (const s of c.slots) if (s.clashWith === slot.id) delete s.clashWith;
   discard(c, slot);
@@ -305,7 +336,7 @@ function oneSided(table: TableState, attacker: Token, target: Token, page: Page,
   const used = new Set<string>();
   const rounds: FxRound[] = [];
   dice.forEach((die, i) => {
-    if (knockedOut(target) || knockedOut(attacker)) return;
+    if (knockedOut(target) || down(attacker)) return;
     const fp = powers?.[i] ?? finalPower(die);
     // The oldest Counter Die answers; one that won stays first and answers the next die too.
     const counter = (c.counters[target.id] ?? [])[0];
@@ -359,7 +390,7 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
   };
 
   for (let guard = 0; qa.length && qb.length && guard < 200; guard++) {
-    if (knockedOut(ta) || knockedOut(tb)) break;
+    if (down(ta) || down(tb)) break;
     const out = clashDice(table, qa[0], qb[0]);
     rounds.push({ a: fxDie(qa[0].die, out.fa), b: fxDie(qb[0].die, out.fb), result: out.winner });
     for (const [q, fate] of [
@@ -378,7 +409,7 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
     [qb, tb, ta, pb],
   ] as const) {
     for (const d of q) {
-      if (knockedOut(me) || knockedOut(them)) break;
+      if (down(me) || knockedOut(them)) break;
       if (isOffensive(d.die.kind)) {
         const fp = finalPower(d.die);
         log(table, ` ${me.name}'s ${diceText(d.die)} (${fp}) hits ${them.name} unopposed.`);
@@ -462,7 +493,7 @@ function resolveSlot(table: TableState, slot: SlottedPage): boolean {
   const c = table.combat!;
   const page = c.pages[slot.pageId];
   const owner = table.tokens[slot.ownerId];
-  if (!page || knockedOut(owner)) {
+  if (!page || down(owner)) {
     removeSlot(c, slot);
     return true;
   }
@@ -500,7 +531,8 @@ function resolveSlot(table: TableState, slot: SlottedPage): boolean {
  */
 function runPhases(table: TableState) {
   const c = table.combat!;
-  for (let skips = 0; skips <= c.order.length; skips++) {
+  // Each character can be skipped at most twice in a row (Staggered for two Upkeeps).
+  for (let skips = 0; skips <= c.order.length * STAGGER_UPKEEPS; skips++) {
     const token = activeToken(table);
     if (!token) return;
     if (knockedOut(token)) {
@@ -525,6 +557,13 @@ function runPhases(table: TableState) {
     r.light += light;
     if (c.decks[token.id] || light) log(table, `  Upkeep: ${c.decks[token.id] ? `draws ${drawn}` : ""}${c.decks[token.id] && light ? ", " : ""}${light ? `+${light} Light` : ""}.`);
     c.counters[token.id] = [];
+    staggerUpkeep(table, token);
+    if (staggered(token)) {
+      // Staggered: no Combat Actions this turn.
+      c.phase = "endstep";
+      advance(c);
+      continue;
+    }
 
     // Combat Actions: wait for the player.
     c.phase = "actions";
@@ -532,7 +571,7 @@ function runPhases(table: TableState) {
     delete c.aim;
     return;
   }
-  log(table, "Everyone in the turn order is Knocked Out.");
+  log(table, "No one in the turn order can act.");
 }
 
 function advance(c: CombatState) {

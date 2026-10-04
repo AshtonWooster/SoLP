@@ -126,8 +126,10 @@ export interface Effect {
 export interface TokenStatus {
   /** Health reached 0. */
   knockedOut?: boolean;
-  /** Stagger Resist reached 0. */
+  /** Stagger Resist reached 0. Can't act; all Resistances are 2x until they recover. */
   staggered?: boolean;
+  /** Upkeeps the character has passed while Staggered; they recover at STAGGER_UPKEEPS. */
+  staggerUpkeeps?: number;
   /** Sanity reached its minimum. */
   panic?: boolean;
 }

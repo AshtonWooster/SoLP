@@ -539,3 +539,5 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 @media (prefers-reduced-motion: reduce) {
   .fx-die.rolling, .fx-die.lose, .fx-impact, .fx-page { animation: none; }
 }
+.player-msg.staggered { border-color: var(--p-stagger); color: var(--p-stagger); }
+.stagger-badge { color: var(--p-stagger); border-color: var(--p-stagger); }

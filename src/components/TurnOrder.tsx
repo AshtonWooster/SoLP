@@ -20,6 +20,7 @@ export function TurnOrder({
           <li key={entry.tokenId} className={(i === c.turn ? "current " : "") + t.side}>
             <span className="swatch" style={{ background: t.color }} />
             <span className="turn-name">{t.name}</span>
+            {t.status?.knockedOut ? <span className="badge-soft">KO</span> : t.status?.staggered && <span className="badge-soft stagger-badge">Staggered</span>}
             <span className="turn-speed" title={`Rolled ${entry.roll}, +${entry.bonus} Justice`}>
               {entry.speed}
             </span>

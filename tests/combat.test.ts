@@ -504,3 +504,55 @@ test("each resolution is recorded die by die for the clash animation", () => {
   assert.equal(hit.pageB, undefined);
   assert.deepEqual(hit.rounds.map((r) => [r.a?.power, r.result]), [[5, "hit"]]);
 });
+
+test("Staggered: Pages discarded, can't act, Resistances 2x; recovers at the second Upkeep with full Stagger Resist", () => {
+  const s = setup([page("poke", "melee", [die("slash", 1)])], [page("smash", "melee", [die("blunt", 9)]), page("jab", "instant", [die("slash", 3)])]);
+  const roland = s.table.tokens.roland;
+  roland.resources.stagger = 3;
+  play(s, "poke", ["rat"]);
+  endTurn(s, p1);
+  enemyPlay(s, "smash", ["roland"]); // clashes with Roland's die
+  endTurn(s);
+  // Roland's turn: his Page loses the clash in Resolve, he's Staggered, his Upkeep counts 1 and he can't act.
+  assert.equal(roland.status?.staggered, true);
+  assert.equal(roland.status?.staggerUpkeeps, 1);
+  assert.equal(activeToken(s.table)!.id, "rat");
+  assert.equal(s.c().phase, "actions");
+  assert.ok(s.table.log.some((l) => l.includes("roland is Staggered and can't act")));
+  // Resistances are 2x while Staggered.
+  const hp = s.hp("roland");
+  enemyPlay(s, "jab", ["roland"]);
+  assert.equal(s.hp("roland"), hp - 6);
+  endTurn(s);
+  // Second Upkeep: recovered, Stagger Resist full, and it's his turn to act.
+  assert.equal(roland.status?.staggered, false);
+  assert.equal(roland.resources.stagger, roland.resources.maxStagger);
+  assert.equal(activeToken(s.table)!.id, "roland");
+  assert.equal(s.c().phase, "actions");
+  endTurn(s, p1);
+  const hp2 = s.hp("roland");
+  enemyPlay(s, "jab", ["roland"]);
+  assert.equal(s.hp("roland"), hp2 - 3);
+});
+
+test("Staggered on someone else's turn: their slotted Page is discarded and the Clash becomes One-Sided", () => {
+  const s = setup([page("poke", "melee", [die("slash", 1)])], [page("smash", "melee", [die("blunt", 9)]), page("jab", "instant", [die("slash", 3)])]);
+  const roland = s.table.tokens.roland;
+  play(s, "poke", ["rat"]);
+  endTurn(s, p1);
+  enemyPlay(s, "smash", ["roland"]);
+  roland.resources.stagger = 2;
+  enemyPlay(s, "jab", ["roland"]); // Staggers Roland now
+  assert.equal(roland.status?.staggered, true);
+  assert.equal(s.c().slots.filter((x) => x.ownerId === "roland").length, 0);
+  const smash = s.c().slots.find((x) => x.ownerId === "rat")!;
+  assert.equal(smash.clashWith, undefined);
+  const discards = s.c().decks.roland.discard.length;
+  const hp = s.hp("roland");
+  endTurn(s);
+  // Roland's first Upkeep while Staggered: skipped, straight to the Rat's turn, where Smash lands One-Sided at 2x.
+  assert.equal(roland.status?.staggerUpkeeps, 1);
+  assert.equal(s.c().decks.roland.discard.length, discards);
+  assert.equal(activeToken(s.table)!.id, "rat");
+  assert.equal(s.hp("roland"), hp - 18);
+});

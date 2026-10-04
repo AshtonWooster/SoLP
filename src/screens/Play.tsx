@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { doc, updateDoc } from "firebase/firestore";
 import type { Character, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
-import { blankCharacter, DASH_LIGHT_COST, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
+import { blankCharacter, DASH_LIGHT_COST, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import type { Card, PageSource, TableAction } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
@@ -258,6 +258,12 @@ export function Play() {
         )}
         <ConnectionBadge status={snapshot.status} />
       </div>
+      {mine?.status?.staggered && (
+        <div className="player-msg staggered" role="status">
+          <strong>Staggered.</strong> You can't act and your Resistances are {STAGGERED_RESISTANCE}x.{" "}
+          {combat && (STAGGER_UPKEEPS - (mine.status.staggerUpkeeps ?? 0) <= 1 ? "You recover at your next Upkeep." : `You recover after ${STAGGER_UPKEEPS - (mine.status.staggerUpkeeps ?? 0)} more Upkeeps.`)}
+        </div>
+      )}
       {(error || notice) && (
         <button type="button" className={"player-msg" + (error ? " error" : "")} onClick={() => (setError(""), setNotice(""))}>
           {error || notice}
