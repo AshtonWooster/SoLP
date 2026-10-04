@@ -5,6 +5,16 @@ import { friendlyError, storage } from "../firebase.ts";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
+/** Check and upload one image file under `folder`; resolves to its download URL. */
+export async function uploadImage(folder: string, file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error("Pick an image file.");
+  if (file.size > MAX_BYTES) throw new Error("Images must be under 5 MB.");
+  const ext = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+  const r = ref(storage, `${folder}/${newId()}.${ext}`);
+  await uploadBytes(r, file, { contentType: file.type });
+  return getDownloadURL(r);
+}
+
 /** Upload an image to Cloud Storage under `folder` and report its URL. */
 export function ImageUpload({
   folder,
@@ -37,15 +47,10 @@ export function ImageUpload({
               const file = e.target.files?.[0];
               e.target.value = "";
               if (!file) return;
-              if (!file.type.startsWith("image/")) return setError("Pick an image file.");
-              if (file.size > MAX_BYTES) return setError("Images must be under 5 MB.");
               setBusy(true);
               setError("");
               try {
-                const ext = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
-                const r = ref(storage, `${folder}/${newId()}.${ext}`);
-                await uploadBytes(r, file, { contentType: file.type });
-                onChange(await getDownloadURL(r));
+                onChange(await uploadImage(folder, file));
               } catch (err) {
                 setError(friendlyError(err));
               } finally {

@@ -13,7 +13,7 @@ import { useClashPlayback } from "../components/ClashFx.tsx";
 import { CycleCharacters, EffectsView, Portrait } from "../components/player/CombatViews.tsx";
 import { InfoPanel, PANELS, type PanelKey } from "../components/player/InfoPanels.tsx";
 import { Overlay } from "../components/player/Overlay.tsx";
-import { PageCard } from "../components/player/PageCard.tsx";
+import { PvCard } from "../components/player/LorCard.tsx";
 import { PageView } from "../components/player/PageView.tsx";
 import { db, friendlyError } from "../firebase.ts";
 import { useClient } from "../net/hooks.ts";
@@ -346,7 +346,7 @@ export function Play() {
                   if (!p) return null;
                   return (
                     <div role="listitem" key={card.id}>
-                      <PageCard page={p} selected={selected[category] === card.id} dim={p.cost > (r?.light ?? 0)} onClick={() => setViewing({ page: p, card, category })} />
+                      <PvCard page={p} size="hand" selected={selected[category] === card.id} dim={p.cost > (r?.light ?? 0)} onClick={() => setViewing({ page: p, card, category })} />
                     </div>
                   );
                 })
@@ -383,19 +383,6 @@ export function Play() {
       </section>
 
       {/* ---- Popups ---- */}
-      {viewing && (
-        <PageView
-          page={viewing.page}
-          onClose={() => setViewing(null)}
-          action={
-            viewing.card && viewing.category
-              ? selected[viewing.category] === viewing.card.id
-                ? { label: "Deselect", run: () => (clearSelection(viewing.category), setViewing(null)) }
-                : { label: "Select this Page", run: () => selectCard(viewing.category!, viewing.card!) }
-              : undefined
-          }
-        />
-      )}
       {overlay === "cycle" && <CycleCharacters table={table} meId={mine?.id} onClose={() => setOverlay(null)} onOpenPage={(p) => setViewing({ page: p })} />}
       {overlay === "effects" && <EffectsView effects={mine?.effects ?? []} onClose={() => setOverlay(null)} />}
       {overlay === "dice" && combat && (
@@ -468,6 +455,20 @@ export function Play() {
             ))}
           </div>
         </Overlay>
+      )}
+      {/* Last, so a Page opened from another popup (e.g. Cycle characters) shows on top of it. */}
+      {viewing && (
+        <PageView
+          page={viewing.page}
+          onClose={() => setViewing(null)}
+          action={
+            viewing.card && viewing.category
+              ? selected[viewing.category] === viewing.card.id
+                ? { label: "Deselect", run: () => (clearSelection(viewing.category), setViewing(null)) }
+                : { label: "Select this Page", run: () => selectCard(viewing.category!, viewing.card!) }
+              : undefined
+          }
+        />
       )}
     </main>
   );

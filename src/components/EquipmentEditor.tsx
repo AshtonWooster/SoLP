@@ -1,7 +1,8 @@
+import { useState } from "react";
 import type { Armor, Dice, DiceKind, Equipment, Page, PageType, Passive, Weapon } from "../../shared/character.ts";
-import { blankDice, blankPage, blankPassive } from "../../shared/ruleset.ts";
+import { blankArmor, blankPage, blankPassive, blankWeapon } from "../../shared/ruleset.ts";
 import { NumberInput, TextField } from "./Fields.tsx";
-import { ImageUpload } from "./ImageUpload.tsx";
+import { PageCardEditor, PvCard } from "./player/LorCard.tsx";
 
 export const PAGE_TYPES: { value: PageType; label: string }[] = [
   { value: "melee", label: "Melee" },
@@ -18,8 +19,6 @@ const DICE_KINDS: { value: DiceKind; label: string }[] = [
   { value: "block", label: "Block" },
   { value: "evade", label: "Evade" },
 ];
-
-const DIE_SIZES = [4, 6, 8, 10, 12, 20];
 
 export function diceLabel(d: Dice): string {
   const kind = DICE_KINDS.find((k) => k.value === d.kind)?.label ?? d.kind;
@@ -79,126 +78,16 @@ export function PassiveList({
   );
 }
 
-function DiceRow({ dice, onChange, onRemove }: { dice: Dice; onChange: (d: Dice) => void; onRemove: () => void }) {
-  return (
-    <div className="dice-row">
-      <select aria-label="Dice type" value={dice.kind} onChange={(e) => onChange({ ...dice, kind: e.target.value as DiceKind })}>
-        {DICE_KINDS.map((k) => (
-          <option key={k.value} value={k.value}>
-            {k.label}
-          </option>
-        ))}
-      </select>
-      <select aria-label="Roll" value={dice.sides} onChange={(e) => onChange({ ...dice, sides: Number(e.target.value) })}>
-        {DIE_SIZES.map((n) => (
-          <option key={n} value={n}>
-            1d{n}
-          </option>
-        ))}
-      </select>
-      <label className="inline">
-        +
-        <NumberInput label="Base Power" value={dice.basePower} onChange={(basePower) => onChange({ ...dice, basePower: Math.round(basePower) })} />
-      </label>
-      <label className="inline check">
-        <input type="checkbox" checked={dice.counter} onChange={(e) => onChange({ ...dice, counter: e.target.checked })} />
-        Counter
-      </label>
-      <button type="button" className="icon" aria-label="Remove dice" onClick={onRemove}>
-        ✕
-      </button>
-      <input
-        className="dice-effect"
-        aria-label="Dice effect"
-        placeholder="Dice effect (optional), e.g. On Hit: Inflict 1 Fragile"
-        value={dice.effect ?? ""}
-        onChange={(e) => onChange({ ...dice, effect: e.target.value || undefined })}
-      />
-    </div>
-  );
+/** Edit one Page on its card (see PageCardEditor). */
+export function PageEditor(props: { page: Page; onChange: (p: Page) => void; onRemove?: () => void; artFolder?: string }) {
+  return <PageCardEditor {...props} />;
 }
 
-export function PageEditor({
-  page,
-  onChange,
-  onRemove,
-  artFolder,
-}: {
-  page: Page;
-  onChange: (p: Page) => void;
-  onRemove?: () => void;
-  /** Where Page art uploads go; no upload button without it. */
-  artFolder?: string;
-}) {
-  return (
-    <div className={`page-card ${page.kind}`}>
-      <div className="row">
-        <input aria-label="Page name" placeholder="Page name" value={page.name} onChange={(e) => onChange({ ...page, name: e.target.value })} />
-        {onRemove && (
-          <button type="button" className="icon" aria-label="Remove page" onClick={onRemove}>
-            ✕
-          </button>
-        )}
-      </div>
-      <div className="row wrap">
-        <select aria-label="Basic or Special" value={page.kind} onChange={(e) => onChange({ ...page, kind: e.target.value as Page["kind"] })}>
-          <option value="basic">Basic Page</option>
-          <option value="special">Special Page</option>
-        </select>
-        <select aria-label="Page type" value={page.type} onChange={(e) => onChange({ ...page, type: e.target.value as PageType })}>
-          {PAGE_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        <label className="inline">
-          Light cost
-          <NumberInput label="Light cost" value={page.cost} min={0} onChange={(cost) => onChange({ ...page, cost: Math.max(0, Math.round(cost)) })} />
-        </label>
-      </div>
-      <h5>Dice (resolved top to bottom)</h5>
-      {page.dice.map((d, i) => (
-        <DiceRow
-          key={d.id}
-          dice={d}
-          onChange={(nd) => onChange({ ...page, dice: replaceAt(page.dice, i, nd) })}
-          onRemove={() => onChange({ ...page, dice: page.dice.filter((_, j) => j !== i) })}
-        />
-      ))}
-      <button type="button" onClick={() => onChange({ ...page, dice: [...page.dice, blankDice()] })}>
-        + Add dice
-      </button>
-      <textarea aria-label="Page effect" placeholder="On Use / On Hit effects" value={page.effect} onChange={(e) => onChange({ ...page, effect: e.target.value })} />
-      {artFolder && <ImageUpload folder={artFolder} shape="page" label="Art (4:3)" value={page.image} onChange={(image) => onChange({ ...page, image })} />}
-    </div>
-  );
-}
-
-export function EquipmentEditor<T extends Weapon | Armor>({
-  item,
-  maxCost,
-  onChange,
-  onRemove,
-  artFolder,
-}: {
-  item: T;
-  maxCost: number;
-  onChange: (item: T) => void;
-  onRemove?: () => void;
-  artFolder?: string;
-}) {
+/** Hands, resistances, description and Passives of one piece of equipment. */
+function EquipmentDetails<T extends Weapon | Armor>({ item, maxCost, onChange, onRemove }: { item: T; maxCost: number; onChange: (item: T) => void; onRemove: () => void }) {
   const set = (patch: Partial<Equipment>) => onChange({ ...item, ...patch });
   return (
-    <div className="equipment-card">
-      <div className="row-between">
-        <TextField label={"hands" in item ? "Weapon name" : "Armor name"} value={item.name} onChange={(name) => set({ name })} />
-        {onRemove && (
-          <button type="button" className="danger" onClick={onRemove}>
-            Remove
-          </button>
-        )}
-      </div>
+    <div className="equip-details">
       {"hands" in item && (
         <label className="inline">
           Hands
@@ -208,57 +97,210 @@ export function EquipmentEditor<T extends Weapon | Armor>({
           </select>
         </label>
       )}
-      {"resistances" in item && (
-        <div>
-          {(
-            [
-              ["resistances", "Resistances", "Damage taken is multiplied by these. Lower is tougher."],
-              ["staggerResistances", "Stagger resistances", "Stagger damage taken is multiplied by these, the same way."],
-            ] as const
-          ).map(([field, title, hint]) => (
-            <div key={field}>
-              <h4>{title}</h4>
-              <p className="muted small">{hint}</p>
-              <div className="row wrap">
-                {(["slash", "pierce", "blunt"] as const).map((k) => {
-                  const set = item[field] ?? { slash: 1, pierce: 1, blunt: 1 };
-                  return (
-                    <label className="inline" key={k}>
-                      {k[0].toUpperCase() + k.slice(1)} ×
-                      <NumberInput
-                        label={`${field === "resistances" ? "" : "stagger "}${k} resistance`}
-                        value={set[k]}
-                        step={0.1}
-                        min={0}
-                        onChange={(v) => onChange({ ...item, [field]: { ...set, [k]: Math.max(0, v) } })}
-                      />
-                    </label>
-                  );
-                })}
-              </div>
+      {"resistances" in item &&
+        (
+          [
+            ["resistances", "Resistances", "Damage taken is multiplied by these. Lower is tougher."],
+            ["staggerResistances", "Stagger resistances", "Stagger damage taken is multiplied by these, the same way."],
+          ] as const
+        ).map(([field, title, hint]) => (
+          <div key={field}>
+            <h4>{title}</h4>
+            <p className="muted small">{hint}</p>
+            <div className="row wrap">
+              {(["slash", "pierce", "blunt"] as const).map((k) => {
+                const r = item[field] ?? { slash: 1, pierce: 1, blunt: 1 };
+                return (
+                  <label className="inline" key={k}>
+                    {k[0].toUpperCase() + k.slice(1)} ×
+                    <NumberInput
+                      label={`${field === "resistances" ? "" : "stagger "}${k} resistance`}
+                      value={r[k]}
+                      step={0.1}
+                      min={0}
+                      onChange={(v) => onChange({ ...item, [field]: { ...r, [k]: Math.max(0, v) } })}
+                    />
+                  </label>
+                );
+              })}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
       <TextField label="Description" value={item.description} onChange={(description) => set({ description })} multiline />
       <PassiveList passives={item.passives} max={maxCost} onChange={(passives) => set({ passives })} />
-      <h4>Pages</h4>
-      {item.pages.map((p, i) => (
-        <PageEditor
-          key={p.id}
-          page={p}
-          artFolder={artFolder}
-          onChange={(np) => set({ pages: replaceAt(item.pages, i, np) })}
-          onRemove={() => set({ pages: item.pages.filter((_, j) => j !== i) })}
-        />
-      ))}
-      <div className="row">
-        <button type="button" onClick={() => set({ pages: [...item.pages, blankPage("basic")] })}>
-          + Basic Page
+      <button type="button" className="danger" onClick={onRemove}>
+        Remove {"hands" in item ? "weapon" : "armor"}
+      </button>
+    </div>
+  );
+}
+
+/** One weapon or armor on the right of the studio: its name, Passives, and its Pages as cards with a + to add one. */
+function EquipmentBox<T extends Weapon | Armor>({
+  item,
+  maxCost,
+  selectedPageId,
+  onSelectPage,
+  onChange,
+  onRemove,
+}: {
+  item: T;
+  maxCost: number;
+  selectedPageId?: string;
+  onSelectPage: (pageId: string) => void;
+  onChange: (item: T) => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const isWeapon = "hands" in item;
+  const label = isWeapon ? "Weapon" : "Armor";
+  const passiveCost = item.passives.reduce((a, p) => a + p.cost, 0);
+  return (
+    <section className={`equip-box ${isWeapon ? "weapon" : "armor"}`}>
+      <header className="equip-head">
+        <span className="equip-kind">{label}</span>
+        <input aria-label={`${label} name`} placeholder={`${label} name`} value={item.name} onChange={(e) => onChange({ ...item, name: e.target.value })} />
+      </header>
+      <button type="button" className="equip-passives" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <strong>Passives</strong>{" "}
+        <span className="muted small">
+          {item.passives.length ? item.passives.map((p) => p.name || "Unnamed").join(", ") : "none"} · cost {passiveCost}/{maxCost}
+          {isWeapon ? ` · ${(item as Weapon).hands === 2 ? "two" : "one"}-handed` : ""}
+        </span>
+        <span className="equip-toggle">{open ? "▴" : "▾ Details"}</span>
+      </button>
+      {open && <EquipmentDetails item={item} maxCost={maxCost} onChange={onChange} onRemove={onRemove} />}
+      <div className="equip-pages">
+        {item.pages.map((p) => (
+          <PvCard key={p.id} page={p} size="thumb" selected={p.id === selectedPageId} onClick={() => onSelectPage(p.id)} />
+        ))}
+        <button
+          type="button"
+          className="equip-add-page"
+          aria-label={`Add a Page to ${item.name || `this ${label.toLowerCase()}`}`}
+          onClick={() => {
+            const page = blankPage("basic");
+            onChange({ ...item, pages: [...item.pages, page] });
+            onSelectPage(page.id);
+          }}
+        >
+          +
         </button>
-        <button type="button" onClick={() => set({ pages: [...item.pages, blankPage("special")] })}>
-          + Special Page
-        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Weapons and Armor, laid out like the design sketch: the selected Page on the left as an
+ * editable card, and on the right each piece of equipment with its Pages (tap one to edit it, + to
+ * add one). The big + adds a weapon or armor.
+ */
+export function EquipmentStudio({
+  weapons,
+  armor,
+  maxCost,
+  artFolder,
+  canAddWeapon,
+  onWeapons,
+  onArmor,
+}: {
+  weapons: Weapon[];
+  armor: Armor | null;
+  maxCost: number;
+  artFolder?: string;
+  canAddWeapon: boolean;
+  onWeapons: (w: Weapon[]) => void;
+  onArmor: (a: Armor | null) => void;
+}) {
+  const all: (Weapon | Armor)[] = [...weapons, ...(armor ? [armor] : [])];
+  const [picked, setPicked] = useState<{ equipId: string; pageId: string } | null>(null);
+  const [adding, setAdding] = useState(false);
+  // Default to the first Page there is; drop a selection whose Page was removed.
+  const current =
+    (picked && all.find((e) => e.id === picked.equipId)?.pages.some((p) => p.id === picked.pageId) ? picked : null) ??
+    (all.find((e) => e.pages.length) ? { equipId: all.find((e) => e.pages.length)!.id, pageId: all.find((e) => e.pages.length)!.pages[0].id } : null);
+  const owner = current ? all.find((e) => e.id === current.equipId) : undefined;
+  const page = owner?.pages.find((p) => p.id === current!.pageId);
+
+  const change = (item: Weapon | Armor) => {
+    if (armor && item.id === armor.id) onArmor(item as Armor);
+    else onWeapons(weapons.map((w) => (w.id === item.id ? (item as Weapon) : w)));
+  };
+  const remove = (item: Weapon | Armor) => {
+    if (armor && item.id === armor.id) onArmor(null);
+    else onWeapons(weapons.filter((w) => w.id !== item.id));
+  };
+
+  return (
+    <div className="equip-studio">
+      <div className="equip-editor">
+        {page && owner ? (
+          <PageCardEditor
+            key={page.id}
+            page={page}
+            artFolder={artFolder}
+            onChange={(np) => change({ ...owner, pages: owner.pages.map((p) => (p.id === np.id ? np : p)) })}
+            onRemove={() => change({ ...owner, pages: owner.pages.filter((p) => p.id !== page.id) })}
+          />
+        ) : (
+          <p className="muted equip-empty">Add a weapon or armor, then tap + to give it a Page.</p>
+        )}
+      </div>
+      <div className="equip-list">
+        <div className="equip-scroll">
+          {all.map((item) => (
+            <EquipmentBox
+              key={item.id}
+              item={item}
+              maxCost={maxCost}
+              selectedPageId={current?.equipId === item.id ? current.pageId : undefined}
+              onSelectPage={(pageId) => setPicked({ equipId: item.id, pageId })}
+              onChange={change}
+              onRemove={() => remove(item)}
+            />
+          ))}
+          {all.length === 0 && <p className="muted">No equipment yet.</p>}
+        </div>
+        <div className="equip-add">
+          {adding ? (
+            <div className="row">
+              <button
+                type="button"
+                disabled={!canAddWeapon}
+                title={canAddWeapon ? undefined : "Both hands are full"}
+                onClick={() => {
+                  const w = blankWeapon();
+                  onWeapons([...weapons, w]);
+                  setPicked({ equipId: w.id, pageId: w.pages[0].id });
+                  setAdding(false);
+                }}
+              >
+                + Add weapon
+              </button>
+              <button
+                type="button"
+                disabled={!!armor}
+                title={armor ? "One armor at a time" : undefined}
+                onClick={() => {
+                  const a = blankArmor();
+                  onArmor(a);
+                  setPicked({ equipId: a.id, pageId: a.pages[0].id });
+                  setAdding(false);
+                }}
+              >
+                + Add armor
+              </button>
+              <button type="button" className="link" onClick={() => setAdding(false)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="equip-add-big" aria-label="Add equipment" onClick={() => setAdding(true)}>
+              +
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

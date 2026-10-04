@@ -460,7 +460,24 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 /* The enlarged Page, Library of Ruina style */
 .page-view { --pv-frame: #6fb4ff; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 0; border: 2px solid var(--pv-frame); border-radius: 10px; overflow: hidden; background: #070b14; box-shadow: 0 0 18px color-mix(in srgb, var(--pv-frame) 35%, transparent); }
 .page-view.special { --pv-frame: #b48cff; }
-.pv-card { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: linear-gradient(180deg, #0d1626, #070b14); border-right: 2px solid var(--pv-frame); min-width: 0; }
+.pv-card { --pv-frame: #6fb4ff; position: relative; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: linear-gradient(180deg, #0d1626, #070b14); min-width: 0; text-align: left; color: var(--text); font: inherit; }
+.pv-card.special { --pv-frame: #b48cff; }
+.page-view .pv-card { border-right: 2px solid var(--pv-frame); }
+/* Standalone cards (hand, thumbnails, editor) carry their own frame. */
+.pv-card.hand, .pv-card.thumb, .pv-card.edit { border: 2px solid var(--pv-frame); border-radius: 8px; box-shadow: 0 0 10px color-mix(in srgb, var(--pv-frame) 25%, transparent); }
+.pv-card.hand { flex: none; width: 128px; height: 100%; gap: 4px; padding: 6px; cursor: pointer; }
+.pv-card.hand .pv-cost { width: 24px; height: 24px; font-size: 0.85rem; }
+.pv-card.hand .pv-name { font-size: 0.78rem; padding: 2px 6px; }
+.pv-card.thumb { flex: none; width: 92px; gap: 3px; padding: 4px; cursor: pointer; }
+.pv-card.thumb .pv-cost { width: 18px; height: 18px; font-size: 0.7rem; box-shadow: none; }
+.pv-card.thumb .pv-type { font-size: 0.8rem; }
+.pv-card.thumb .pv-name { font-size: 0.66rem; padding: 1px 4px; }
+.pv-card.thumb .pv-bottom { gap: 2px; }
+.pv-card.thumb .dice-icon { border-width: 1.5px; border-radius: 4px; }
+.pv-card.selected { --pv-frame: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 16px #e0b04f66; }
+.pv-card.hand.selected { transform: translateY(-4px); }
+.pv-card.dim { opacity: 0.55; }
+button.pv-card:hover { filter: brightness(1.12); }
 .pv-top { display: flex; justify-content: space-between; align-items: center; }
 .pv-cost { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; color: #1a1408; background: var(--p-light); box-shadow: 0 0 8px #f0a03088; }
 .pv-type { font-size: 1.2rem; color: var(--pv-frame); }
@@ -583,3 +600,59 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .dice-effect { flex: 1 1 100%; font-size: 0.85rem; }
 .confirm-button { transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
 .confirm-button.armed { background: #f3b5b3; color: #5a0f0c; border-color: var(--hp); font-weight: 700; }
+
+/* Editing a Page on its card */
+.pv-card.edit { gap: 8px; padding: 10px; }
+.pv-cost.edit { width: auto; height: auto; padding: 0; background: none; box-shadow: none; }
+.pv-cost.edit input { width: 2.6rem; height: 2.2rem; border-radius: 50%; text-align: center; font-weight: 900; color: #1a1408; background: var(--p-light); border: none; padding: 0; -moz-appearance: textfield; }
+.pv-cost.edit input::-webkit-inner-spin-button { display: none; }
+.pv-type-select { max-width: 60%; font-size: 0.8rem; padding: 0.25rem 0.4rem; background: #0b0f18; color: var(--pv-frame); border-color: color-mix(in srgb, var(--pv-frame) 50%, transparent); }
+.pv-name-input { width: 100%; border: none; font-family: inherit; }
+.pv-name-input::placeholder { color: #10131a88; }
+.pv-art.pickable { position: relative; cursor: pointer; }
+.pv-art.pickable:hover { border-color: var(--pv-frame); }
+.pv-art-hint { color: var(--muted); font-size: 0.85rem; padding: 0 8px; text-align: center; }
+.pv-art-hint.over { position: absolute; inset: auto 0 0 0; background: #000b; padding: 4px; color: var(--text); }
+.pv-art.busy { opacity: 0.7; }
+.pv-art-remove { align-self: flex-end; margin-top: -4px; }
+.pv-edit-dice { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.pv-edit-die { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr); gap: 6px; align-items: center; }
+.die-kind-pick { position: relative; display: inline-grid; }
+.die-kind-pick select { position: absolute; inset: 0; opacity: 0; cursor: pointer; padding: 0; }
+.pv-range-edit { display: inline-flex; align-items: center; gap: 2px; font-weight: 800; }
+.pv-range-edit input { width: 2.6rem; padding: 0.2rem 0.25rem; text-align: center; font-weight: 800; background: #0b0f18; }
+.pv-edit-die.offensive .pv-range-edit input { color: #ff7a3d; }
+.pv-edit-die.block .pv-range-edit input { color: #5aa8ff; }
+.pv-edit-die.evade .pv-range-edit input { color: #5ed38a; }
+.die-counter { font-size: 0.7rem; padding: 0.2rem 0.45rem; justify-self: start; color: var(--muted); }
+.die-counter.on { color: #1a1408; background: #ffd166; border-color: #ffd166; font-weight: 700; }
+.die-remove { justify-self: end; }
+.die-effect-in { grid-column: 1 / -1; font-size: 0.85rem; background: #0b0f18; color: #f3dcc0; }
+.pv-add-die { align-self: flex-start; font-size: 0.85rem; }
+.pv-effect-in { min-height: 2.6rem; background: #0b0f18; color: #ffe08a; }
+.pv-edit-foot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+/* Equipment studio (character sheet, step 5) */
+.equip-studio { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.equip-editor { position: sticky; top: 8px; }
+.equip-empty { border: 1px dashed var(--line); border-radius: 10px; padding: 24px 12px; text-align: center; }
+.equip-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.equip-scroll { display: flex; flex-direction: column; gap: 10px; max-height: 70vh; overflow-y: auto; padding-right: 2px; }
+.equip-box { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
+.equip-head { display: flex; align-items: center; gap: 8px; }
+.equip-head input { flex: 1; min-width: 0; font-weight: 700; }
+.equip-kind { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+.equip-box.armor .equip-kind { color: var(--sanity); }
+.equip-passives { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; text-align: left; background: none; border: 1px dashed var(--line); }
+.equip-toggle { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+.equip-details { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 8px; background: var(--panel); }
+.equip-pages { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; align-items: stretch; }
+.equip-add-page { flex: none; width: 92px; min-height: 120px; font-size: 2rem; color: var(--muted); border: 2px dashed var(--line); }
+.equip-add-page:hover { color: var(--accent); }
+.equip-add { display: flex; justify-content: center; }
+.equip-add-big { width: 52px; height: 52px; border-radius: 50%; font-size: 1.8rem; line-height: 1; padding: 0; border: 2px solid var(--line); }
+.equip-add-big:hover { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 760px) {
+  .equip-studio { grid-template-columns: 1fr; }
+  .equip-editor { position: static; }
+}
