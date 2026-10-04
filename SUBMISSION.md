@@ -8,9 +8,16 @@ It's built for the **LoR PMTTRPG**, a fan-made tabletop RPG inspired by *Library
 
 ## Who is the target user for your project?
 
-- **Game Masters** running the LoR PMTTRPG, in person or online, typically with a laptop for controls and an iPad or TV for the board.
+**The problem:** tabletop groups today have two options, and neither fits a custom system like the LoR PMTTRPG.
+- **A physical board** is interactive but expensive to build up, and it only works when everyone is in the same room.
+- **Online tabletops** connect people anywhere, but they're costly to subscribe to and don't support custom rules, so players still track combat by hand.
+
+**SoLP bridges the two.** A big screen shows the live board like a real table, while each player's phone works as their personal "remote": they pick Pages, aim at targets and watch them light up on the board. It feels like playing in person, whether everyone is in one room or spread across the world, with the system's own rules built in.
+
+It's for:
+- **Game Masters** running the LoR PMTTRPG, typically with a laptop for controls and an iPad or TV for the board.
 - **Players** on their phones. No install: open a link or scan the QR code on the board.
-- **Groups spread across cities or countries** who want a real tabletop night together, with a tool that understands this system's combat.
+- **Groups spread across cities or countries** who want a real tabletop night together.
 
 ## GitHub / repository link
 
