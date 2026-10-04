@@ -1,145 +1,466 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { Character } from "../../shared/character.ts";
-import { blankCharacter, useItemIn } from "../../shared/ruleset.ts";
 import { doc, updateDoc } from "firebase/firestore";
-import { db, friendlyError } from "../firebase.ts";
-import type { Token } from "../../shared/types.ts";
+import type { Character, Page } from "../../shared/character.ts";
+import { activeToken, validTargets } from "../../shared/engine.ts";
+import { blankCharacter, DASH_LIGHT_COST, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
+import type { Card, PageSource, TableAction } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
-import { LoadoutSummary } from "../components/LoadoutSummary.tsx";
-import { ActionPanel, HandPreview, PHASE_LABELS } from "../components/ActionPanel.tsx";
-import { activeToken } from "../../shared/engine.ts";
-import { pct } from "../components/Grid.tsx";
-import { TurnOrder } from "../components/TurnOrder.tsx";
+import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { Waiting } from "../components/Waiting.tsx";
+import { CycleCharacters, EffectsView, Portrait } from "../components/player/CombatViews.tsx";
+import { InfoPanel, PANELS, type PanelKey } from "../components/player/InfoPanels.tsx";
+import { Overlay } from "../components/player/Overlay.tsx";
+import { PageCard } from "../components/player/PageCard.tsx";
+import { PageView } from "../components/player/PageView.tsx";
+import { db, friendlyError } from "../firebase.ts";
 import { useClient } from "../net/hooks.ts";
 
-/** A player's phone: their own character, plus public info about allies. */
+type Category = "combat" | "ego" | "aux";
+const CATEGORIES: { key: Category; label: string; source: PageSource }[] = [
+  { key: "combat", label: "Combat", source: "hand" },
+  { key: "ego", label: "E.G.O.", source: "ego" },
+  { key: "aux", label: "Auxiliary", source: "aux" },
+];
+const sourceOf = (cat: Category) => CATEGORIES.find((x) => x.key === cat)!.source;
+
+/** The middle carousel shows two information buttons at a time. */
+const CAROUSEL: PanelKey[][] = [
+  ["I", "S"],
+  ["W", "A"],
+  ["AU", "P"],
+];
+const PANEL_LABELS: Record<PanelKey, string> = { I: "Inventory", S: "Stats", W: "Weapons", A: "Armor", AU: "Augments", P: "Proficiencies" };
+
+type OverlayKey = "cycle" | "effects" | "dice" | "story" | "targets";
+
+/**
+ * The player's screen: a persistent top section (who you are, resources and actions), a middle
+ * section for character information, and a persistent bottom section with the Pages you can use.
+ * Panels and popups sit on top without touching the combat selection underneath.
+ */
 export function Play() {
   const { id = "" } = useParams();
   const { user } = useAuth();
   const { snapshot, client } = useClient(id, user?.id, "play");
-  const character = useDoc<Character>(user ? `games/${id}/characters/${user.id}` : null);
+  const characterDoc = useDoc<Character>(user ? `games/${id}/characters/${user.id}` : null);
+
+  // UI state lives here, so opening panels and popups never resets it.
+  const [carousel, setCarousel] = useState(0);
+  const [panel, setPanel] = useState<PanelKey | null>(null);
+  const [overlay, setOverlay] = useState<OverlayKey | null>(null);
+  const [viewing, setViewing] = useState<{ page: Page; card?: Card; category?: Category } | null>(null);
+  const [category, setCategory] = useState<Category>("combat");
+  const [selected, setSelected] = useState<Partial<Record<Category, string>>>({});
+  const [die, setDie] = useState<number | undefined>(undefined);
+  const [target, setTarget] = useState<string | undefined>(undefined);
   const [error, setError] = useState("");
-
-  if (!snapshot.table) return <Waiting snapshot={snapshot} gameId={id} />;
-
-  const tokens = Object.values(snapshot.table.tokens);
-  const mine = tokens.find((t) => t.ownerId === user?.id);
-  const allies = tokens.filter((t) => t.side === "player" && t.ownerId !== user?.id);
+  const [notice, setNotice] = useState("");
+  // The start of the log line we're waiting for after a Story Roll.
+  const [awaitingRoll, setAwaitingRoll] = useState<{ prefix: string; tail: string } | null>(null);
 
   const table = snapshot.table;
-  const combat = table.combat;
-  const active = activeToken(table);
+  const combat = table?.combat;
+  const mine = table ? Object.values(table.tokens).find((t) => t.ownerId === user?.id) : undefined;
+  const c: Character | undefined = characterDoc.data && user ? { ...blankCharacter(user.id, ""), ...characterDoc.data } : undefined;
+  const deck = combat && mine ? combat.decks[mine.id] : undefined;
+  const active = table ? activeToken(table) : undefined;
   const myTurn = !!mine && active?.id === mine.id;
-  // Outside combat you can always move; in combat only on your turn.
-  const canMove = !!mine && (!combat || myTurn);
-  const send = (action: Parameters<NonNullable<typeof client>["act"]>[0]) =>
-    client?.act(action).then(() => setError(""), (e: Error) => setError(e.message));
+  const canAct = myTurn && combat?.phase === "actions";
+  const myDice = (combat && mine && combat.order.find((x) => x.tokenId === mine.id)?.dice) || 0;
 
-  const move = (dx: number, dy: number) => {
-    if (mine) client?.act({ type: "step", tokenId: mine.id, dx, dy }).then(() => setError(""), (e) => setError(e.message));
+  const cardsIn = (cat: Category): Card[] => (!deck ? [] : cat === "combat" ? deck.hand : cat === "ego" ? (deck.ego ?? []) : deck.aux);
+  const selectedCard = cardsIn(category).find((x) => x.id === selected[category]);
+  const page = selectedCard && combat ? combat.pages[selectedCard.pageId] : undefined;
+  const source = sourceOf(category);
+  const mass = !!page && isMassAttack(page.type);
+  const inRange = useMemo(() => new Set(page && mine && table ? validTargets(table, mine, page).map((t) => t.id) : []), [page, mine, table]);
+  const freeDice = Array.from({ length: myDice }, (_, i) => i).filter((i) => !combat?.slots.some((s) => s.ownerId === mine?.id && s.die === i));
+  // Mass Attack targets live on the host (so the board shows them too); a single target is local.
+  const myAim = combat?.aim && combat.aim.tokenId === mine?.id && combat.aim.cardId === selectedCard?.id ? combat.aim : undefined;
+  const targets = mass ? (myAim?.targets ?? []) : target ? [target] : [];
+
+  // A Page that left the hand (used, e.g. from the board) is no longer selected.
+  const selectedId = selected[category];
+  const stillThere = !!selectedCard;
+  useEffect(() => {
+    if (selectedId && deck && !stillThere) setSelected((s) => ({ ...s, [category]: undefined }));
+  }, [selectedId, stillThere, deck, category]);
+  // A die that got used (e.g. from the board) is no longer selected.
+  useEffect(() => {
+    if (die !== undefined && !freeDice.includes(die)) setDie(undefined);
+  }, [die, freeDice.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const act = (action: TableAction) =>
+    client
+      ? client.act(action).then(
+          () => (setError(""), true),
+          (e: Error) => (setError(e.message), false),
+        )
+      : Promise.resolve(false);
+
+  // Tell the host which Page is picked, so the board lights up its targets.
+  useEffect(() => {
+    if (!canAct || !client) return;
+    if (selectedCard) client.act({ type: "aim", source, cardId: selectedCard.id, die }).catch((e: Error) => setError(e.message));
+    else if (combat?.aim?.tokenId === mine?.id) client.act({ type: "clearAim" }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAct, selectedCard?.id, source, die]);
+
+  // Show a Story Roll's result once its log line arrives.
+  const log = table?.log;
+  useEffect(() => {
+    if (!awaitingRoll || !log) return;
+    if (log.slice(-10).join("\n") === awaitingRoll.tail) return;
+    const line = [...log.slice(-10)].reverse().find((l) => l.startsWith(awaitingRoll.prefix));
+    if (line) {
+      setNotice(line);
+      setAwaitingRoll(null);
+    }
+  }, [log, awaitingRoll]);
+
+  if (!table) return <Waiting snapshot={snapshot} gameId={id} />;
+  const sheetUrl = `/games/${id}/characters/${user?.id}`;
+  const r = mine?.resources;
+
+  // Why the current selection can't be used yet; "" when it can.
+  const problem = (() => {
+    if (!combat) return "Combat hasn't started";
+    if (!mine || !deck) return "You're not in this combat";
+    if (!canAct) return myTurn ? "Wait for Combat Actions" : `Waiting for ${active?.name ?? "the next turn"}`;
+    if (!page) return "Pick a Page";
+    if ((r?.light ?? 0) < page.cost) return `Needs ${page.cost} Light`;
+    if (page.type !== "instant" && (die !== undefined ? !freeDice.includes(die) : freeDice.length === 0)) return "No free Speed Die";
+    if (targets.length === 0) return mass ? "Pick targets" : "Pick a target";
+    const far = targets.find((t) => !inRange.has(t));
+    if (far) return `${table.tokens[far]?.name ?? "Target"} is out of range`;
+    return "";
+  })();
+
+  const clearSelection = (cat: Category = category) => {
+    setSelected((s) => ({ ...s, [cat]: undefined }));
+    setTarget(undefined);
+    setDie(undefined);
   };
 
+  /** Pay and slot a Page on the chosen die against the chosen target(s). */
+  const place = async (cat: Category, card: Card, withTargets?: string[]) => {
+    if (!(await act({ type: "aim", source: sourceOf(cat), cardId: card.id, die }))) return;
+    if (await act({ type: "slot", targets: withTargets })) clearSelection(cat);
+  };
+
+  const selectCard = (cat: Category, card: Card) => {
+    setCategory(cat);
+    setSelected((s) => ({ ...s, [cat]: card.id }));
+    setViewing(null);
+    // Die, target and Page all chosen: place it right away.
+    const p = combat?.pages[card.pageId];
+    if (p && canAct && mine && target && !isMassAttack(p.type) && validTargets(table, mine, p).some((t) => t.id === target)) {
+      void place(cat, card, [target]);
+    }
+  };
+
+  const pickTarget = (tokenId: string) => {
+    if (mass) {
+      if (canAct) void act({ type: "aimTarget", tokenId });
+      return;
+    }
+    setTarget(tokenId);
+    setOverlay(null);
+    if (page && selectedCard && canAct && inRange.has(tokenId)) void place(category, selectedCard, [tokenId]);
+  };
+
+  const endTurn = () => {
+    const affordable = cardsIn("combat").some((x) => (combat?.pages[x.pageId]?.cost ?? Infinity) <= (r?.light ?? 0));
+    if (freeDice.length > 0 && affordable && !confirm("You still have a free Speed Die and a Page you can afford. End your turn?")) return;
+    void act({ type: "endTurn" });
+  };
+
+  const useItem = (itemId: string) => {
+    if (!user || !characterDoc.data) return;
+    updateDoc(doc(db, "games", id, "characters", user.id), { "inventory.items": useItemIn(characterDoc.data.inventory?.items ?? [], itemId) }).catch((e) =>
+      setError(friendlyError(e)),
+    );
+  };
+  const raiseStat = (group: "primary" | "secondary", key: string) => {
+    if (!user || !c) return;
+    const current = (c[group] as Record<string, number>)[key] ?? 0;
+    updateDoc(doc(db, "games", id, "characters", user.id), { [`${group}.${key}`]: current + 1 }).catch((e) => setError(friendlyError(e)));
+  };
+
+  const resources = [
+    { cls: "res-hp", label: "Health", v: r?.hp, max: r?.maxHp },
+    { cls: "res-stagger", label: "Stagger", v: r?.stagger, max: r?.maxStagger },
+    { cls: "res-sanity", label: "Sanity", v: r?.sanity, max: r?.maxSanity },
+    { cls: "res-light", label: "Light", v: r?.light, max: r?.maxLight },
+  ];
+  const others = Object.values(table.tokens).filter((t) => t.id !== mine?.id && !t.status?.knockedOut);
+  const stats = [
+    ...PRIMARY_STATS.map((s) => ({ key: s.key as string, label: s.label, v: c?.primary[s.key] ?? 0 })),
+    ...SECONDARY_STATS.map((s) => ({ key: s.key, label: s.label, v: c?.secondary[s.key] ?? 0 })),
+  ];
+  const cards = cardsIn(category);
+
   return (
-    <main className="play">
-      <header className="play-header">
-        <h2>{mine?.name ?? "…"}</h2>
-        <ConnectionBadge status={snapshot.status} />
-      </header>
-      {error && <p className="error">{error}</p>}
-      {mine && <ResourceBars token={mine} />}
-
-      {combat && (
-        <section className={"combat-banner" + (myTurn ? "" : " waiting")}>
-          <div>
-            <strong>{myTurn ? "Your turn" : active ? `${active.name}'s turn` : "Combat"}</strong>
-            <div className="muted small">
-              Round {combat.round} · {PHASE_LABELS[combat.phase]}
-              {myTurn && " · move here or tap your token on the board"}
+    <main className="player-screen">
+      {/* ---- Top: who you are, resources, actions ---- */}
+      <section className="player-top">
+        <div className="pt-who">
+          <Portrait token={mine} size={64} />
+          <Link to={sheetUrl} className="pt-name">
+            {mine?.name ?? c?.name ?? "…"}
+          </Link>
+        </div>
+        <div className="pt-res">
+          {resources.map((x) => (
+            <div key={x.label} className={`res-box ${x.cls}`} aria-label={`${x.label} ${x.v ?? "?"} of ${x.max ?? "?"}`}>
+              <span className="res-label">{x.label}</span>
+              <span className="res-val">
+                {x.v ?? "–"}/{x.max ?? "–"}
+              </span>
             </div>
-          </div>
-        </section>
-      )}
-      {combat && mine && myTurn && <ActionPanel table={table} token={mine} canAct send={(a) => void send(a)} />}
-      {combat && mine && !myTurn && combat.decks[mine.id] && (
-        <section>
-          <h3>Your hand</h3>
-          <HandPreview table={table} tokenId={mine.id} />
-        </section>
-      )}
-
-      <section>
-        <h3>Move</h3>
-        <div className="dpad">
-          <button style={{ gridArea: "up" }} disabled={!canMove} onClick={() => move(0, -1)}>▲</button>
-          <button style={{ gridArea: "left" }} disabled={!canMove} onClick={() => move(-1, 0)}>◀</button>
-          <button style={{ gridArea: "right" }} disabled={!canMove} onClick={() => move(1, 0)}>▶</button>
-          <button style={{ gridArea: "down" }} disabled={!canMove} onClick={() => move(0, 1)}>▼</button>
+          ))}
+        </div>
+        <div className="pt-actions">
+          <button type="button" disabled={!myDice} onClick={() => setOverlay("dice")}>
+            {die !== undefined ? `Die ${die + 1}` : "Speed dice"}
+          </button>
+          <button type="button" disabled={!canAct} onClick={endTurn}>
+            End turn
+          </button>
+          <button type="button" disabled={!canAct || (r?.light ?? 0) < DASH_LIGHT_COST} onClick={() => void act({ type: "dash" })}>
+            Dash
+          </button>
+          <button type="button" disabled={!mine} onClick={() => setOverlay("story")}>
+            Story roll
+          </button>
+        </div>
+        <div className="pt-side">
+          <button type="button" onClick={() => setOverlay("cycle")}>
+            Cycle characters
+          </button>
+          <button type="button" onClick={() => setOverlay("effects")}>
+            Effects{mine?.effects?.length ? ` (${mine.effects.length})` : ""}
+          </button>
         </div>
       </section>
 
-      {combat && (
-        <section>
-          <h3>Turn order</h3>
-          <TurnOrder table={table} />
-        </section>
+      {/* ---- Turn state ---- */}
+      <div className={"turn-strip" + (myTurn ? " mine" : "")}>
+        {combat ? (
+          <span>
+            <strong>{myTurn ? "Your turn" : `${active?.name ?? "—"}'s turn`}</strong> · Round {combat.round} · {PHASE_LABELS[combat.phase]}
+            {myTurn && ` · ${combat.movementLeft} Movement, move on the board`}
+          </span>
+        ) : (
+          <span>Not in combat. Move by tapping your token on the board.</span>
+        )}
+        <ConnectionBadge status={snapshot.status} />
+      </div>
+      {(error || notice) && (
+        <button type="button" className={"player-msg" + (error ? " error" : "")} onClick={() => (setError(""), setNotice(""))}>
+          {error || notice}
+        </button>
       )}
 
-      {character.data && user && (
-        <LoadoutSummary
-          c={{ ...blankCharacter(user.id, ""), ...character.data }}
-          gameId={id}
-          uid={user.id}
-          inCombat={!!combat}
-          onUse={(itemId) =>
-            updateDoc(doc(db, "games", id, "characters", user.id), {
-              "inventory.items": useItemIn(character.data!.inventory?.items ?? [], itemId),
-            }).catch((e) => setError(friendlyError(e)))
+      {/* ---- Middle: character information ---- */}
+      <section className="player-middle">
+        {!c ? (
+          <div className="center-text">
+            <p className="muted">You don't have a character in this game yet.</p>
+            <Link className="big-button" to={sheetUrl}>
+              Create my character
+            </Link>
+          </div>
+        ) : panel ? (
+          <div className="info-panel">
+            <header className="info-head">
+              <h2>{PANELS.find((p) => p.key === panel)!.title}</h2>
+              <button type="button" className="icon" aria-label="Close panel" onClick={() => setPanel(null)}>
+                ✕
+              </button>
+            </header>
+            <div className="info-body">
+              <InfoPanel panel={panel} c={c} sheetUrl={sheetUrl} onOpenPage={(p) => setViewing({ page: p })} onUseItem={useItem} onRaiseStat={raiseStat} />
+            </div>
+          </div>
+        ) : (
+          <div className="carousel">
+            <button type="button" className="car-arrow" aria-label="Previous" onClick={() => setCarousel((n) => (n + CAROUSEL.length - 1) % CAROUSEL.length)}>
+              ‹
+            </button>
+            {CAROUSEL[carousel].map((k) => (
+              <button type="button" key={k} className="car-tile" onClick={() => setPanel(k)} aria-label={PANEL_LABELS[k]}>
+                <span className="car-letter">{k}</span>
+                <span className="car-label">{PANEL_LABELS[k]}</span>
+              </button>
+            ))}
+            <button type="button" className="car-arrow" aria-label="Next" onClick={() => setCarousel((n) => (n + 1) % CAROUSEL.length)}>
+              ›
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* ---- Bottom: Pages you can use ---- */}
+      <section className="player-bottom">
+        {combat && mine && deck && (
+          <div className="select-strip">
+            <button type="button" className="chip" disabled={!myDice} onClick={() => setOverlay("dice")}>
+              Die: {die !== undefined ? die + 1 : freeDice.length ? `${freeDice[0] + 1} (auto)` : "none free"}
+            </button>
+            <span className="chip static">Page: {page ? page.name || "Unnamed" : "—"}</span>
+            <button type="button" className="chip" onClick={() => setOverlay("targets")}>
+              Target: {targets.length ? targets.map((t) => table.tokens[t]?.name).join(", ") : "—"}
+            </button>
+            <span className={"chip static " + (problem ? "warn" : "ok")} role="status">
+              {problem || "Ready"}
+            </span>
+            {page && selectedCard && !problem && (
+              <button type="button" className="chip go" onClick={() => void place(category, selectedCard, targets)}>
+                Use{mass ? ` on ${targets.length}` : ""}
+              </button>
+            )}
+            {(page || target) && (
+              <button type="button" className="chip" onClick={() => clearSelection()}>
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+        <div className="pb-main">
+          <div className="hand-row" role="list" aria-label={`${CATEGORIES.find((x) => x.key === category)!.label} Pages`}>
+            {combat && deck ? (
+              cards.length ? (
+                cards.map((card) => {
+                  const p = combat.pages[card.pageId];
+                  if (!p) return null;
+                  return (
+                    <div role="listitem" key={card.id}>
+                      <PageCard page={p} selected={selected[category] === card.id} dim={p.cost > (r?.light ?? 0)} onClick={() => setViewing({ page: p, card, category })} />
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="muted small hand-empty">{category === "combat" ? "No Pages in hand." : "None available."}</p>
+              )
+            ) : (
+              <p className="muted small hand-empty">
+                {category === "combat" ? (
+                  <>
+                    Your hand is drawn when combat starts. <Link to={`${sheetUrl}?tab=decks`}>Edit decks</Link>
+                  </>
+                )
+                  : category === "ego"
+                    ? `${c?.ego?.length ?? 0} E.G.O. Page${c?.ego?.length === 1 ? "" : "s"} ready for combat.`
+                    : "Your Tools' Pages are ready for combat."}
+              </p>
+            )}
+          </div>
+          <div className="pb-cats">
+            {CATEGORIES.map((x) => (
+              <button
+                type="button"
+                key={x.key}
+                className={"cat" + (category === x.key ? " active" : "") + (selected[x.key] ? " has-pick" : "")}
+                aria-pressed={category === x.key}
+                onClick={() => setCategory(x.key)}
+              >
+                {x.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ---- Popups ---- */}
+      {viewing && (
+        <PageView
+          page={viewing.page}
+          onClose={() => setViewing(null)}
+          action={
+            viewing.card && viewing.category
+              ? selected[viewing.category] === viewing.card.id
+                ? { label: "Deselect", run: () => (clearSelection(viewing.category), setViewing(null)) }
+                : { label: "Select this Page", run: () => selectCard(viewing.category!, viewing.card!) }
+              : undefined
           }
         />
       )}
-
-      <section>
-        <h3>Allies</h3>
-        {allies.length === 0 && <p className="muted">No one else has joined yet.</p>}
-        {allies.map((t) => (
-          <div className="ally" key={t.id}>
-            <strong>{t.name}</strong>
-            <ResourceBars token={t} compact />
-            {combat?.decks[t.id] && <HandPreview table={table} tokenId={t.id} />}
+      {overlay === "cycle" && <CycleCharacters table={table} meId={mine?.id} onClose={() => setOverlay(null)} onOpenPage={(p) => setViewing({ page: p })} />}
+      {overlay === "effects" && <EffectsView effects={mine?.effects ?? []} onClose={() => setOverlay(null)} />}
+      {overlay === "dice" && combat && (
+        <Overlay title="Speed Dice" onClose={() => setOverlay(null)}>
+          <ul className="plain dice-list">
+            {Array.from({ length: myDice }, (_, i) => {
+              const s = combat.slots.find((x) => x.ownerId === mine?.id && x.die === i);
+              return (
+                <li key={i}>
+                  <button type="button" className={"die-pick" + (die === i ? " active" : "")} disabled={!!s} onClick={() => (setDie(i), setOverlay(null))}>
+                    <strong>Speed Die {i + 1}</strong>
+                    <span className="muted small">
+                      {s
+                        ? `${combat.pages[s.pageId]?.name ?? "Page"} → ${s.targets.map((t) => table.tokens[t.tokenId]?.name).join(", ")}${s.clashWith ? " (Clash)" : ""}`
+                        : "Free"}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <button type="button" onClick={() => (setDie(undefined), setOverlay(null))}>
+            Use the first free die
+          </button>
+        </Overlay>
+      )}
+      {overlay === "targets" && (
+        <Overlay title={mass ? "Pick targets" : "Pick a target"} onClose={() => setOverlay(null)}>
+          {page && <p className="muted small">For {page.name || "this Page"}: highlighted names are in range. You can also tap a lit token on the board.</p>}
+          <ul className="plain target-list">
+            {others.map((t) => (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  className={"target-pick" + (targets.includes(t.id) ? " active" : "") + (page ? (inRange.has(t.id) ? " near" : " far") : "")}
+                  disabled={mass && !canAct}
+                  onClick={() => pickTarget(t.id)}
+                >
+                  <Portrait token={t} size={36} />
+                  <span>{t.name}</span>
+                  <span className="muted small">{page ? (inRange.has(t.id) ? "in range" : "out of range") : t.side}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {mass && selectedCard && (
+            <button type="button" className="big-button" disabled={!!problem} onClick={() => (setOverlay(null), void place(category, selectedCard, targets))}>
+              Use on {targets.length} target{targets.length === 1 ? "" : "s"}
+            </button>
+          )}
+        </Overlay>
+      )}
+      {overlay === "story" && mine && (
+        <Overlay title="Story Roll" onClose={() => setOverlay(null)}>
+          <p className="muted small">Rolls 1d{STORY_DIE} + the Stat. Everyone sees the result in the table log.</p>
+          <div className="story-grid">
+            {stats.map((s) => (
+              <button
+                type="button"
+                key={s.key}
+                onClick={async () => {
+                  setOverlay(null);
+                  const tail = table.log.slice(-10).join("\n");
+                  const label = s.key.charAt(0).toUpperCase() + s.key.slice(1).toLowerCase();
+                  if (await act({ type: "storyRoll", tokenId: mine.id, stat: s.key })) setAwaitingRoll({ prefix: `${mine.name} makes a ${label} Story Roll`, tail });
+                }}
+              >
+                {s.label} <span className="muted">+{s.v}</span>
+              </button>
+            ))}
           </div>
-        ))}
-      </section>
-
-      <Link to={`/games/${id}/characters/${user?.id}`}>My character sheet</Link>
-      <Link to={`/games/${id}`} className="muted">← Back to the game</Link>
+        </Overlay>
+      )}
     </main>
-  );
-}
-
-function ResourceBars({ token, compact }: { token: Token; compact?: boolean }) {
-  const r = token.resources;
-  const rows: [string, number, number, string][] = [
-    ["Health", r.hp, r.maxHp, "hp"],
-    ["Stagger", r.stagger, r.maxStagger, "stagger"],
-    ["Light", r.light, r.maxLight, "light"],
-    ["Sanity", r.sanity, r.maxSanity, "sanity"],
-  ];
-  return (
-    <div className={"resources" + (compact ? " compact" : "")}>
-      {rows.map(([label, v, max, cls]) => (
-        <div className="resource" key={label}>
-          <span>{label}</span>
-          <div className="meter">
-            <div className={"fill " + cls} style={{ width: `${pct(v, max)}%` }} />
-          </div>
-          <span className="num">
-            {v}/{max}
-          </span>
-        </div>
-      ))}
-    </div>
   );
 }

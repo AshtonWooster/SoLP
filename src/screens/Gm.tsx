@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { GameDoc, GmMeta, Resources, TableAction, TableState, Token } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
-import { activeToken } from "../../shared/engine.ts";
+import { activeToken, newId } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
 import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { EnemyDeckEditor } from "../components/EnemyDeckEditor.tsx";
@@ -247,6 +247,7 @@ function Override({
         </>
       )}
       {token.side === "enemy" && <EnemyDeck token={token} act={act} />}
+      <EffectsEditor token={token} act={act} />
       <label className="muted">GM notes (hidden from players)</label>
       <textarea
         value={notes}
@@ -431,6 +432,33 @@ function TemplatePanel({ gameId, table, act }: { gameId: string; table: TableSta
           </li>
         ))}
       </ul>
+    </details>
+  );
+}
+
+/** Effects on a character (Bleed, Burn, buffs…), set by hand until Effects are automated. */
+function EffectsEditor({ token, act }: { token: Token; act: (action: TableAction) => boolean }) {
+  const effects = token.effects ?? [];
+  const save = (next: typeof effects) => act({ type: "setEffects", tokenId: token.id, effects: next });
+  return (
+    <details className="enemy-pages effects-editor">
+      <summary>Effects ({effects.length})</summary>
+      {effects.map((e, i) => (
+        <div className="effect-edit" key={e.id}>
+          <div className="row">
+            <input aria-label="Effect name" placeholder="Effect" value={e.name} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)))} />
+            <NumberField value={e.count} onCommit={(n) => save(effects.map((x, j) => (j === i ? { ...x, count: n } : x)))} />
+            <button type="button" className="icon" aria-label="Remove effect" onClick={() => save(effects.filter((_, j) => j !== i))}>
+              ✕
+            </button>
+          </div>
+          <input aria-label="Effect description" placeholder="What it does" value={e.description} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, description: ev.target.value } : x)))} />
+          <input aria-label="Effect duration" placeholder="Duration (optional)" value={e.duration ?? ""} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, duration: ev.target.value } : x)))} />
+        </div>
+      ))}
+      <button type="button" onClick={() => save([...effects, { id: newId(), name: "", count: 1, description: "" }])}>
+        + Add effect
+      </button>
     </details>
   );
 }

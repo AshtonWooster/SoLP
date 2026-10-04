@@ -36,6 +36,8 @@ export interface Page {
   type: PageType;
   dice: Dice[];
   effect: string;
+  /** Optional artwork (an uploaded image's URL). */
+  image?: string;
 }
 
 export interface Equipment {
@@ -80,6 +82,7 @@ export interface EnemyTemplate {
   /** Copies of each Page in its Combat Deck. No size limit. */
   deck: DeckEntry[];
   notes: string;
+  portrait?: string;
   updatedAt: number;
 }
 
@@ -159,5 +162,9 @@ export interface Character {
   inventory: Inventory;
   /** The Combat Deck (Act 6). The Auxiliary Deck is built from the inventory's Tools. */
   deck: DeckEntry[];
+  /** E.G.O. Pages (Act 3): unique Pages from character progression, made with the GM. */
+  ego: Page[];
+  /** Portrait image URL. */
+  portrait?: string;
   updatedAt: number;
 }

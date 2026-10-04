@@ -6,6 +6,7 @@ import { blankEnemy, enemyDeck } from "../../shared/ruleset.ts";
 import type { GameDoc } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { EnemyDeckEditor } from "../components/EnemyDeckEditor.tsx";
+import { ImageUpload } from "../components/ImageUpload.tsx";
 import { NumberInput, Section, TextField } from "../components/Fields.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
@@ -64,6 +65,7 @@ function TemplateEditor({ gameId, id, template }: { gameId: string; id: string; 
         <span className={status === "Saved" ? "ok-text" : "muted"}>{status}</span>
       </div>
       <Section id="basics" title="Basics">
+        <ImageUpload folder={`games/${gameId}/assets/enemies`} label="Portrait" value={t.portrait} onChange={(portrait) => update({ portrait })} />
         <div className="row wrap">
           <TextField label="Name" value={t.name} onChange={(name) => update({ name })} />
           <label className="field">
@@ -92,7 +94,7 @@ function TemplateEditor({ gameId, id, template }: { gameId: string; id: string; 
         <TextField label="GM notes" multiline value={t.notes} onChange={(notes) => update({ notes })} />
       </Section>
       <Section id="deck" title="Pages and Combat Deck">
-        <EnemyDeckEditor pages={t.pages} deck={t.deck} onChange={(pages, deck) => update({ pages, deck })} />
+        <EnemyDeckEditor artFolder={`games/${gameId}/assets/pages`} pages={t.pages} deck={t.deck} onChange={(pages, deck) => update({ pages, deck })} />
       </Section>
     </div>
   );

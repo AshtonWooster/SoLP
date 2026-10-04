@@ -273,6 +273,7 @@ export class Host {
           justice: c.primary.justice,
           resistances: c.armor?.resistances,
           staggerResistances: c.armor?.staggerResistances,
+          portrait: c.portrait,
         }
       : undefined;
   }
@@ -285,7 +286,11 @@ export class Host {
       if (!c) return undefined;
       const aux = auxiliaryDeck(c);
       return {
-        pages: Object.fromEntries([...equipmentPages(c).map((x) => x.page), ...aux.map((x) => x.page)].map((p) => [p.id, p])),
+        pages: Object.fromEntries(
+          [...equipmentPages(c).map((x) => x.page), ...aux.map((x) => x.page), ...(c.ego ?? [])].map((p) => [p.id, p]),
+        ),
+        ego: (c.ego ?? []).map((p) => p.id),
+        stats: { ...c.primary, ...c.secondary },
         deck: cleanDeck(c).flatMap((e) => Array(e.copies).fill(e.pageId)),
         aux: aux.flatMap((x) => Array.from({ length: x.copies }, () => ({ pageId: x.page.id, itemId: x.item.id }))),
         resistances: c.armor?.resistances,

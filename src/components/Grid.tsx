@@ -71,7 +71,11 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
           <button
             key={t.id}
             className={classes.join(" ")}
-            style={{ gridColumn: t.x + 1, gridRow: t.y + 1, background: t.color }}
+            style={{
+              gridColumn: t.x + 1,
+              gridRow: t.y + 1,
+              background: t.portrait ? `center / cover no-repeat url("${t.portrait}"), ${t.color}` : t.color,
+            }}
             onClick={(e) => {
               e.stopPropagation();
               onTokenClick?.(t);

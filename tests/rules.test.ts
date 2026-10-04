@@ -182,3 +182,14 @@ test("storage: GM uploads game images, members view, others can't", async () => 
   await assertSucceeds(getBytes(ref(env.authenticatedContext("p1").storage(), path)));
   await assertFails(getBytes(ref(env.authenticatedContext("stranger").storage(), path)));
 });
+
+test("storage: players (and the GM) upload a player's portrait and Page art; other players can view but not overwrite", async () => {
+  const png = new Uint8Array([137, 80, 78, 71]);
+  const path = `games/${GAME}/users/p1/portrait.png`;
+  await assertSucceeds(uploadBytes(ref(env.authenticatedContext("p1").storage(), path), png, { contentType: "image/png" }));
+  await assertSucceeds(uploadBytes(ref(env.authenticatedContext("gm").storage(), path), png, { contentType: "image/png" }));
+  await assertFails(uploadBytes(ref(env.authenticatedContext("p1").storage(), `games/${GAME}/users/gm/portrait.png`), png, { contentType: "image/png" }));
+  await assertFails(uploadBytes(ref(env.authenticatedContext("p1").storage(), `games/${GAME}/users/p1/x.js`), png, { contentType: "text/javascript" }));
+  await assertSucceeds(getBytes(ref(env.authenticatedContext("gm").storage(), path)));
+  await assertFails(getBytes(ref(env.authenticatedContext("stranger").storage(), path)));
+});

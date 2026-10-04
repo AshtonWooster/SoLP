@@ -15,6 +15,7 @@ import {
   SPEED_DICE,
   SPEED_DIE,
   STARTING_HAND,
+  STORY_DIE,
   UPKEEP_DRAW,
   UPKEEP_LIGHT,
   WEAPON_RANGE,
@@ -40,6 +41,10 @@ export interface Loadout {
   deck: string[];
   /** Auxiliary Deck: one entry per copy, with the inventory Tool it comes from. */
   aux: { pageId: string; itemId: string }[];
+  /** E.G.O. Page ids. */
+  ego?: string[];
+  /** Stat values by key (primary and secondary), for Story Rolls. */
+  stats?: Record<string, number>;
   resistances?: ResistanceSet;
   staggerResistances?: ResistanceSet;
 }
@@ -104,6 +109,8 @@ function setUpDeck(c: CombatState, token: Token, ctx: EngineContext | undefined)
     discard: [],
     aux: loadout.aux.map((a) => ({ id: newId(), pageId: a.pageId, itemId: a.itemId })),
     auxUsed: [],
+    ego: (loadout.ego ?? []).map((pageId) => ({ id: newId(), pageId })),
+    egoUsed: [],
   };
   c.decks[token.id] = deck;
   for (let i = 0; i < STARTING_HAND; i++) draw(c, token.id);
@@ -130,8 +137,17 @@ function discard(c: CombatState, slot: SlottedPage) {
   const deck = c.decks[slot.ownerId];
   if (!deck || !slot.card) return;
   if (slot.fromAux) deck.auxUsed.push(slot.card);
+  else if (slot.fromEgo) (deck.egoUsed ??= []).push(slot.card);
   else deck.discard.push(slot.card);
 }
+
+/** The pile a source's cards live in during combat. */
+function pile(deck: DeckState | undefined, source: PageSource): Card[] | undefined {
+  if (!deck) return undefined;
+  return source === "aux" ? deck.aux : source === "ego" ? (deck.ego ?? []) : deck.hand;
+}
+
+const SOURCE_NAMES: Record<PageSource, string> = { hand: "the hand", aux: "the Auxiliary Deck", ego: "your E.G.O. Pages" };
 
 // ---- Resources and statuses ----
 
@@ -583,6 +599,18 @@ export function pinnedBy(table: TableState, token: Token): Token | undefined {
   return slot ? table.tokens[slot.ownerId] : undefined;
 }
 
+/** A Story Roll (Act 7): 1d20 (placeholder) + the chosen Stat. Allowed any time, in or out of combat. */
+export function storyRoll(table: TableState, actor: Actor, token: Token, stat: string, ctx?: EngineContext) {
+  if (actor.role !== "gm" && token.ownerId !== actor.uid) throw new ActionError("You can only roll for your own character.");
+  const stats = token.side === "enemy" ? { justice: token.justice ?? 0 } : (ctx?.loadout(token.id)?.stats ?? {});
+  const key = String(stat).toLowerCase();
+  const value = Math.round(Number(stats[key] ?? 0));
+  const roll = rollDie(STORY_DIE);
+  const label = key.charAt(0).toUpperCase() + key.slice(1);
+  log(table, `${token.name} makes a ${label} Story Roll: ${roll}${value >= 0 ? "+" : ""}${value} = ${roll + value}.`);
+  return roll + value;
+}
+
 export function dash(table: TableState, actor: Actor) {
   const token = actingToken(table, actor);
   if (token.resources.light < DASH_LIGHT_COST) throw new ActionError(`Dashing costs ${DASH_LIGHT_COST} Light.`);
@@ -591,13 +619,20 @@ export function dash(table: TableState, actor: Actor) {
   log(table, `${token.name} Dashes: -${DASH_LIGHT_COST} Light, +${DASH_MOVEMENT} Movement.`);
 }
 
-/** The card being used from the hand or Auxiliary Deck. */
+/** The card being used from the hand, Auxiliary Deck or E.G.O. Pages. */
 function pageFor(table: TableState, token: Token, source: PageSource, cardId?: string): { page: Page; card: Card } {
   const c = table.combat!;
-  const deck = c.decks[token.id];
-  const card = (source === "aux" ? deck?.aux : deck?.hand)?.find((x) => x.id === cardId);
-  if (!card) throw new ActionError(source === "aux" ? "That Page isn't in the Auxiliary Deck." : "That Page isn't in the hand.");
+  const card = pile(c.decks[token.id], source)?.find((x) => x.id === cardId);
+  if (!card) throw new ActionError(`That Page isn't in ${SOURCE_NAMES[source]}.`);
   return { page: c.pages[card.pageId], card };
+}
+
+/** A Speed Die the character has and that holds no Page yet. */
+function freeDie(c: CombatState, token: Token, die: number | undefined): number | undefined {
+  const count = c.order.find((x) => x.tokenId === token.id)?.dice ?? 0;
+  const free = (i: number) => i >= 0 && i < count && !c.slots.some((s) => s.ownerId === token.id && s.die === i);
+  if (die !== undefined) return free(die) ? die : undefined;
+  return Array.from({ length: count }, (_, i) => i).find(free);
 }
 
 /** Characters a Page can target: within Weapon Range and not Knocked Out. Only Instant Pages can target yourself. */
@@ -607,10 +642,14 @@ export function validTargets(table: TableState, user: Token, page: Page): Token[
   );
 }
 
-export function aim(table: TableState, actor: Actor, source: PageSource, cardId?: string) {
+export function aim(table: TableState, actor: Actor, source: PageSource, cardId?: string, die?: number) {
   const token = actingToken(table, actor);
-  const { page, card } = pageFor(table, token, source === "aux" ? "aux" : "hand", cardId);
-  table.combat!.aim = { tokenId: token.id, pageId: page.id, source: source === "aux" ? "aux" : "hand", cardId: card.id, targets: [] };
+  const src: PageSource = source === "aux" || source === "ego" ? source : "hand";
+  const { page, card } = pageFor(table, token, src, cardId);
+  if (die !== undefined && page.type !== "instant" && freeDie(table.combat!, token, die) === undefined) {
+    throw new ActionError(`Speed Die ${die + 1} isn't free.`);
+  }
+  table.combat!.aim = { tokenId: token.id, pageId: page.id, source: src, cardId: card.id, targets: [], ...(die !== undefined ? { die } : {}) };
 }
 
 export function aimTarget(table: TableState, actor: Actor, tokenId: string) {
@@ -650,10 +689,11 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   for (const id of ids) if (!allowed.has(id)) throw new ActionError(`${table.tokens[id]?.name ?? "That target"} is out of range.`);
   if (token.resources.light < page.cost) throw new ActionError(`${page.name} costs ${page.cost} Light; ${token.name} has ${token.resources.light}.`);
 
-  const card = a.cardId ? (a.source === "aux" ? c.decks[token.id]?.aux : c.decks[token.id]?.hand)?.find((x) => x.id === a.cardId) : undefined;
-  const combatant = c.order.find((x) => x.tokenId === token.id)!;
-  const free = Array.from({ length: combatant.dice }, (_, i) => i).find((i) => !c.slots.some((s) => s.ownerId === token.id && s.die === i));
-  if (page.type !== "instant" && free === undefined) throw new ActionError("No free Speed Die to slot it on.");
+  const card = a.cardId ? pile(c.decks[token.id], a.source)?.find((x) => x.id === a.cardId) : undefined;
+  const free = freeDie(c, token, a.die);
+  if (page.type !== "instant" && free === undefined) {
+    throw new ActionError(a.die !== undefined ? `Speed Die ${a.die + 1} isn't free.` : "No free Speed Die to slot it on.");
+  }
 
   // Pay, and take the card out of the hand (or Auxiliary Deck).
   token.resources.light -= page.cost;
@@ -662,7 +702,8 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
     if (a.source === "aux") {
       deck.aux = deck.aux.filter((x) => x.id !== card.id);
       if (card.itemId) ctx?.onToolUsed?.(token.id, card.itemId);
-    } else deck.hand = deck.hand.filter((x) => x.id !== card.id);
+    } else if (a.source === "ego") deck.ego = (deck.ego ?? []).filter((x) => x.id !== card.id);
+    else deck.hand = deck.hand.filter((x) => x.id !== card.id);
   }
   delete c.aim;
   const entry: SlottedPage = {
@@ -672,6 +713,7 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
     pageId: page.id,
     card,
     fromAux: a.source === "aux",
+    fromEgo: a.source === "ego",
     targets: ids.map((tokenId) => ({ tokenId, die: 0 })),
   };
   const names = ids.map((id) => table.tokens[id].name).join(", ");

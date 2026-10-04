@@ -8,10 +8,12 @@ export function EnemyDeckEditor({
   pages,
   deck,
   onChange,
+  artFolder,
 }: {
   pages: Page[];
   deck: DeckEntry[];
   onChange: (pages: Page[], deck: DeckEntry[]) => void;
+  artFolder?: string;
 }) {
   const copies = (id: string) => deck.find((e) => e.pageId === id)?.copies ?? 0;
   const setCopies = (id: string, n: number) =>
@@ -31,6 +33,7 @@ export function EnemyDeckEditor({
           </div>
           <PageEditor
             page={p}
+            artFolder={artFolder}
             onChange={(np) => onChange(pages.map((x, j) => (j === i ? np : x)), deck)}
             onRemove={() => onChange(pages.filter((_, j) => j !== i), deck.filter((e) => e.pageId !== p.id))}
           />
