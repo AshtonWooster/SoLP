@@ -21,6 +21,8 @@ export interface Dice {
   counter: boolean;
   sides: number;
   basePower: number;
+  /** What this die does besides its Power, e.g. "On Hit: Inflict 1 Fragile next Scene". */
+  effect?: string;
 }
 
 export type PageType = "melee" | "ranged" | "massSummation" | "massIndividual" | "instant";

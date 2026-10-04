@@ -17,7 +17,8 @@ export function ImageUpload({
   value?: string;
   onChange: (url: string | undefined) => void;
   label?: string;
-  shape?: "square" | "card";
+  /** "page": 4:3 landscape, like Page art everywhere it's shown. */
+  shape?: "square" | "page";
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
