@@ -125,6 +125,12 @@ export const DASH_MOVEMENT = 2;
 export const isMassAttack = (type: PageType) => type === "massSummation" || type === "massIndividual";
 export const isOffensive = (kind: DiceKind) => kind === "slash" || kind === "pierce" || kind === "blunt";
 
+/**
+ * PLACEHOLDER: Story Rolls (Act 7) "roll a specific stat", but the ruleset doesn't name the die.
+ * A Story Roll here is 1d20 + the stat.
+ */
+export const STORY_DIE = 20;
+
 /** "Characters can move tiles in any direction", so a diagonal step costs 1 like any other. */
 export function moveCost(from: { x: number; y: number }, to: { x: number; y: number }): number {
   return Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
@@ -286,6 +292,7 @@ export function blankCharacter(ownerId: string, name: string): Character {
     ahn: 0,
     inventory: { slotCount: INVENTORY_SLOTS, items: [], trinket: null },
     deck: [],
+    ego: [],
     updatedAt: Date.now(),
   };
 }

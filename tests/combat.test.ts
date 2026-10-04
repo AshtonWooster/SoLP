@@ -411,3 +411,53 @@ test("using a Tool's Auxiliary Page tells the host which item, so its uses can c
   assert.equal(table.tokens.rat.resources.hp, 25);
   assert.equal(table.combat!.decks.roland.aux.length, 0, "gone until combat ends");
 });
+
+test("E.G.O. Pages are available from the start and used once per combat", () => {
+  const ego = page("ego", "instant", [die("slash", 8)], 0);
+  const table: TableState = {
+    map: { name: "m", width: 16, height: 10 },
+    tokens: {
+      roland: token("roland", "player", 2, 2, { ownerId: "p1", justice: 100 }),
+      rat: token("rat", "enemy", 3, 2, { justice: -100, pages: [page("bite", "melee", [die("pierce", 3)])] }),
+    },
+    log: [],
+  };
+  const ctx: EngineContext = { loadout: (id) => (id === "roland" ? { pages: { ego }, deck: [], aux: [], ego: ["ego"] } : undefined) };
+  applyAction(table, { type: "startCombat", tokenIds: ["roland", "rat"] }, gm, ctx);
+  const deck = table.combat!.decks.roland;
+  assert.equal(deck.ego!.length, 1);
+  applyAction(table, { type: "aim", source: "ego", cardId: deck.ego![0].id }, p1, ctx);
+  applyAction(table, { type: "slot", targets: ["rat"] }, p1, ctx);
+  assert.equal(table.tokens.rat.resources.hp, 22);
+  assert.equal(table.combat!.decks.roland.ego!.length, 0);
+  assert.equal(table.combat!.decks.roland.egoUsed!.length, 1);
+});
+
+test("players pick which Speed Die a Page goes on; a taken die is refused", () => {
+  const s = setup([page("slash", "melee", [die("slash", 3)], 0)], [], ["slash", "slash", "slash", "slash"]);
+  s.c().order.find((x) => x.tokenId === "roland")!.dice = 2;
+  const [a, b] = s.c().decks.roland.hand;
+  s.act({ type: "aim", source: "hand", cardId: a.id, die: 1 });
+  s.act({ type: "slot", targets: ["rat"] });
+  assert.equal(s.c().slots[0].die, 1);
+  assert.throws(() => s.act({ type: "aim", source: "hand", cardId: b.id, die: 1 }), /Speed Die 2 isn't free/);
+  s.act({ type: "aim", source: "hand", cardId: b.id, die: 0 });
+  s.act({ type: "slot", targets: ["rat"] });
+  assert.deepEqual(s.c().slots.map((x) => x.die).sort(), [0, 1]);
+});
+
+test("Story Rolls add the chosen Stat and go in the log; players roll only for themselves", () => {
+  const table: TableState = { map: { name: "m", width: 8, height: 8 }, tokens: { roland: token("roland", "player", 1, 1, { ownerId: "p1" }) }, log: [] };
+  const ctx: EngineContext = { loadout: () => ({ pages: {}, deck: [], aux: [], stats: { insight: 3 } }) };
+  applyAction(table, { type: "storyRoll", tokenId: "roland", stat: "insight" }, p1, ctx);
+  const m = table.log.at(-1)!.match(/Insight Story Roll: (\d+)\+3 = (\d+)/);
+  assert.ok(m && Number(m[2]) === Number(m[1]) + 3 && Number(m[1]) >= 1 && Number(m[1]) <= 20, table.log.at(-1));
+  assert.throws(() => applyAction(table, { type: "storyRoll", tokenId: "roland", stat: "insight" }, { uid: "p2", role: "player", displayName: "P2" }, ctx), /your own/);
+});
+
+test("the GM sets Effects on any token; players can't", () => {
+  const table: TableState = { map: { name: "m", width: 8, height: 8 }, tokens: { roland: token("roland", "player", 1, 1, { ownerId: "p1" }) }, log: [] };
+  applyAction(table, { type: "setEffects", tokenId: "roland", effects: [{ id: "e1", name: "Bleed", count: 3, description: "Lose 1 HP per die", duration: "2 turns" }] }, gm);
+  assert.deepEqual(table.tokens.roland.effects, [{ id: "e1", name: "Bleed", count: 3, description: "Lose 1 HP per die", duration: "2 turns" }]);
+  assert.throws(() => applyAction(table, { type: "setEffects", tokenId: "roland", effects: [] }, p1), /GM only/);
+});

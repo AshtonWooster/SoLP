@@ -26,6 +26,8 @@ export function Board() {
   const isMember = !!user && !!game.data?.members[user.id];
   const { snapshot, client } = useClient(id, isMember ? user.id : undefined, "board");
   const [moving, setMoving] = useState(false);
+  // Outside combat: the token picked up to move anywhere (your own, or any on the GM's account).
+  const [carrying, setCarrying] = useState<string | null>(null);
   const [error, setError] = useState("");
   const table = snapshot.table;
   const active = table ? activeToken(table) : undefined;
@@ -75,21 +77,27 @@ export function Board() {
             Round {combat.round} · {PHASE_LABELS[combat.phase]}
           </span>
         )}
+        {!combat && <span className="muted small">{carrying ? "Tap a tile to move there." : "Tap your token, then a tile, to move."}</span>}
       </header>
       <div className={combat ? "board-layout" : ""}>
         <Grid
           state={table}
           activeId={active?.id}
-          selectedId={moving ? playerTurn?.id : null}
+          selectedId={moving ? playerTurn?.id : carrying}
           reachable={reachable}
           onTokenClick={(t) => {
             if (aiming && targetable.has(t.id)) {
               send(mass ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
               return;
             }
-            if (mayAct && playerTurn && t.id === playerTurn.id) setMoving((m) => !m);
+            if (mayAct && playerTurn && t.id === playerTurn.id) return setMoving((m) => !m);
+            if (!combat && (isGm || t.ownerId === user?.id)) setCarrying((c) => (c === t.id ? null : t.id));
           }}
           onCellClick={(x, y) => {
+            if (!combat && carrying) {
+              send({ type: "move", tokenId: carrying, x, y });
+              return setCarrying(null);
+            }
             if (!reachable?.has(`${x},${y}`)) return setMoving(false);
             send({ type: "turnMove", x, y })?.then(() => setMoving(false));
           }}

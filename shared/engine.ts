@@ -15,6 +15,7 @@ import {
   pinnedBy,
   slot,
   sortOrder,
+  storyRoll,
   speedText,
   startCombat,
   type EngineContext,
@@ -55,6 +56,7 @@ export interface SeatProfile {
   justice: number;
   resistances?: ResistanceSet;
   staggerResistances?: ResistanceSet;
+  portrait?: string;
 }
 
 /**
@@ -75,6 +77,7 @@ export function seatPlayer(table: TableState, actor: Actor, profile?: SeatProfil
       token.justice = profile.justice;
       if (profile.resistances) token.resistances = profile.resistances;
       if (profile.staggerResistances) token.staggerResistances = profile.staggerResistances;
+      if (profile.portrait) token.portrait = profile.portrait;
     }
     table.tokens[token.id] = token;
     log(table, `${name} took a seat.`);
@@ -94,13 +97,17 @@ export function seatPlayer(table: TableState, actor: Actor, profile?: SeatProfil
   const sameRes =
     JSON.stringify([existing.resistances ?? null, existing.staggerResistances ?? null]) ===
     JSON.stringify([profile.resistances ?? null, profile.staggerResistances ?? null]);
+  const samePortrait = (existing.portrait ?? "") === (profile.portrait ?? "");
   const changed =
     existing.name !== name ||
     existing.justice !== profile.justice ||
     !sameRes ||
+    !samePortrait ||
     (Object.keys(next) as (keyof Resources)[]).some((k) => next[k] !== r[k]);
   existing.name = name;
   existing.resources = next;
+  if (profile.portrait) existing.portrait = profile.portrait;
+  else delete existing.portrait;
   existing.justice = profile.justice;
   if (profile.resistances) existing.resistances = profile.resistances;
   else delete existing.resistances;
@@ -260,6 +267,7 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       token.pages = (Array.isArray(t.pages) ? t.pages : []).slice(0, 60) as Page[];
       token.deck = cleanDeckEntries(t.deck);
       token.templateId = String(action.templateId);
+      if (typeof t.portrait === "string" && t.portrait) token.portrait = t.portrait;
       // Find a free tile near where it was asked for.
       for (let r = 0; occupied(table, token.x, token.y, token.id) && r < Math.max(width, height); r++) {
         const spot = reachableTiles(table, token, r + 1).values().next().value;
@@ -342,8 +350,23 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       dash(table, actor);
       return true;
     case "aim":
-      aim(table, actor, action.source, action.cardId);
+      aim(table, actor, action.source, action.cardId, action.die === undefined ? undefined : clamp(action.die, 0, 20));
       return true;
+    case "storyRoll":
+      storyRoll(table, actor, tokenOf(action.tokenId), action.stat, ctx);
+      return true;
+    case "setEffects": {
+      gmOnly();
+      const token = tokenOf(action.tokenId);
+      token.effects = (Array.isArray(action.effects) ? action.effects : []).slice(0, 50).map((e) => ({
+        id: String(e?.id || newId()),
+        name: String(e?.name ?? "").slice(0, 60),
+        count: Math.max(0, Math.min(999, Math.round(Number(e?.count) || 0))),
+        description: String(e?.description ?? "").slice(0, 1000),
+        ...(e?.duration ? { duration: String(e.duration).slice(0, 80) } : {}),
+      }));
+      return true;
+    }
     case "aimTarget":
       aimTarget(table, actor, String(action.tokenId));
       return true;

@@ -6,6 +6,7 @@ import { newId } from "../../shared/engine.ts";
 import {
   blankArmor,
   blankCharacter,
+  blankPage,
   blankWeapon,
   characterChecks,
   maxResources,
@@ -18,7 +19,8 @@ import {
 import type { GameDoc, TableState } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
 import { DeckEditor } from "../components/DeckEditor.tsx";
-import { EquipmentEditor, PassiveList } from "../components/EquipmentEditor.tsx";
+import { EquipmentEditor, PageEditor, PassiveList } from "../components/EquipmentEditor.tsx";
+import { ImageUpload } from "../components/ImageUpload.tsx";
 import { InventoryEditor } from "../components/InventoryEditor.tsx";
 import { NumberInput, Section, Stepper, TextField } from "../components/Fields.tsx";
 import { TopBar } from "../components/TopBar.tsx";
@@ -273,6 +275,20 @@ export function CharacterSheet() {
             <Section id="decks" title="Decks" intro="You have two decks: a Combat Deck built from your Equipment's Pages, and an Auxiliary Deck from the Tools in your Inventory.">
               <DeckEditor c={c} update={update} />
             </Section>
+            <Section id="ego" title="E.G.O. Pages" intro="Unique Pages from your character's progression, made with your GM. In combat they're available from the start, and each can be used once per combat.">
+              {(c.ego ?? []).map((p, i) => (
+                <PageEditor
+                  key={p.id}
+                  page={p}
+                  artFolder={`games/${id}/users/${uid}/art`}
+                  onChange={(np) => update((d) => void (d.ego[i] = np))}
+                  onRemove={() => update((d) => void d.ego.splice(i, 1))}
+                />
+              ))}
+              <button type="button" onClick={() => update((d) => void (d.ego = [...(d.ego ?? []), { ...blankPage("special"), name: "E.G.O." }]))}>
+                + Add E.G.O. Page
+              </button>
+            </Section>
           </fieldset>
         )}
 
@@ -388,6 +404,7 @@ export function CharacterSheet() {
             {c.weapons.map((w, i) => (
               <EquipmentEditor
                 key={w.id}
+                artFolder={`games/${id}/users/${uid}/art`}
                 item={w}
                 maxCost={t.equipmentMaxCost}
                 onChange={(nw) => update((d) => void (d.weapons[i] = nw))}
@@ -401,6 +418,7 @@ export function CharacterSheet() {
             <h3>Armor</h3>
             {c.armor ? (
               <EquipmentEditor
+                artFolder={`games/${id}/users/${uid}/art`}
                 item={c.armor}
                 maxCost={t.equipmentMaxCost}
                 onChange={(na) => update((d) => void (d.armor = na))}
@@ -414,6 +432,7 @@ export function CharacterSheet() {
           </Section>
 
           <Section id="details" title="6 · Finishing Touches" intro="Who your character is. These help your GM weave you into the City.">
+            <ImageUpload folder={`games/${id}/users/${uid}/portrait`} label="Portrait" value={c.portrait} onChange={(url) => update((d) => void (url ? (d.portrait = url) : delete d.portrait))} />
             <TextField label="Name" value={c.name} onChange={(v) => update((d) => void (d.name = v))} />
             <div className="row wrap">
               <TextField label="Age" value={c.details.age} onChange={(v) => update((d) => void (d.details.age = v))} />

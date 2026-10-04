@@ -54,13 +54,13 @@ The character sheet has **Inventory** and **Decks** tabs (Acts 6 and 7):
 - **Combat Deck:** 12 Pages built from your Equipment: any number of copies of Basic Pages, one of each Special Page.
 - **Auxiliary Deck:** built automatically from your Inventory's Tools (one copy per item in a stack). The equipped Trinket isn't a card; it's always on.
 
-Players can edit decks any time outside combat; during combat they're locked (also enforced in the security rules). The GM can see and edit every player's inventory and decks, from the game page or the token panel on the GM screen. The phone's table view shows both decks, the Trinket and the Inventory.
+Players can edit decks any time outside combat; during combat they're locked (also enforced in the security rules). The GM can see and edit every player's inventory and decks, from the game page or the token panel on the GM screen. The phone links to the deck editor while you're out of combat.
 
 ### Combat
 
 From the GM screen, **Start combat**, tick who's in the fight, and **Roll Speed and start**. Everyone rolls 1d6 + Justice and acts from highest to lowest (Act 8). On a tie, players go before enemies; the GM can swap neighbours with ↑/↓ to settle any other tie.
 
-At the start of each turn the active character gets Movement Points (3 + Justice; the base is a placeholder in `shared/ruleset.ts`) and Upkeep restores 1 Light. On a player's turn their token glows on the board: they tap it, reachable tiles light up, and they tap one to move. They can also move with the phone's arrows, and end their turn from the board or their phone. Players can only move on their own turn during combat.
+At the start of each turn the active character gets Movement Points (3 + Justice; the base is a placeholder in `shared/ruleset.ts`) and Upkeep restores 1 Light. On a player's turn their token glows on the board: they tap it, reachable tiles light up, and they tap one to move. They end their turn from the board or their phone. Players can only move on their own turn during combat. Outside combat, anyone can tap their own token on the board and then a tile to move it.
 
 The GM can move and edit anything at any time, press **Next turn** (e.g. after an enemy's turn), add or remove combatants, re-roll Speed, and **End combat**. Enemies' Justice is set in the GM's token panel; players' comes from their character sheet.
 
@@ -69,12 +69,29 @@ The GM can move and edit anything at any time, press **Next turn** (e.g. after a
 **Pages in combat** (Act 3):
 - Players start combat with 3 Pages from their shuffled Combat Deck and draw 1 each Upkeep; an empty deck reshuffles the discard pile. The Auxiliary Deck is available from the start; a used Auxiliary Page is gone until combat ends. Hands are visible to the party; draw piles are hidden.
 - On your turn, pick a Page on your phone; valid targets (within Weapon Range) light up on the board. Tap one on the board or phone to pay its Light and slot it on a Speed Die. It resolves at the start of your next turn.
+- **E.G.O. Pages** are made on the character sheet (Decks tab). They aren't in the Combat Deck: each one can be used once per combat from the phone's E.G.O. category.
 - Slotting against a Speed Die that already holds a Page starts a **Clash**, shown as an orange arrow. Dice clash top to bottom: higher Final Power wins, ties are Draws, Clash Win/Lose give ±1 Sanity. Block and Evade, Recycling, Melee vs Ranged, leftover dice, and Counter Dice all work as written. **Mass Attacks** (Summation and Individual) and **Instant** Pages are in too.
 - Offensive dice deal damage × the target's Type Resistance, and the same amount × their Stagger Resistance as Stagger damage. Armor has both sets; the GM sets enemies'. Health 0 = Knocked Out (turns skipped), Stagger 0 = Staggered, Sanity at its minimum = Panic. A character targeted by an enemy's non-Mass Page can't move. **Dash** turns Light into Movement.
 - Enemies have decks too: they draw 3 to start and 1 each Upkeep, and the GM plays their hand from the GM screen. Enemy hands are hidden from players.
 - Placeholders (not in the ruleset yet) are in `shared/ruleset.ts`: 1 Speed Die each, Weapon Range (Melee 1, Ranged 6, Mass 3), Dash (1 Light → 2 Movement).
 
 Anyone in the game can open the board, not just the GM.
+
+### The player screen
+
+The phone shows one screen with three parts, so players never have to leave it during combat:
+
+- **Top:** portrait, name, and Health (red), Stagger (yellow), Sanity (blue) and Light (orange). Buttons for **Speed dice** (pick which die the next Page goes on), **End turn** (asks first if a die is still free and a Page is affordable), **Dash**, and **Story roll**. **Cycle characters** shows anyone else's Speed Dice, the Page on each, its targets and the Page answering it. **Effects** lists your Effects: count, name, description and duration.
+- **Middle:** a carousel (‹ ›) of Inventory · Stats, Weapons · Armor, Augments · Proficiencies. Tapping one opens it in place; ✕ goes back. Stats have **+** buttons while points are left. Items can be used from Inventory.
+- **Bottom:** the Pages in your hand, switched between **Combat**, **E.G.O.** and **Auxiliary** (each keeps its own selection). Tapping a Page enlarges it; **Select this Page** picks it. A strip shows the die, Page, target and whether that's valid. Once a die, a target and a Page are chosen, the Page is placed. Mass Attacks take several targets, then **Use**.
+
+Opening panels and popups never clears the selection, ends the turn or changes the category.
+
+**Story Rolls** roll 1d20 + a Stat and post the result to the table log (the d20 is a placeholder in `shared/ruleset.ts`; enemies roll with Justice).
+
+**Portraits and Page art:** players upload a portrait on their sheet (Finishing Touches) and art on each Page. The GM uploads enemy portraits and Page art in the templates. Images are under 5 MB and stored in Firebase Storage. Portraits show on tokens.
+
+**Effects** are set by the GM in the token panel on the GM screen (name, count, description, duration) for now; they're shown to players but don't trigger anything automatically yet.
 
 ### Enemy templates
 

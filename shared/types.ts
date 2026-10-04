@@ -105,7 +105,22 @@ export interface Token {
   deck?: DeckEntry[];
   /** The enemy template this token was copied from. */
   templateId?: string;
+  /** Portrait image URL (players' from their character, enemies' from their template). */
+  portrait?: string;
+  /** Effects on the character (set by the GM for now). */
+  effects?: Effect[];
   status?: TokenStatus;
+}
+
+/** A temporary ailment, buff or environmental effect (Act 7, "Effects"). */
+export interface Effect {
+  id: string;
+  name: string;
+  /** Stacks or count. */
+  count: number;
+  description: string;
+  /** e.g. "until end of next turn". */
+  duration?: string;
 }
 
 export interface TokenStatus {
@@ -152,6 +167,9 @@ export interface DeckState {
   aux: Card[];
   /** Auxiliary Pages already used this combat. */
   auxUsed: Card[];
+  /** E.G.O. Pages: available from the start; each is used once per combat. */
+  ego?: Card[];
+  egoUsed?: Card[];
 }
 
 export interface TargetRef {
@@ -169,6 +187,7 @@ export interface SlottedPage {
   /** The card it came from (players), so it can go to the discard pile. */
   card?: Card;
   fromAux?: boolean;
+  fromEgo?: boolean;
   targets: TargetRef[];
   /** The page this one is clashing with, if any. */
   clashWith?: string;
@@ -187,12 +206,14 @@ export interface Aim {
   pageId: string;
   source: PageSource;
   cardId?: string;
+  /** The Speed Die picked for it, if the player chose one. */
+  die?: number;
   /** Picked so far (Mass Attacks pick several). */
   targets: string[];
 }
 
-/** Where a Page being used comes from: the hand or the Auxiliary Deck. */
-export type PageSource = "hand" | "aux";
+/** Where a Page being used comes from: the hand, the Auxiliary Deck, or E.G.O. Pages. */
+export type PageSource = "hand" | "aux" | "ego";
 
 /** Present while combat is running (Act 8). */
 export interface CombatState {
@@ -258,8 +279,11 @@ export type TableAction =
   | { type: "turnMove"; x: number; y: number }
   /** Convert Light into Movement Points. */
   | { type: "dash" }
+  /** Roll a Story Roll with one of the character's Stats; the result goes in the log. */
+  | { type: "storyRoll"; tokenId: string; stat: string }
+  | { type: "setEffects"; tokenId: string; effects: Effect[] }
   /** Pick a Page to use, so the board can show its valid targets. */
-  | { type: "aim"; source: PageSource; cardId?: string; pageId?: string }
+  | { type: "aim"; source: PageSource; cardId?: string; pageId?: string; die?: number }
   /** Add or remove a target while aiming a Mass Attack. */
   | { type: "aimTarget"; tokenId: string }
   | { type: "clearAim" }

@@ -1,6 +1,7 @@
 import type { Armor, Dice, DiceKind, Equipment, Page, PageType, Passive, Weapon } from "../../shared/character.ts";
 import { blankDice, blankPage, blankPassive } from "../../shared/ruleset.ts";
 import { NumberInput, TextField } from "./Fields.tsx";
+import { ImageUpload } from "./ImageUpload.tsx";
 
 export const PAGE_TYPES: { value: PageType; label: string }[] = [
   { value: "melee", label: "Melee" },
@@ -110,7 +111,18 @@ function DiceRow({ dice, onChange, onRemove }: { dice: Dice; onChange: (d: Dice)
   );
 }
 
-export function PageEditor({ page, onChange, onRemove }: { page: Page; onChange: (p: Page) => void; onRemove?: () => void }) {
+export function PageEditor({
+  page,
+  onChange,
+  onRemove,
+  artFolder,
+}: {
+  page: Page;
+  onChange: (p: Page) => void;
+  onRemove?: () => void;
+  /** Where Page art uploads go; no upload button without it. */
+  artFolder?: string;
+}) {
   return (
     <div className={`page-card ${page.kind}`}>
       <div className="row">
@@ -151,6 +163,7 @@ export function PageEditor({ page, onChange, onRemove }: { page: Page; onChange:
         + Add dice
       </button>
       <textarea aria-label="Page effect" placeholder="On Use / On Hit effects" value={page.effect} onChange={(e) => onChange({ ...page, effect: e.target.value })} />
+      {artFolder && <ImageUpload folder={artFolder} shape="card" label="Art" value={page.image} onChange={(image) => onChange({ ...page, image })} />}
     </div>
   );
 }
@@ -160,11 +173,13 @@ export function EquipmentEditor<T extends Weapon | Armor>({
   maxCost,
   onChange,
   onRemove,
+  artFolder,
 }: {
   item: T;
   maxCost: number;
   onChange: (item: T) => void;
   onRemove?: () => void;
+  artFolder?: string;
 }) {
   const set = (patch: Partial<Equipment>) => onChange({ ...item, ...patch });
   return (
@@ -225,6 +240,7 @@ export function EquipmentEditor<T extends Weapon | Armor>({
         <PageEditor
           key={p.id}
           page={p}
+          artFolder={artFolder}
           onChange={(np) => set({ pages: replaceAt(item.pages, i, np) })}
           onRemove={() => set({ pages: item.pages.filter((_, j) => j !== i) })}
         />
