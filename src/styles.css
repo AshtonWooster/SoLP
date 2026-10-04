@@ -581,3 +581,5 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .new-map input[type="number"] { width: 4rem; }
 .map-editor .field { flex: none; }
 .dice-effect { flex: 1 1 100%; font-size: 0.85rem; }
+.confirm-button { transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
+.confirm-button.armed { background: #f3b5b3; color: #5a0f0c; border-color: var(--hp); font-weight: 700; }

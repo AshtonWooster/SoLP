@@ -11,6 +11,7 @@ import { blankEnemy, isMassAttack } from "../../shared/ruleset.ts";
 import type { EnemyTemplate } from "../../shared/character.ts";
 import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ImageUpload } from "../components/ImageUpload.tsx";
+import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { MAP_MAX, MAP_MIN } from "../../shared/maps.ts";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
@@ -339,9 +340,9 @@ function CombatPanel({ table, act }: { table: TableState; act: (action: TableAct
     <div className="combat-panel">
       <div className="row-between">
         <h3>Combat · Round {combat.round}</h3>
-        <button className="danger" onClick={() => confirm("End combat?") && act({ type: "endCombat" })}>
+        <ConfirmButton className="danger" confirmLabel="Confirm end combat" onConfirm={() => act({ type: "endCombat" })}>
           End combat
-        </button>
+        </ConfirmButton>
       </div>
       {active && (
         <p className="muted small">
