@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import type { Character } from "../../shared/character.ts";
+import { blankCharacter } from "../../shared/ruleset.ts";
 import type { Token } from "../../shared/types.ts";
-import { useAuth } from "../api.ts";
+import { useAuth, useDoc } from "../api.ts";
+import { LoadoutSummary } from "../components/LoadoutSummary.tsx";
 import { activeToken } from "../../shared/engine.ts";
 import { pct } from "../components/Grid.tsx";
 import { TurnOrder } from "../components/TurnOrder.tsx";
@@ -14,6 +17,7 @@ export function Play() {
   const { id = "" } = useParams();
   const { user } = useAuth();
   const { snapshot, client } = useClient(id, user?.id, "play");
+  const character = useDoc<Character>(user ? `games/${id}/characters/${user.id}` : null);
   const [error, setError] = useState("");
 
   if (!snapshot.table) return <Waiting snapshot={snapshot} gameId={id} />;
@@ -72,6 +76,10 @@ export function Play() {
           <h3>Turn order</h3>
           <TurnOrder table={table} />
         </section>
+      )}
+
+      {character.data && user && (
+        <LoadoutSummary c={{ ...blankCharacter(user.id, ""), ...character.data }} gameId={id} uid={user.id} inCombat={!!combat} />
       )}
 
       <section>

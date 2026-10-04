@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
 import { newId } from "../../shared/engine.ts";
@@ -15,9 +15,11 @@ import {
   rankTable,
   SECONDARY_STATS,
 } from "../../shared/ruleset.ts";
-import type { GameDoc } from "../../shared/types.ts";
+import type { GameDoc, TableState } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
+import { DeckEditor } from "../components/DeckEditor.tsx";
 import { EquipmentEditor, PassiveList } from "../components/EquipmentEditor.tsx";
+import { InventoryEditor } from "../components/InventoryEditor.tsx";
 import { NumberInput, Section, Stepper, TextField } from "../components/Fields.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
@@ -107,6 +109,13 @@ function useCharacter(gameId: string, uid: string, fallbackName: string, canEdit
   return { character, error, save, update, create };
 }
 
+const TABS = [
+  ["sheet", "Character"],
+  ["inventory", "Inventory"],
+  ["decks", "Decks"],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
 const STEPS = [
   ["rank", "1 · Rank"],
   ["stats", "2 · Stats"],
@@ -126,6 +135,11 @@ export function CharacterSheet() {
   const canEdit = isMine || isGm;
   const ownerName = game.data?.members[uid]?.displayName ?? "";
   const { character: c, error, save, update, create } = useCharacter(id, uid, ownerName, canEdit);
+  const [params, setParams] = useSearchParams();
+  const tab: Tab = TABS.some(([t]) => t === params.get("tab")) ? (params.get("tab") as Tab) : "sheet";
+  // Decks can't change mid-combat (Act 6). The GM's table saves combat state every few seconds.
+  const table = useDoc<TableState>(`games/${id}/table/state`);
+  const decksLocked = !!table.data?.combat && !isGm;
 
   if (game.error || error) {
     return (
@@ -199,13 +213,28 @@ export function CharacterSheet() {
             </span>
           </p>
           {!canEdit && <p className="muted">Only {owner.displayName} and the GM can edit this sheet.</p>}
-          <nav className="step-nav">
-            {STEPS.map(([anchor, label]) => (
-              <a key={anchor} href={`#${anchor}`}>
+          <nav className="tabs" role="tablist">
+            {TABS.map(([t, label]) => (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={tab === t}
+                className={tab === t ? "tab active" : "tab"}
+                onClick={() => setParams(t === "sheet" ? {} : { tab: t }, { replace: true })}
+              >
                 {label}
-              </a>
+              </button>
             ))}
           </nav>
+          {tab === "sheet" && (
+            <nav className="step-nav">
+              {STEPS.map(([anchor, label]) => (
+                <a key={anchor} href={`#${anchor}`}>
+                  {label}
+                </a>
+              ))}
+            </nav>
+          )}
         </header>
 
         <aside className="sheet-summary panel">
@@ -216,7 +245,7 @@ export function CharacterSheet() {
             <div><span className="muted">Light</span><strong>{max.maxLight}</strong></div>
             <div><span className="muted">Speed</span><strong>1d6+{c.primary.justice}</strong></div>
           </div>
-          <details open={!ready}>
+          <details open={!ready && tab === "sheet"} key={tab}>
             <summary className={ready ? "ok-text" : "warn-text"}>
               {ready ? "✓ Ready for the table" : `${checks.filter((ch) => !ch.ok).length} left to finish`}
             </summary>
@@ -230,6 +259,24 @@ export function CharacterSheet() {
           </details>
         </aside>
 
+        {tab === "inventory" && (
+          <fieldset disabled={!canEdit} className="sheet-body">
+            <Section id="inventory" title="Inventory" intro="Items and Tools take one Slot each. Tools add their Page to your Auxiliary Deck. Your one Trinket is active only while in the Trinket Slot.">
+              <InventoryEditor c={c} canSetSlots={isGm} update={update} />
+            </Section>
+          </fieldset>
+        )}
+
+        {tab === "decks" && (
+          <fieldset disabled={!canEdit || decksLocked} className="sheet-body">
+            {decksLocked && <div className="notice">Combat is on. Decks can be changed again once it ends.</div>}
+            <Section id="decks" title="Decks" intro="You have two decks: a Combat Deck built from your Equipment's Pages, and an Auxiliary Deck from the Tools in your Inventory.">
+              <DeckEditor c={c} update={update} />
+            </Section>
+          </fieldset>
+        )}
+
+        {tab === "sheet" && (
         <fieldset disabled={!canEdit} className="sheet-body">
           <Section id="rank" title="1 · Rank" intro="Your Fixer Grade (or equivalent). It sets how many points and how much Passive Cost you get. Agree on it with your GM.">
             {isGm ? (
@@ -386,6 +433,7 @@ export function CharacterSheet() {
             </label>
           </Section>
         </fieldset>
+        )}
       </main>
     </>
   );

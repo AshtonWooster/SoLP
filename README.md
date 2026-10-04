@@ -46,6 +46,16 @@ Each player makes one character per game from the game page ("Create my characte
 
 The ruleset's tables aren't written yet, so the numbers they'd provide (points per Rank, base Resources, max Passive Costs, base Movement) are **placeholders in `shared/ruleset.ts`**. Fill them in there and the whole app follows.
 
+### Inventory and decks
+
+The character sheet has **Inventory** and **Decks** tabs (Acts 6 and 7):
+
+- **Inventory:** 9 Slots (the GM can change the count), each holding an Item or a Tool. Stacking items hold several in one Slot up to a max. Tools carry a Page. The **Trinket Slot** holds one Trinket, which is always active while equipped.
+- **Combat Deck:** 12 Pages built from your Equipment: any number of copies of Basic Pages, one of each Special Page.
+- **Auxiliary Deck:** built automatically from your Inventory's Tools (one copy per item in a stack). The equipped Trinket isn't a card; it's always on.
+
+Players can edit decks any time outside combat; during combat they're locked (also enforced in the security rules). The GM can see and edit every player's inventory and decks, from the game page or the token panel on the GM screen. The phone's table view shows both decks, the Trinket and the Inventory.
+
 ### Combat
 
 From the GM screen, **Start combat**, tick who's in the fight, and **Roll Speed and start**. Everyone rolls 1d6 + Justice and acts from highest to lowest (Act 8). On a tie, players go before enemies; the GM can swap neighbours with ↑/↓ to settle any other tie.

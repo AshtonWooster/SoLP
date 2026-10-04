@@ -78,6 +78,9 @@ test("only the GM's hosting tab can save the table", async () => {
   await assertFails(setDoc(doc(as("p1"), "games", GAME, "table", "state"), table));
   await assertFails(setDoc(doc(as("stranger"), "games", GAME, "table", "state"), table));
   await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "state"), { ...table, extra: 1 }));
+  // Autosave while combat is running.
+  const combat = { round: 1, order: [], turn: 0, movementLeft: 3 };
+  await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "table", "state"), { ...table, combat }));
   await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "other"), table));
 });
 
@@ -119,6 +122,23 @@ test("characters: players edit their own, the GM edits any and sets Rank", async
   await assertSucceeds(getDoc(ref("gm")));
   await assertFails(getDoc(ref("stranger")));
   await assertSucceeds(deleteDoc(ref("p1")));
+});
+
+test("decks lock for players during combat; the GM can still edit them", async () => {
+  const sheet = { ownerId: "p1", name: "Roland", rank: 9, deck: [{ pageId: "a", copies: 12 }], inventory: { items: [] } };
+  const ref = (who: string) => doc(as(who), "games", GAME, "characters", "p1");
+  const table = (combat: unknown) =>
+    env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), "games", GAME, "table", "state"), { map: {}, tokens: {}, log: [], ...(combat ? { combat } : {}) }),
+    );
+  await assertSucceeds(setDoc(ref("p1"), sheet));
+  await table({ round: 1, order: [], turn: 0, movementLeft: 3 });
+  await assertFails(updateDoc(ref("p1"), { deck: [{ pageId: "b", copies: 12 }] }));
+  await assertSucceeds(updateDoc(ref("p1"), { name: "Roland (in combat)" }));
+  await assertSucceeds(updateDoc(ref("p1"), { "inventory.items": [{ id: "x" }] }));
+  await assertSucceeds(updateDoc(ref("gm"), { deck: [{ pageId: "c", copies: 12 }] }));
+  await table(null);
+  await assertSucceeds(updateDoc(ref("p1"), { deck: [{ pageId: "b", copies: 12 }] }));
 });
 
 test("only the GM sees the invite code and GM notes", async () => {

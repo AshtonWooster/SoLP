@@ -110,14 +110,16 @@ function DiceRow({ dice, onChange, onRemove }: { dice: Dice; onChange: (d: Dice)
   );
 }
 
-function PageEditor({ page, onChange, onRemove }: { page: Page; onChange: (p: Page) => void; onRemove: () => void }) {
+export function PageEditor({ page, onChange, onRemove }: { page: Page; onChange: (p: Page) => void; onRemove?: () => void }) {
   return (
     <div className={`page-card ${page.kind}`}>
       <div className="row">
         <input aria-label="Page name" placeholder="Page name" value={page.name} onChange={(e) => onChange({ ...page, name: e.target.value })} />
-        <button type="button" className="icon" aria-label="Remove page" onClick={onRemove}>
-          ✕
-        </button>
+        {onRemove && (
+          <button type="button" className="icon" aria-label="Remove page" onClick={onRemove}>
+            ✕
+          </button>
+        )}
       </div>
       <div className="row wrap">
         <select aria-label="Basic or Special" value={page.kind} onChange={(e) => onChange({ ...page, kind: e.target.value as Page["kind"] })}>

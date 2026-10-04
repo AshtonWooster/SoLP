@@ -161,6 +161,7 @@ function Override({
   act: (action: TableAction) => boolean;
   onRemoved: () => void;
 }) {
+  const { id: gameIdParam = "" } = useParams();
   const [notes, setNotes] = useState(note);
   useEffect(() => setNotes(note), [note]);
 
@@ -191,6 +192,11 @@ function Override({
           <NumberField value={token.justice ?? 0} onCommit={(n) => act({ type: "setJustice", tokenId: token.id, justice: n })} />
         )}
       </div>
+      {token.ownerId && (
+        <a href={`/games/${gameIdParam}/characters/${token.ownerId}?tab=inventory`} target="_blank" rel="noreferrer">
+          Open character sheet, inventory and decks ↗
+        </a>
+      )}
       <label className="muted">GM notes (hidden from players)</label>
       <textarea
         value={notes}
