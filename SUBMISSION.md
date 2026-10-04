@@ -2,7 +2,7 @@
 **Ashton Wooster** & **Tyler Ruf**   
 **Try it out:** https://solp.online
 
-**Theme: Connections.** SoLP brings a tabletop RPG night online, so friends can play together from anywhere in the world. The GM runs the table from their browser, players join from their phones, and everyone shares one live battle map and the same fight, even on different continents, connected device to device.
+**Theme: Connections.** SoLP brings a tabletop RPG night online, so friends anywhere in the world can play together. The GM runs the table from their browser, players join from their phones, and everyone shares one live battle map, connected device to device.
 
 It's built for the **LoR PMTTRPG**, a fan-made tabletop RPG inspired by *Library of Ruina*, where combat means slotting Pages (cards) onto Speed Dice and resolving dice Clashes. That's slow on paper; SoLP runs the rules for you.
 
@@ -19,7 +19,6 @@ It's built for the **LoR PMTTRPG**, a fan-made tabletop RPG inspired by *Library
 It's for:
 - **Game Masters** running the LoR PMTTRPG, usually with a laptop for controls and an iPad or TV for the board.
 - **Players** on their phones. No install: open a link or scan the QR code on the board.
-- **Groups spread across cities or countries** who want a proper tabletop night together.
 
 ## GitHub / repository link
 
@@ -41,7 +40,6 @@ It's for:
 - Slot Pages on your phone; valid targets light up on the board.
 - Clashes resolve automatically: Block, Evade and Counter Dice, Recycling, Melee vs. Ranged, Mass Attacks, Instant Pages, Resistances, Stagger and Knock Out.
 - Clashes play out die by die like *Library of Ruina*: the dice roll, the winner glows and the loser shatters, and damage lands when its die plays.
-- Redirected Clashes show as two-way arrows, and tokens slide when they move.
 
 **Player screen and GM tools**
 - One persistent phone screen: resources, Speed Dice, End Turn, Dash, Story Roll and your hand as cards. Pick a die, a target and a Page to slot it.
@@ -79,7 +77,7 @@ This created new problems to solve:
 - **Robust connections:** devices reconnect automatically if the GM reloads, and opening the GM screen on another device takes over hosting.
 - **Proving it works:** our end-to-end tests count Cloud Function calls in the emulator log and require **zero during an entire combat**.
 
-A close second was the **clash animation**. The engine records each die's result and both characters' state after every step, so every screen replays the clash die by die and shows damage when its die lands, while the real state stays correct underneath.
+A close second was the **clash animation**: the engine records each die's result and both characters' state, so screens replay clashes die by die and show damage only when its die lands.
 
 ## Is anything incomplete, buggy, or planned as a future feature?
 - **Effects, Passives and dice effects are text, not automation yet.** They're shown everywhere they matter, but a Passive like "+1 Power on Slash dice" isn't applied by the engine. Automating them is the biggest planned feature.
