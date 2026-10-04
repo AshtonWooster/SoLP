@@ -14,6 +14,7 @@ import { Gm } from "./screens/Gm.tsx";
 import { Play } from "./screens/Play.tsx";
 import { CharacterSheet } from "./screens/CharacterSheet.tsx";
 import { Enemies } from "./screens/Enemies.tsx";
+import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import "./styles.css";
 
 /** Sends logged-out visitors to the login page, then back here afterwards. */
@@ -57,4 +58,11 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+// A new deploy can remove the files an old open page asks for: reload to get the new ones.
+window.addEventListener("vite:preloadError", () => location.reload());
+
+createRoot(document.getElementById("root")!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+);

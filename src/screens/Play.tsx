@@ -64,19 +64,19 @@ export function Play() {
   const combat = table?.combat;
   const mine = table ? Object.values(table.tokens).find((t) => t.ownerId === user?.id) : undefined;
   const c: Character | undefined = characterDoc.data && user ? { ...blankCharacter(user.id, ""), ...characterDoc.data } : undefined;
-  const deck = combat && mine ? combat.decks[mine.id] : undefined;
+  const deck = combat && mine ? combat.decks?.[mine.id] : undefined;
   const active = table ? activeToken(table) : undefined;
   const myTurn = !!mine && active?.id === mine.id;
   const canAct = myTurn && combat?.phase === "actions";
-  const myDice = (combat && mine && combat.order.find((x) => x.tokenId === mine.id)?.dice) || 0;
+  const myDice = (combat && mine && combat.order?.find((x) => x.tokenId === mine.id)?.dice) || 0;
 
-  const cardsIn = (cat: Category): Card[] => (!deck ? [] : cat === "combat" ? deck.hand : cat === "ego" ? (deck.ego ?? []) : deck.aux);
+  const cardsIn = (cat: Category): Card[] => (!deck ? [] : cat === "combat" ? (deck.hand ?? []) : cat === "ego" ? (deck.ego ?? []) : (deck.aux ?? []));
   const selectedCard = cardsIn(category).find((x) => x.id === selected[category]);
-  const page = selectedCard && combat ? combat.pages[selectedCard.pageId] : undefined;
+  const page = selectedCard && combat ? combat.pages?.[selectedCard.pageId] : undefined;
   const source = sourceOf(category);
   const mass = !!page && isMassAttack(page.type);
   const inRange = useMemo(() => new Set(page && mine && table ? validTargets(table, mine, page).map((t) => t.id) : []), [page, mine, table]);
-  const freeDice = Array.from({ length: myDice }, (_, i) => i).filter((i) => !combat?.slots.some((s) => s.ownerId === mine?.id && s.die === i));
+  const freeDice = Array.from({ length: myDice }, (_, i) => i).filter((i) => !combat?.slots?.some((s) => s.ownerId === mine?.id && s.die === i));
   // Mass Attack targets live on the host (so the board shows them too); a single target is local.
   const myAim = combat?.aim && combat.aim.tokenId === mine?.id && combat.aim.cardId === selectedCard?.id ? combat.aim : undefined;
   const targets = mass ? (myAim?.targets ?? []) : target ? [target] : [];
@@ -334,7 +334,7 @@ export function Play() {
             {combat && deck ? (
               cards.length ? (
                 cards.map((card) => {
-                  const p = combat.pages[card.pageId];
+                  const p = combat.pages?.[card.pageId];
                   if (!p) return null;
                   return (
                     <div role="listitem" key={card.id}>
@@ -394,14 +394,14 @@ export function Play() {
         <Overlay title="Speed Dice" onClose={() => setOverlay(null)}>
           <ul className="plain dice-list">
             {Array.from({ length: myDice }, (_, i) => {
-              const s = combat.slots.find((x) => x.ownerId === mine?.id && x.die === i);
+              const s = (combat.slots ?? []).find((x) => x.ownerId === mine?.id && x.die === i);
               return (
                 <li key={i}>
                   <button type="button" className={"die-pick" + (die === i ? " active" : "")} disabled={!!s} onClick={() => (setDie(i), setOverlay(null))}>
                     <strong>Speed Die {i + 1}</strong>
                     <span className="muted small">
                       {s
-                        ? `${combat.pages[s.pageId]?.name ?? "Page"} → ${s.targets.map((t) => table.tokens[t.tokenId]?.name).join(", ")}${s.clashWith ? " (Clash)" : ""}`
+                        ? `${combat.pages?.[s.pageId]?.name ?? "Page"} → ${s.targets.map((t) => table.tokens[t.tokenId]?.name).join(", ")}${s.clashWith ? " (Clash)" : ""}`
                         : "Free"}
                     </span>
                   </button>

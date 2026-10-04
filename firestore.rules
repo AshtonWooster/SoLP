@@ -56,7 +56,9 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(["uid", "sessionId", "offer", "createdAt"])
           && request.resource.data.offer is string
           && request.resource.data.offer.size() < 20000;
-        allow read, delete: if signedIn() && (resource.data.uid == request.auth.uid || isGm(gameId));
+        // A deleted (already answered) signal reads as empty instead of an error.
+        allow read: if signedIn() && (resource == null || resource.data.uid == request.auth.uid || isGm(gameId));
+        allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isGm(gameId));
         allow update: if isGm(gameId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["answer"])
           && request.resource.data.answer is string
