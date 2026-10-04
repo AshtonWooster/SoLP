@@ -107,6 +107,13 @@ function DiceRow({ dice, onChange, onRemove }: { dice: Dice; onChange: (d: Dice)
       <button type="button" className="icon" aria-label="Remove dice" onClick={onRemove}>
         ✕
       </button>
+      <input
+        className="dice-effect"
+        aria-label="Dice effect"
+        placeholder="Dice effect (optional), e.g. On Hit: Inflict 1 Fragile"
+        value={dice.effect ?? ""}
+        onChange={(e) => onChange({ ...dice, effect: e.target.value || undefined })}
+      />
     </div>
   );
 }
@@ -163,7 +170,7 @@ export function PageEditor({
         + Add dice
       </button>
       <textarea aria-label="Page effect" placeholder="On Use / On Hit effects" value={page.effect} onChange={(e) => onChange({ ...page, effect: e.target.value })} />
-      {artFolder && <ImageUpload folder={artFolder} shape="card" label="Art" value={page.image} onChange={(image) => onChange({ ...page, image })} />}
+      {artFolder && <ImageUpload folder={artFolder} shape="page" label="Art (4:3)" value={page.image} onChange={(image) => onChange({ ...page, image })} />}
     </div>
   );
 }

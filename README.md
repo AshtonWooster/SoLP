@@ -85,13 +85,15 @@ The phone shows one screen with three parts, so players never have to leave it d
 
 - **Top:** portrait, name, and Health (red), Stagger (yellow), Sanity (blue) and Light (orange). Buttons for **Speed dice** (pick which die the next Page goes on), **End turn** (asks first if a die is still free and a Page is affordable), **Dash**, and **Story roll**. **Cycle characters** shows anyone else's Speed Dice, the Page on each, its targets and the Page answering it. **Effects** lists your Effects: count, name, description and duration.
 - **Middle:** a carousel (‹ ›) of Inventory · Stats, Weapons · Armor, Augments · Proficiencies. Tapping one opens it in place; ✕ goes back. Stats have **+** buttons while points are left. Items can be used from Inventory.
-- **Bottom:** the Pages in your hand, switched between **Combat**, **E.G.O.** and **Auxiliary** (each keeps its own selection). Tapping a Page enlarges it; **Select this Page** picks it. A strip shows the die, Page, target and whether that's valid. Once a die, a target and a Page are chosen, the Page is placed. Mass Attacks take several targets, then **Use**.
+- **Bottom:** the Pages in your hand, switched between **Combat**, **E.G.O.** and **Auxiliary** (each keeps its own selection). Tapping a Page enlarges it, Library of Ruina style: the card (cost, type, name, art, dice) on the left and each die's Power range and effects on the right. **Select this Page** picks it. A strip shows the die, Page, target and whether that's valid. Once a die, a target and a Page are chosen, the Page is placed. Mass Attacks take several targets, then **Use**.
 
 Opening panels and popups never clears the selection, ends the turn or changes the category.
 
 **Story Rolls** roll 1d20 + a Stat and post the result to the table log (the d20 is a placeholder in `shared/ruleset.ts`; enemies roll with Justice).
 
-**Portraits and Page art:** players upload a portrait on their sheet (Finishing Touches) and art on each Page. The GM uploads enemy portraits and Page art in the templates. Images are under 5 MB and stored in Firebase Storage. Portraits show on tokens.
+**Dice effects:** each die on a Page can have its own effect text (e.g. "On Hit: Inflict 1 Fragile next Scene"), shown next to it when the Page is enlarged. Effects are text for now; they don't trigger automatically.
+
+**Portraits and Page art:** players upload a portrait on their sheet (Finishing Touches) and 4:3 landscape art on each Page. The GM uploads enemy portraits and Page art in the templates. Images are under 5 MB and stored in Firebase Storage. Portraits show on tokens.
 
 **Effects** are set by the GM in the token panel on the GM screen (name, count, description, duration) for now; they're shown to players but don't trigger anything automatically yet.
 
