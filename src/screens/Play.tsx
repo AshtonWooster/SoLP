@@ -5,6 +5,7 @@ import { blankCharacter } from "../../shared/ruleset.ts";
 import type { Token } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
 import { LoadoutSummary } from "../components/LoadoutSummary.tsx";
+import { ActionPanel, HandPreview, PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { activeToken } from "../../shared/engine.ts";
 import { pct } from "../components/Grid.tsx";
 import { TurnOrder } from "../components/TurnOrder.tsx";
@@ -53,11 +54,17 @@ export function Play() {
           <div>
             <strong>{myTurn ? "Your turn" : active ? `${active.name}'s turn` : "Combat"}</strong>
             <div className="muted small">
-              Round {combat.round}
-              {myTurn && ` · ${combat.movementLeft} Movement left · move here or tap your token on the board`}
+              Round {combat.round} · {PHASE_LABELS[combat.phase]}
+              {myTurn && " · move here or tap your token on the board"}
             </div>
           </div>
-          {myTurn && <button onClick={() => send({ type: "endTurn" })}>End turn</button>}
+        </section>
+      )}
+      {combat && mine && myTurn && <ActionPanel table={table} token={mine} canAct send={(a) => void send(a)} />}
+      {combat && mine && !myTurn && combat.decks[mine.id] && (
+        <section>
+          <h3>Your hand</h3>
+          <HandPreview table={table} tokenId={mine.id} />
         </section>
       )}
 
@@ -89,6 +96,7 @@ export function Play() {
           <div className="ally" key={t.id}>
             <strong>{t.name}</strong>
             <ResourceBars token={t} compact />
+            {combat?.decks[t.id] && <HandPreview table={table} tokenId={t.id} />}
           </div>
         ))}
       </section>

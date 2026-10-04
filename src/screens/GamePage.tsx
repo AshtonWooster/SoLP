@@ -70,6 +70,10 @@ export function GamePage() {
               Open my table view
               <small>Your character, hand and party, on your phone</small>
             </Link>
+            <Link className="big-button secondary" to={`/games/${id}/board`}>
+              Open the board
+              <small>The shared map, on any screen</small>
+            </Link>
             <Link className="big-button secondary" to={`/games/${id}/characters/${user!.id}`}>
               {characters?.[user!.id] ? "My character" : "Create my character"}
               <small>

@@ -3,7 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import type { GameDoc, GmMeta, Resources, TableAction, TableState, Token } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
 import { activeToken } from "../../shared/engine.ts";
-import { Grid } from "../components/Grid.tsx";
+import { aimTargets, Grid } from "../components/Grid.tsx";
+import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
+import { PageEditor } from "../components/EquipmentEditor.tsx";
+import { blankPage, isMassAttack } from "../../shared/ruleset.ts";
 import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
@@ -69,7 +72,16 @@ export function Gm() {
             state={table}
             selectedId={selectedId}
             activeId={table.combat ? activeToken(table)?.id : undefined}
-            onTokenClick={(t) => setSelectedId(t.id === selectedId ? null : t.id)}
+            onTokenClick={(t) => {
+              // While a Page is being aimed, clicking a lit token targets it.
+              const aim = table.combat?.aim;
+              if (aim && aimTargets(table).targetable.has(t.id)) {
+                const page = table.combat!.pages[aim.pageId] ?? table.tokens[aim.tokenId]?.pages?.find((p) => p.id === aim.pageId);
+                act(page && isMassAttack(page.type) ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
+                return;
+              }
+              setSelectedId(t.id === selectedId ? null : t.id);
+            }}
             onCellClick={(x, y) => selectedId && act({ type: "move", tokenId: selectedId, x, y })}
           />
         )}
@@ -197,6 +209,30 @@ function Override({
           Open character sheet, inventory and decks ↗
         </a>
       )}
+      <h4>Resistances</h4>
+      {token.side === "player" && token.ownerId ? (
+        <p className="muted small">
+          {token.resistances
+            ? `Slash ×${token.resistances.slash}, Pierce ×${token.resistances.pierce}, Blunt ×${token.resistances.blunt}`
+            : "×1 (no Armor)"}
+          , from their Armor
+        </p>
+      ) : (
+        <div className="row wrap">
+          {(["slash", "pierce", "blunt"] as const).map((k) => (
+            <label className="inline" key={k}>
+              {k[0].toUpperCase() + k.slice(1)} ×
+              <NumberField
+                value={token.resistances?.[k] ?? 1}
+                onCommit={(n) =>
+                  act({ type: "setResistances", tokenId: token.id, resistances: { slash: 1, pierce: 1, blunt: 1, ...token.resistances, [k]: n } })
+                }
+              />
+            </label>
+          ))}
+        </div>
+      )}
+      {token.side === "enemy" && <EnemyPages token={token} act={act} />}
       <label className="muted">GM notes (hidden from players)</label>
       <textarea
         value={notes}
@@ -287,7 +323,13 @@ function CombatPanel({ table, act }: { table: TableState; act: (action: TableAct
       </div>
       {active && (
         <p className="muted small">
-          {active.name}'s turn · {combat.movementLeft} Movement left
+          {active.name}'s turn · {PHASE_LABELS[combat.phase]} · {combat.movementLeft} Movement left
+        </p>
+      )}
+      {active?.side === "enemy" && <ActionPanel table={table} token={active} canAct send={(a) => void act(a)} />}
+      {active?.side === "player" && combat.aim && (
+        <p className="muted small">
+          {active.name} is aiming {combat.pages[combat.aim.pageId]?.name}. Lit tokens can be clicked to target for them.
         </p>
       )}
       <TurnOrder
@@ -328,5 +370,29 @@ function CombatPanel({ table, act }: { table: TableState; act: (action: TableAct
         </div>
       )}
     </div>
+  );
+}
+
+/** The Pages an enemy can use in combat. */
+function EnemyPages({ token, act }: { token: Token; act: (action: TableAction) => boolean }) {
+  const pages = token.pages ?? [];
+  const save = (next: typeof pages) => act({ type: "setEnemyPages", tokenId: token.id, pages: next });
+  return (
+    <details className="enemy-pages">
+      <summary>
+        Combat Pages ({pages.length})
+      </summary>
+      {pages.map((p, i) => (
+        <PageEditor
+          key={p.id}
+          page={p}
+          onChange={(np) => save(pages.map((x, j) => (j === i ? np : x)))}
+          onRemove={() => save(pages.filter((_, j) => j !== i))}
+        />
+      ))}
+      <button type="button" onClick={() => save([...pages, { ...blankPage("basic"), name: `Attack ${pages.length + 1}` }])}>
+        + Add Page
+      </button>
+    </details>
   );
 }

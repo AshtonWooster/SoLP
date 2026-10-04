@@ -1,0 +1,696 @@
+// Combat (Act 8) and Pages (Act 3): turn phases, decks, slotting Pages, and resolving them,
+// including Dice Clashes, Counter Dice and Mass Attacks. Runs on the host (the GM's browser).
+import type { Dice, Page, ResistanceSet } from "./character.ts";
+import { ActionError, clamp, log, type Actor } from "./core.ts";
+export type { Actor };
+import { newId, rollDie } from "./id.ts";
+import {
+  DASH_LIGHT_COST,
+  DASH_MOVEMENT,
+  isMassAttack,
+  isOffensive,
+  moveCost,
+  movementPoints,
+  SPEED_DICE,
+  SPEED_DIE,
+  STARTING_HAND,
+  UPKEEP_DRAW,
+  UPKEEP_LIGHT,
+  WEAPON_RANGE,
+} from "./ruleset.ts";
+import type {
+  Card,
+  Combatant,
+  CombatState,
+  DeckState,
+  PageSource,
+  SlottedPage,
+  TableState,
+  Token,
+} from "./types.ts";
+
+// ---- What the host knows about each character's Pages ----
+
+/** A player's Pages, from their character sheet. The host supplies these; enemies use token.pages. */
+export interface Loadout {
+  /** Every Page the character might use, by id. */
+  pages: Record<string, Page>;
+  /** Combat Deck page ids, one entry per copy. */
+  deck: string[];
+  /** Auxiliary Deck page ids, one entry per copy. */
+  aux: string[];
+  resistances?: ResistanceSet;
+}
+
+export interface EngineContext {
+  loadout(tokenId: string): Loadout | undefined;
+}
+
+// ---- Small helpers ----
+
+function shuffle<T>(list: T[]): T[] {
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = rollDie(i + 1) - 1;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+export function activeToken(table: TableState): Token | undefined {
+  const c = table.combat;
+  return c ? table.tokens[c.order[c.turn]?.tokenId] : undefined;
+}
+
+function rollSpeed(token: Token): Combatant {
+  const bonus = token.justice ?? 0;
+  const roll = rollDie(SPEED_DIE);
+  return { tokenId: token.id, roll, bonus, speed: roll + bonus, dice: SPEED_DICE };
+}
+
+export function speedText(t: Token, c: Combatant) {
+  return `${t.name} ${c.speed} (${c.roll}${c.bonus >= 0 ? "+" : ""}${c.bonus})`;
+}
+
+/** Highest Speed first. On a tie players go before enemies; other ties keep their order (the GM can swap them). */
+export function sortOrder(table: TableState, order: Combatant[]): Combatant[] {
+  const sideRank = (c: Combatant) => (table.tokens[c.tokenId]?.side === "player" ? 0 : 1);
+  return [...order].sort((a, b) => b.speed - a.speed || sideRank(a) - sideRank(b));
+}
+
+const knockedOut = (t: Token | undefined) => !t || !!t.status?.knockedOut;
+const distance = (a: Token, b: Token) => moveCost(a, b);
+const diceText = (d: Dice) => `${d.counter ? "Counter " : ""}${d.kind[0].toUpperCase()}${d.kind.slice(1)} 1d${d.sides}${d.basePower >= 0 ? "+" : ""}${d.basePower}`;
+
+// ---- Decks (Act 7, "Deck Interactions") ----
+
+function setUpDeck(c: CombatState, token: Token, loadout: Loadout | undefined) {
+  if (token.side !== "player" || !loadout) return;
+  Object.assign(c.pages, loadout.pages);
+  const deck: DeckState = {
+    draw: shuffle(loadout.deck.map((pageId) => ({ id: newId(), pageId }))),
+    hand: [],
+    discard: [],
+    aux: loadout.aux.map((pageId) => ({ id: newId(), pageId })),
+    auxUsed: [],
+  };
+  c.decks[token.id] = deck;
+  for (let i = 0; i < STARTING_HAND; i++) draw(c, token.id);
+  if (loadout.resistances) token.resistances = loadout.resistances;
+}
+
+/** Take the top Page of the Combat Deck into the hand. An empty deck reshuffles the discard pile. */
+function draw(c: CombatState, tokenId: string): Card | undefined {
+  const deck = c.decks[tokenId];
+  if (!deck) return;
+  if (deck.draw.length === 0) {
+    if (deck.discard.length === 0) return;
+    deck.draw = shuffle(deck.discard);
+    deck.discard = [];
+  }
+  const card = deck.draw.pop()!;
+  deck.hand.push(card);
+  return card;
+}
+
+/** A used Page goes to the top of the discard pile (or, for Auxiliary Pages, out until combat ends). */
+function discard(c: CombatState, slot: SlottedPage) {
+  const deck = c.decks[slot.ownerId];
+  if (!deck || !slot.card) return;
+  if (slot.fromAux) deck.auxUsed.push(slot.card);
+  else deck.discard.push(slot.card);
+}
+
+// ---- Resources and statuses ----
+
+function resistance(t: Token, kind: Dice["kind"]): number {
+  if (!isOffensive(kind)) return 1;
+  return t.resistances?.[kind as keyof ResistanceSet] ?? 1;
+}
+
+/** Offensive Dice deal (Final Power) × (target's Type Resistance), rounded down. */
+function dealDamage(table: TableState, target: Token, amount: number, kind: Dice["kind"]) {
+  const dmg = Math.max(0, Math.floor(amount * resistance(target, kind)));
+  const r = target.resources;
+  r.hp = Math.max(0, r.hp - dmg);
+  log(table, `  ${target.name} takes ${dmg} ${kind} damage (${r.hp}/${r.maxHp} Health).`);
+  if (r.hp === 0 && !target.status?.knockedOut) {
+    target.status = { ...target.status, knockedOut: true };
+    log(table, `  ${target.name} is Knocked Out!`);
+    onKnockedOut(table, target);
+  }
+}
+
+function staggerDamage(table: TableState, target: Token, amount: number) {
+  if (amount <= 0) return;
+  const r = target.resources;
+  r.stagger = Math.max(0, r.stagger - amount);
+  log(table, `  ${target.name} takes ${amount} Stagger damage (${r.stagger}/${r.maxStagger}).`);
+  if (r.stagger === 0 && !target.status?.staggered) {
+    target.status = { ...target.status, staggered: true };
+    log(table, `  ${target.name} is Staggered!`);
+  }
+}
+
+function recoverStagger(table: TableState, t: Token, amount: number) {
+  const r = t.resources;
+  const before = r.stagger;
+  r.stagger = Math.min(r.maxStagger, r.stagger + amount);
+  if (r.stagger > 0 && t.status?.staggered) t.status = { ...t.status, staggered: false };
+  if (r.stagger > before) log(table, `  ${t.name} recovers ${r.stagger - before} Stagger Resist.`);
+}
+
+/** Clash Win heals 1 Sanity, Clash Lose costs 1. Sanity runs from -max to +max; the minimum means Panic. */
+function changeSanity(t: Token, delta: number) {
+  const r = t.resources;
+  r.sanity = clamp(r.sanity + delta, -r.maxSanity, r.maxSanity);
+  const panic = r.sanity <= -r.maxSanity;
+  if (panic !== !!t.status?.panic) t.status = { ...t.status, panic };
+}
+
+/** A Knocked Out character's slotted Pages go to the discard pile; Pages clashing with them stop clashing. */
+function onKnockedOut(table: TableState, t: Token) {
+  const c = table.combat;
+  if (!c) return;
+  for (const s of c.slots.filter((x) => x.ownerId === t.id)) removeSlot(c, s);
+  c.counters[t.id] = [];
+}
+
+function removeSlot(c: CombatState, slot: SlottedPage) {
+  c.slots = c.slots.filter((s) => s.id !== slot.id);
+  for (const s of c.slots) if (s.clashWith === slot.id) delete s.clashWith;
+  discard(c, slot);
+}
+
+// ---- Dice Clashes (Act 3, "Dice") ----
+
+interface LiveDie {
+  die: Dice;
+  owner: Token;
+  pageType: Page["type"];
+}
+
+const finalPower = (d: Dice) => rollDie(d.sides) + d.basePower;
+
+interface ClashOutcome {
+  winner: "a" | "b" | "draw";
+  /** What happens to each die afterwards: gone, reused as the current die, or moved to the bottom of its page. */
+  a: "gone" | "recycle" | "bottom";
+  b: "gone" | "recycle" | "bottom";
+}
+
+/**
+ * Two Dice clash: higher Final Power wins, equal is a Draw (both Negated), Evade vs Evade is
+ * always a Draw. Applies damage, Stagger and Sanity as the ruleset describes.
+ */
+function clashDice(table: TableState, a: LiveDie, b: LiveDie, fa = finalPower(a.die), fb = finalPower(b.die)): ClashOutcome {
+  const desc = `${a.owner.name}'s ${diceText(a.die)} (${fa}) vs ${b.owner.name}'s ${diceText(b.die)} (${fb})`;
+  if (fa === fb || (a.die.kind === "evade" && b.die.kind === "evade")) {
+    log(table, ` ${desc}: Draw, both Negated.`);
+    return { winner: "draw", a: "gone", b: "gone" };
+  }
+  const aWins = fa > fb;
+  const [w, l, fw, fl] = aWins ? [a, b, fa, fb] : [b, a, fb, fa];
+  log(table, ` ${desc}: ${w.owner.name} wins.`);
+  changeSanity(w.owner, 1);
+  changeSanity(l.owner, -1);
+  let wKeep: ClashOutcome["a"] = "gone";
+
+  if (isOffensive(w.die.kind)) {
+    if (isOffensive(l.die.kind)) {
+      // Melee vs Ranged: the winning melee die deals no damage; it's recycled to the bottom of the page.
+      if (w.pageType === "melee" && l.pageType === "ranged") {
+        log(table, `  Melee beats Ranged: the die is recycled to the bottom of the Page.`);
+        wKeep = "bottom";
+      } else dealDamage(table, l.owner, fw, w.die.kind);
+    } else if (l.die.kind === "block") {
+      // A losing Block reduces the damage (before Type Resistance) by its Final Power.
+      dealDamage(table, l.owner, Math.max(0, fw - fl), w.die.kind);
+    } else dealDamage(table, l.owner, fw, w.die.kind);
+  } else if (w.die.kind === "block") {
+    if (isOffensive(l.die.kind)) {
+      // A Ranged attacker outside the Melee target's range takes no Stagger damage from a winning Block.
+      const rangedSafe = l.pageType === "ranged" && w.pageType === "melee" && distance(l.owner, w.owner) > WEAPON_RANGE.melee;
+      if (rangedSafe) log(table, `  ${l.owner.name} is out of melee range: no Stagger damage.`);
+      else staggerDamage(table, l.owner, fw - fl);
+    } else staggerDamage(table, l.owner, fw);
+  } else if (w.die.kind === "evade") {
+    recoverStagger(table, w.owner, fw);
+    if (isOffensive(l.die.kind)) wKeep = "recycle";
+  }
+  return aWins ? { winner: "a", a: wKeep, b: "gone" } : { winner: "b", a: "gone", b: wKeep };
+}
+
+/** Unused Defensive Dice become Counter Dice on their owner. */
+function storeCounter(c: CombatState, owner: Token, die: Dice, pageId: string) {
+  (c.counters[owner.id] ??= []).push({ id: newId(), die: { ...die, counter: true }, pageId });
+}
+
+// ---- Resolving Pages (Act 8, "Resolve Slotted Pages") ----
+
+/**
+ * A One-Sided Attack: each die hits the target top to bottom. The target's Counter Dice answer
+ * automatically, in the order they were made; any used are lost when the page finishes.
+ */
+function oneSided(table: TableState, attacker: Token, target: Token, page: Page, dice: Dice[], powers?: number[]) {
+  const c = table.combat!;
+  const used = new Set<string>();
+  dice.forEach((die, i) => {
+    if (knockedOut(target) || knockedOut(attacker)) return;
+    const fp = powers?.[i] ?? finalPower(die);
+    // The oldest Counter Die answers; one that won stays first and answers the next die too.
+    const counter = (c.counters[target.id] ?? [])[0];
+    if (counter) {
+      used.add(counter.id);
+      const out = clashDice(table, { die, owner: attacker, pageType: page.type }, { die: counter.die, owner: target, pageType: c.pages[counter.pageId]?.type ?? "melee" }, fp);
+      // "On Clash Win, Counter Dice are Recycled": it answers the next die too. Otherwise it's spent.
+      if (out.winner !== "b") c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => x.id !== counter.id);
+      return;
+    }
+    if (isOffensive(die.kind)) {
+      log(table, ` ${attacker.name}'s ${diceText(die)} (${fp}) hits ${target.name}.`);
+      dealDamage(table, target, fp, die.kind);
+    } else storeCounter(c, attacker, die, page.id);
+  });
+  // Counter Dice used against this page are lost at the end of its resolution.
+  if (used.size) c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => !used.has(x.id));
+}
+
+/** Two Pages clash: their dice clash top to bottom until one side runs out. */
+function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
+  const c = table.combat!;
+  const owner = (s: SlottedPage) => table.tokens[s.ownerId];
+  const pa = c.pages[a.pageId];
+  const pb = c.pages[b.pageId];
+  const ta = owner(a);
+  const tb = owner(b);
+  log(table, `Clash: ${ta.name}'s ${pa.name} vs ${tb.name}'s ${pb.name}.`);
+  const qa = pa.dice.filter((d) => !d.counter).map((die) => ({ die, owner: ta, pageType: pa.type }));
+  const qb = pb.dice.filter((d) => !d.counter).map((die) => ({ die, owner: tb, pageType: pb.type }));
+
+  /** A Ranged Page with no Offensive Dice left, out of the Melee target's range, Negates the target's Offensive Dice. */
+  const rangedEscape = () => {
+    for (const [mine, theirs, me, them] of [
+      [qa, qb, ta, tb],
+      [qb, qa, tb, ta],
+    ] as const) {
+      const myType = mine === qa ? pa.type : pb.type;
+      const theirType = mine === qa ? pb.type : pa.type;
+      if (myType === "ranged" && theirType === "melee" && !mine.some((d) => isOffensive(d.die.kind)) && distance(me, them) > WEAPON_RANGE.melee) {
+        const before = theirs.length;
+        const kept = theirs.filter((d) => !isOffensive(d.die.kind));
+        theirs.splice(0, theirs.length, ...kept);
+        if (kept.length < before) log(table, `  ${me.name} is out of melee range: ${them.name}'s Offensive Dice are Negated.`);
+      }
+    }
+  };
+
+  for (let guard = 0; qa.length && qb.length && guard < 200; guard++) {
+    if (knockedOut(ta) || knockedOut(tb)) break;
+    const out = clashDice(table, qa[0], qb[0]);
+    for (const [q, fate] of [
+      [qa, out.a],
+      [qb, out.b],
+    ] as const) {
+      if (fate === "gone") q.shift();
+      else if (fate === "bottom") q.push(q.shift()!);
+    }
+    rangedEscape();
+  }
+  // Leftover dice: Offensive ones hit One-Sided (Counter Dice don't answer inside a clash);
+  // Defensive ones become Counter Dice.
+  for (const [q, me, them, page] of [
+    [qa, ta, tb, pa],
+    [qb, tb, ta, pb],
+  ] as const) {
+    for (const d of q) {
+      if (knockedOut(me) || knockedOut(them)) break;
+      if (isOffensive(d.die.kind)) {
+        const fp = finalPower(d.die);
+        log(table, ` ${me.name}'s ${diceText(d.die)} (${fp}) hits ${them.name} unopposed.`);
+        dealDamage(table, them, fp, d.die.kind);
+      } else storeCounter(c, me, d.die, page.id);
+    }
+  }
+}
+
+/** The page on a target's chosen Speed Die, or one clashing with this Mass Attack. */
+function defendingPage(c: CombatState, mass: SlottedPage, targetId: string, die: number) {
+  return c.slots.find((s) => s.ownerId === targetId && s.id !== mass.id && (s.clashWith === mass.id || s.die === die) && !isMassAttack(c.pages[s.pageId]?.type));
+}
+
+function resolveMass(table: TableState, slot: SlottedPage) {
+  const c = table.combat!;
+  const owner = table.tokens[slot.ownerId];
+  const page = c.pages[slot.pageId];
+  const dice = page.dice.filter((d) => !d.counter);
+  const targets = slot.targets.map((t) => ({ ref: t, token: table.tokens[t.tokenId] })).filter((t) => t.token && !knockedOut(t.token));
+  log(table, `${owner.name} unleashes ${page.name} (${page.type === "massSummation" ? "Summation" : "Individual"}) on ${targets.map((t) => t.token.name).join(", ")}.`);
+  const powers = dice.map(finalPower);
+
+  if (page.type === "massSummation") {
+    const total = powers.reduce((x, y) => x + y, 0);
+    const hit: Token[] = [];
+    for (const { ref, token } of targets) {
+      const defence = defendingPage(c, slot, token.id, ref.die);
+      if (!defence) {
+        hit.push(token);
+        continue;
+      }
+      const dp = c.pages[defence.pageId];
+      const theirs = dp.dice.filter((d) => !d.counter).map(finalPower).reduce((x, y) => x + y, 0);
+      log(table, ` Summation: ${owner.name} ${total} vs ${token.name}'s ${dp.name} ${theirs}.`);
+      if (theirs < total) {
+        log(table, `  ${token.name}'s ${dp.name} is Negated.`);
+        removeSlot(c, defence);
+        hit.push(token);
+      } else if (theirs > total) {
+        log(table, `  ${token.name} is unaffected.`);
+        delete defence.clashWith;
+      } else {
+        log(table, `  Draw: ${token.name}'s ${dp.name} is Negated and ${token.name} is unaffected.`);
+        removeSlot(c, defence);
+      }
+    }
+    for (const t of hit) oneSided(table, owner, t, page, dice, powers);
+  } else {
+    // Individual: each Mass die meets each target's next die; a lower target die is Negated and the Mass die lands.
+    const queues = new Map(
+      targets.map(({ ref, token }) => {
+        const defence = defendingPage(c, slot, token.id, ref.die);
+        return [token.id, { defence, dice: defence ? c.pages[defence.pageId].dice.filter((d) => !d.counter) : [] }];
+      }),
+    );
+    dice.forEach((die, i) => {
+      for (const { token } of targets) {
+        if (knockedOut(token) || knockedOut(owner)) continue;
+        const q = queues.get(token.id)!;
+        const theirs = q.dice.shift();
+        if (theirs) {
+          const tf = finalPower(theirs);
+          log(table, ` ${owner.name}'s ${diceText(die)} (${powers[i]}) vs ${token.name}'s ${diceText(theirs)} (${tf}).`);
+          if (tf >= powers[i]) continue;
+          log(table, `  ${token.name}'s die is Negated.`);
+        }
+        oneSided(table, owner, token, page, [die], [powers[i]]);
+      }
+    });
+    for (const q of queues.values()) if (q.defence) removeSlot(c, q.defence);
+  }
+}
+
+/** Resolve one slotted Page: clashing, Mass, or One-Sided. Returns false if it has to wait. */
+function resolveSlot(table: TableState, slot: SlottedPage): boolean {
+  const c = table.combat!;
+  const page = c.pages[slot.pageId];
+  const owner = table.tokens[slot.ownerId];
+  if (!page || knockedOut(owner)) {
+    removeSlot(c, slot);
+    return true;
+  }
+  if (isMassAttack(page.type)) {
+    resolveMass(table, slot);
+    removeSlot(c, slot);
+    return true;
+  }
+  const partner = slot.clashWith ? c.slots.find((s) => s.id === slot.clashWith) : undefined;
+  if (partner) {
+    // A clash with a Mass Attack (more than 1 target) waits for the Mass Attack owner's turn.
+    if (isMassAttack(c.pages[partner.pageId]?.type) && partner.targets.length > 1) return false;
+    clashPages(table, slot, partner);
+    removeSlot(c, partner);
+    removeSlot(c, slot);
+    return true;
+  }
+  const target = table.tokens[slot.targets[0]?.tokenId];
+  if (!target || knockedOut(target)) {
+    log(table, `${owner.name}'s ${page.name} has no target left.`);
+  } else {
+    log(table, `${owner.name} uses ${page.name} on ${target.name}.`);
+    oneSided(table, owner, target, page, page.dice.filter((d) => !d.counter));
+  }
+  removeSlot(c, slot);
+  return true;
+}
+
+// ---- Turn phases (Act 8, "On Your Turn") ----
+
+/**
+ * Runs the active character's turn forward until it needs input: Resolve Slotted Pages, then
+ * Upkeep, then Combat Actions (which waits for the player). Knocked Out characters are skipped.
+ * New phase effects (e.g. Passives at Upkeep) slot in here.
+ */
+function runPhases(table: TableState) {
+  const c = table.combat!;
+  for (let skips = 0; skips <= c.order.length; skips++) {
+    const token = activeToken(table);
+    if (!token) return;
+    if (knockedOut(token)) {
+      log(table, `${token.name} is Knocked Out; their turn is skipped.`);
+      advance(c);
+      continue;
+    }
+    // Resolve Slotted Pages
+    c.phase = "resolve";
+    log(table, `Round ${c.round}: ${token.name}'s turn.`);
+    for (const slot of c.slots.filter((s) => s.ownerId === token.id).sort((a, b) => a.die - b.die)) {
+      if (c.slots.includes(slot)) resolveSlot(table, slot);
+    }
+    if (!table.combat) return;
+    if (knockedOut(token)) continue;
+
+    // Upkeep: draw, restore Light, then (later) Effects and Passives. Counter Dice expire at its end.
+    c.phase = "upkeep";
+    const drawn = Array.from({ length: UPKEEP_DRAW }, () => draw(c, token.id)).filter(Boolean).length;
+    const r = token.resources;
+    const light = Math.min(UPKEEP_LIGHT, Math.max(0, r.maxLight - r.light));
+    r.light += light;
+    if (c.decks[token.id] || light) log(table, `  Upkeep: ${c.decks[token.id] ? `draws ${drawn}` : ""}${c.decks[token.id] && light ? ", " : ""}${light ? `+${light} Light` : ""}.`);
+    c.counters[token.id] = [];
+
+    // Combat Actions: wait for the player.
+    c.phase = "actions";
+    c.movementLeft = movementPoints(token.justice ?? 0);
+    delete c.aim;
+    return;
+  }
+  log(table, "Everyone in the turn order is Knocked Out.");
+}
+
+function advance(c: CombatState) {
+  c.turn += 1;
+  if (c.turn >= c.order.length) {
+    c.turn = 0;
+    c.round += 1;
+  }
+}
+
+/** Endstep (Effects and Passives later), then the next character's turn. */
+export function endTurn(table: TableState) {
+  const c = table.combat!;
+  c.phase = "endstep";
+  delete c.aim;
+  advance(c);
+  runPhases(table);
+}
+
+// ---- Starting, joining and leaving combat ----
+
+export function startCombat(table: TableState, ids: string[], ctx?: EngineContext) {
+  const order = sortOrder(table, ids.map((id) => rollSpeed(table.tokens[id])));
+  const c: CombatState = { round: 1, order, turn: 0, phase: "resolve", movementLeft: 0, pages: {}, decks: {}, slots: [], counters: {} };
+  table.combat = c;
+  for (const id of ids) setUpDeck(c, table.tokens[id], ctx?.loadout(id));
+  log(table, `Combat started. Speed: ${order.map((x) => speedText(table.tokens[x.tokenId], x)).join(", ")}.`);
+  runPhases(table);
+}
+
+export function addCombatant(table: TableState, token: Token, ctx?: EngineContext) {
+  const c = table.combat!;
+  const entry = rollSpeed(token);
+  const activeId = c.order[c.turn].tokenId;
+  c.order = sortOrder(table, [...c.order, entry]);
+  c.turn = c.order.findIndex((x) => x.tokenId === activeId);
+  setUpDeck(c, token, ctx?.loadout(token.id));
+  log(table, `${speedText(token, entry)} joined the turn order.`);
+}
+
+/** Takes a character out of the order, keeping the turn on the right person. */
+export function dropCombatant(table: TableState, tokenId: string) {
+  const c = table.combat;
+  if (!c) return;
+  const i = c.order.findIndex((x) => x.tokenId === tokenId);
+  if (i < 0) return;
+  c.order.splice(i, 1);
+  for (const s of c.slots.filter((x) => x.ownerId === tokenId)) removeSlot(c, s);
+  for (const s of c.slots) s.targets = s.targets.filter((t) => t.tokenId !== tokenId);
+  delete c.decks[tokenId];
+  delete c.counters[tokenId];
+  if (c.order.length === 0) {
+    delete table.combat;
+    log(table, "Combat ended: no one left in the turn order.");
+    return;
+  }
+  if (i < c.turn) c.turn -= 1;
+  else if (i === c.turn) {
+    if (c.turn >= c.order.length) {
+      c.turn = 0;
+      c.round += 1;
+    }
+    runPhases(table);
+  }
+}
+
+// ---- Combat Actions ----
+
+/** Who may act right now: the GM, or the player whose turn it is, during Combat Actions. */
+export function actingToken(table: TableState, actor: Actor): Token {
+  const c = table.combat;
+  const active = activeToken(table);
+  if (!c || !active) throw new ActionError("Combat hasn't started.");
+  if (actor.role !== "gm" && active.ownerId !== actor.uid) throw new ActionError("It isn't your turn.");
+  if (c.phase !== "actions") throw new ActionError("Wait for Combat Actions.");
+  return active;
+}
+
+/** "Characters cannot spend any Movement Points while they are the target of an enemy attack, unless the attack is a Mass Attack." */
+export function pinnedBy(table: TableState, token: Token): Token | undefined {
+  const c = table.combat;
+  if (!c) return;
+  const slot = c.slots.find((s) => {
+    const owner = table.tokens[s.ownerId];
+    return owner && owner.side !== token.side && !isMassAttack(c.pages[s.pageId]?.type) && s.targets.some((t) => t.tokenId === token.id);
+  });
+  return slot ? table.tokens[slot.ownerId] : undefined;
+}
+
+export function dash(table: TableState, actor: Actor) {
+  const token = actingToken(table, actor);
+  if (token.resources.light < DASH_LIGHT_COST) throw new ActionError(`Dashing costs ${DASH_LIGHT_COST} Light.`);
+  token.resources.light -= DASH_LIGHT_COST;
+  table.combat!.movementLeft += DASH_MOVEMENT;
+  log(table, `${token.name} Dashes: -${DASH_LIGHT_COST} Light, +${DASH_MOVEMENT} Movement.`);
+}
+
+/** The Page a player could use from the given source. */
+function pageFor(table: TableState, token: Token, source: PageSource, cardId?: string, pageId?: string): { page: Page; card?: Card } {
+  const c = table.combat!;
+  if (source === "enemy") {
+    const page = token.pages?.find((p) => p.id === pageId);
+    if (!page) throw new ActionError("That Page isn't on this enemy.");
+    return { page };
+  }
+  const deck = c.decks[token.id];
+  const card = (source === "aux" ? deck?.aux : deck?.hand)?.find((x) => x.id === cardId);
+  if (!card) throw new ActionError(source === "aux" ? "That Page isn't in the Auxiliary Deck." : "That Page isn't in the hand.");
+  return { page: c.pages[card.pageId], card };
+}
+
+/** Characters a Page can target: within Weapon Range and not Knocked Out. Only Instant Pages can target yourself. */
+export function validTargets(table: TableState, user: Token, page: Page): Token[] {
+  return Object.values(table.tokens).filter(
+    (t) => !knockedOut(t) && (t.id !== user.id || page.type === "instant") && distance(user, t) <= WEAPON_RANGE[page.type],
+  );
+}
+
+export function aim(table: TableState, actor: Actor, source: PageSource, cardId?: string, pageId?: string) {
+  const token = actingToken(table, actor);
+  if (source === "enemy" ? token.side !== "enemy" : token.side !== "player") throw new ActionError("Wrong kind of Page for this character.");
+  const { page, card } = pageFor(table, token, source, cardId, pageId);
+  table.combat!.aim = { tokenId: token.id, pageId: page.id, source, cardId: card?.id, targets: [] };
+}
+
+export function aimTarget(table: TableState, actor: Actor, tokenId: string) {
+  const token = actingToken(table, actor);
+  const a = table.combat!.aim;
+  if (!a || a.tokenId !== token.id) throw new ActionError("Pick a Page first.");
+  const page = pageForAim(table, token);
+  if (!isMassAttack(page.type)) throw new ActionError("Only Mass Attacks take several targets.");
+  if (a.targets.includes(tokenId)) a.targets = a.targets.filter((x) => x !== tokenId);
+  else {
+    if (!validTargets(table, token, page).some((t) => t.id === tokenId)) throw new ActionError("Out of range.");
+    a.targets.push(tokenId);
+  }
+}
+
+function pageForAim(table: TableState, token: Token): Page {
+  const c = table.combat!;
+  const a = c.aim!;
+  if (a.source === "enemy") {
+    const p = token.pages?.find((x) => x.id === a.pageId);
+    if (!p) throw new ActionError("That Page isn't on this enemy.");
+    c.pages[p.id] = p;
+    return p;
+  }
+  return pageFor(table, token, a.source, a.cardId).page;
+}
+
+/**
+ * Use a Combat Page (or Auxiliary/enemy Page): pay its Light and slot it on a free Speed Die
+ * against the target(s). Slotting against a Speed Die that already holds a Page starts a Clash.
+ * Instant Pages resolve right away and never clash.
+ */
+export function slot(table: TableState, actor: Actor, targetIds?: string[]) {
+  const c = table.combat!;
+  const token = actingToken(table, actor);
+  const a = c.aim;
+  if (!a || a.tokenId !== token.id) throw new ActionError("Pick a Page first.");
+  const page = pageForAim(table, token);
+  const ids = [...new Set(targetIds?.length ? targetIds : a.targets)];
+  const mass = isMassAttack(page.type);
+  if (ids.length === 0) throw new ActionError("Pick a target.");
+  if (!mass && ids.length > 1) throw new ActionError("This Page takes one target.");
+  const allowed = new Set(validTargets(table, token, page).map((t) => t.id));
+  for (const id of ids) if (!allowed.has(id)) throw new ActionError(`${table.tokens[id]?.name ?? "That target"} is out of range.`);
+  if (token.resources.light < page.cost) throw new ActionError(`${page.name} costs ${page.cost} Light; ${token.name} has ${token.resources.light}.`);
+
+  const card = a.cardId ? (a.source === "aux" ? c.decks[token.id]?.aux : c.decks[token.id]?.hand)?.find((x) => x.id === a.cardId) : undefined;
+  const combatant = c.order.find((x) => x.tokenId === token.id)!;
+  const free = Array.from({ length: combatant.dice }, (_, i) => i).find((i) => !c.slots.some((s) => s.ownerId === token.id && s.die === i));
+  if (page.type !== "instant" && free === undefined) throw new ActionError("No free Speed Die to slot it on.");
+
+  // Pay, and take the card out of the hand (or Auxiliary Deck).
+  token.resources.light -= page.cost;
+  const deck = c.decks[token.id];
+  if (deck && card) {
+    if (a.source === "aux") deck.aux = deck.aux.filter((x) => x.id !== card.id);
+    else deck.hand = deck.hand.filter((x) => x.id !== card.id);
+  }
+  delete c.aim;
+  const entry: SlottedPage = {
+    id: newId(),
+    ownerId: token.id,
+    die: free ?? 0,
+    pageId: page.id,
+    card,
+    fromAux: a.source === "aux",
+    targets: ids.map((tokenId) => ({ tokenId, die: 0 })),
+  };
+  const names = ids.map((id) => table.tokens[id].name).join(", ");
+
+  if (page.type === "instant") {
+    log(table, `${token.name} uses ${page.name} (Instant) on ${names}.`);
+    c.slots.push(entry);
+    resolveSlot(table, entry);
+    return;
+  }
+
+  // Counter Dice on the Page wait on the character until the end of their next Upkeep.
+  for (const d of page.dice.filter((x) => x.counter)) storeCounter(c, token, d, page.id);
+  c.slots.push(entry);
+
+  if (!mass) {
+    const ref = entry.targets[0];
+    const other = c.slots.find((s) => s.ownerId === ref.tokenId && s.die === ref.die && !s.clashWith && c.pages[s.pageId]?.type !== "instant");
+    const otherPage = other && c.pages[other.pageId];
+    // A Mass Attack only clashes with Pages from characters it's aimed at.
+    const clashes = other && (!isMassAttack(otherPage!.type) || other.targets.some((t) => t.tokenId === token.id));
+    if (other && clashes) {
+      entry.clashWith = other.id;
+      if (!isMassAttack(otherPage!.type)) other.clashWith = entry.id;
+      log(table, `${token.name} slots ${page.name} against ${names}: Clash with ${otherPage!.name}!`);
+      return;
+    }
+  }
+  log(table, `${token.name} slots ${page.name} against ${names} (${page.cost} Light).`);
+}

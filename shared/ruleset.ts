@@ -4,7 +4,20 @@
 // Effects_Passives_Proficiencies.md are empty). Every value marked PLACEHOLDER below stands in
 // for one of those; replace it here when the table is written and the whole app follows.
 import { newId } from "./id.ts";
-import type { Armor, Character, DeckEntry, Dice, Equipment, InventoryItem, Page, Passive, PrimaryStat, Weapon } from "./character.ts";
+import type {
+  Armor,
+  Character,
+  DeckEntry,
+  Dice,
+  DiceKind,
+  Equipment,
+  InventoryItem,
+  Page,
+  PageType,
+  Passive,
+  PrimaryStat,
+  Weapon,
+} from "./character.ts";
 import type { Resources } from "./types.ts";
 
 /** Act 5, Step 1: "For most campaigns, it is encouraged to start at Rank 9." */
@@ -87,6 +100,29 @@ export function movementPoints(justice: number): number {
 
 /** Upkeep: "characters restore, by default, 1 Light." */
 export const UPKEEP_LIGHT = 1;
+
+/** You asked for players to start combat with 3 Pages in hand. */
+export const STARTING_HAND = 3;
+/** Upkeep: "characters first draw a Page from their Combat Deck." */
+export const UPKEEP_DRAW = 1;
+/** PLACEHOLDER: the ruleset doesn't say how many Speed Dice (Page slots) a character has. */
+export const SPEED_DICE = 1;
+
+/** PLACEHOLDER: "Weapon Range" isn't defined yet. Tiles, measured like movement. */
+export const WEAPON_RANGE: Record<PageType, number> = {
+  melee: 1,
+  ranged: 6,
+  massSummation: 3,
+  massIndividual: 3,
+  instant: 6,
+};
+
+/** PLACEHOLDER: Dash converts Light into Movement Points; the exchange rate isn't in the ruleset yet. */
+export const DASH_LIGHT_COST = 1;
+export const DASH_MOVEMENT = 2;
+
+export const isMassAttack = (type: PageType) => type === "massSummation" || type === "massIndividual";
+export const isOffensive = (kind: DiceKind) => kind === "slash" || kind === "pierce" || kind === "blunt";
 
 /** "Characters can move tiles in any direction", so a diagonal step costs 1 like any other. */
 export function moveCost(from: { x: number; y: number }, to: { x: number; y: number }): number {

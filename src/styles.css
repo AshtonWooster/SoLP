@@ -296,3 +296,31 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .loadout h3 { margin: 0; }
 .deck-list.compact li { padding: 6px 8px; }
 .item-list li { padding: 3px 0; }
+
+/* Pages in combat */
+.grid { position: relative; }
+.arrows { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; overflow: visible; }
+.arrow { stroke: var(--sanity); stroke-width: 0.08; stroke-linecap: round; opacity: 0.85; }
+.arrow.clash { stroke: var(--accent); stroke-width: 0.12; stroke-dasharray: 0.25 0.12; }
+.token.targetable { outline: 3px dashed var(--accent); outline-offset: 3px; cursor: crosshair; }
+.token.picked { outline: 3px solid var(--hp); outline-offset: 3px; }
+.token.ko { filter: grayscale(1) brightness(0.6); }
+.token.staggered { border-style: dashed; }
+.token-status { position: absolute; bottom: 100%; font-size: clamp(0.5rem, 0.8vw, 0.7rem); background: #000a; color: #fff; padding: 0 4px; border-radius: 4px; white-space: nowrap; pointer-events: none; }
+.action-panel { background: var(--panel); border: 1px solid var(--accent); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.action-panel h4 { margin: 4px 0 0; }
+.hand { display: flex; flex-direction: column; gap: 6px; }
+.hand.compact { gap: 4px; margin-top: 6px; }
+.card { display: flex; flex-direction: column; align-items: stretch; gap: 4px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.card.static { padding: 4px 8px; }
+.card.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
+.card.unaffordable .page-cost { background: var(--line); color: var(--muted); }
+.card-effect { white-space: pre-wrap; }
+.aim-box { border: 1px dashed var(--accent); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.aim-box button.picked { border-color: var(--hp); color: var(--hp); }
+.slot-list li { padding: 3px 0; }
+.clash-tag { margin-left: 6px; font-size: 0.7rem; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0 6px; }
+.combat-log { list-style: none; margin: 0; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; font-size: 0.8rem; display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto; }
+.combat-log li.detail { color: var(--muted); padding-left: 10px; }
+.enemy-pages { display: flex; flex-direction: column; gap: 8px; }
+.enemy-pages summary { cursor: pointer; font-weight: 600; }

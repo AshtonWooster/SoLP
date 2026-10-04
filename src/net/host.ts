@@ -14,8 +14,18 @@ import {
   type DocumentChange,
 } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
-import { ActionError, applyAction, newId, newTable, seatPlayer, type Actor, type SeatProfile } from "../../shared/engine.ts";
-import { maxResources } from "../../shared/ruleset.ts";
+import {
+  ActionError,
+  applyAction,
+  newId,
+  newTable,
+  seatPlayer,
+  type Actor,
+  type EngineContext,
+  type Loadout,
+  type SeatProfile,
+} from "../../shared/engine.ts";
+import { auxiliaryDeck, cleanDeck, equipmentPages, maxResources } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
   GmNotes,
@@ -243,7 +253,6 @@ export class Host {
   }
 
   private onHello(peer: Peer, view: View) {
-    if (view === "board" && peer.actor.role !== "gm") return this.refuse(peer, "Only the GM can open this screen.");
     if (view === "play" && peer.actor.role === "gm") {
       return this.refuse(peer, "You're the GM of this game. Use the GM screen.");
     }
@@ -257,8 +266,24 @@ export class Host {
 
   private profileOf(uid: string): SeatProfile | undefined {
     const c = this.characters.get(uid);
-    return c ? { name: c.name, max: maxResources(c), justice: c.primary.justice } : undefined;
+    return c ? { name: c.name, max: maxResources(c), justice: c.primary.justice, resistances: c.armor?.resistances } : undefined;
   }
+
+  /** Lets combat read each player's decks from their character sheet. */
+  private ctx: EngineContext = {
+    loadout: (tokenId: string): Loadout | undefined => {
+      const ownerId = this.table?.tokens[tokenId]?.ownerId;
+      const c = ownerId ? this.characters.get(ownerId) : undefined;
+      if (!c) return undefined;
+      const aux = auxiliaryDeck(c);
+      return {
+        pages: Object.fromEntries([...equipmentPages(c).map((x) => x.page), ...aux.map((x) => x.page)].map((p) => [p.id, p])),
+        deck: cleanDeck(c).flatMap((e) => Array(e.copies).fill(e.pageId)),
+        aux: aux.flatMap((x) => Array(x.copies).fill(x.page.id)),
+        resistances: c.armor?.resistances,
+      };
+    },
+  };
 
   /** Brings every seated player's token in line with their character sheet. */
   private syncSeatedPlayers() {
@@ -293,11 +318,11 @@ export class Host {
     if (!this.table) throw new ActionError("The table is still loading.");
     let changed: boolean;
     if (action?.type === "setNote") {
-      applyAction(this.table, action, actor); // permission check only
+      applyAction(this.table, action, actor, this.ctx); // permission check only
       this.notes = { ...this.notes, [action.tokenId]: String(action.note ?? "").slice(0, 2000) };
       changed = true;
     } else {
-      changed = applyAction(this.table, action, actor);
+      changed = applyAction(this.table, action, actor, this.ctx);
     }
     if (changed) {
       this.changed();
@@ -317,13 +342,16 @@ export class Host {
     if (!this.table || this.stopped) return;
     const online = [this.me.uid, ...[...this.peers].filter((p) => p.view).map((p) => p.actor.uid)];
     const unique = [...new Set(online)];
+    // Players see how many Pages are left in each draw pile, but not their order.
+    const forPlayers = hideDrawPiles(this.table);
     for (const peer of this.peers) {
       if (!peer.view) continue;
+      const gm = peer.actor.role === "gm";
       this.send(peer, {
         t: "state",
-        table: this.table,
+        table: gm ? this.table : forPlayers,
         online: unique,
-        notes: peer.actor.role === "gm" ? this.notes : undefined,
+        notes: gm ? this.notes : undefined,
       });
     }
     // Hand the GM screen a fresh copy so React sees the change.
@@ -333,4 +361,13 @@ export class Host {
   private send(peer: Peer, msg: HostMessage) {
     if (peer.channel?.readyState === "open") peer.channel.send(JSON.stringify(msg));
   }
+}
+
+function hideDrawPiles(table: TableState): TableState {
+  const c = table.combat;
+  if (!c) return table;
+  const decks = Object.fromEntries(
+    Object.entries(c.decks).map(([id, d]) => [id, { ...d, draw: d.draw.map(() => ({ id: "hidden", pageId: "hidden" })) }]),
+  );
+  return { ...table, combat: { ...c, decks } };
 }
