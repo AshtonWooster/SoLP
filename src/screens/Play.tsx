@@ -54,6 +54,7 @@ export function Play() {
         ))}
       </section>
 
+      <Link to={`/games/${id}/characters/${user?.id}`}>My character sheet</Link>
       <Link to={`/games/${id}`} className="muted">← Back to the game</Link>
     </main>
   );

@@ -40,6 +40,12 @@ The GM tab saves the table to Firestore a few seconds after changes and when it 
 
 Keep the GM screen open during play. If it closes, phones and the board show "Waiting for the GM" and reconnect automatically when it's opened again. Opening the GM screen on another device moves hosting there.
 
+### Characters
+
+Each player makes one character per game from the game page ("Create my character"), following the six steps in Act 5 of the ruleset: Rank, Stats, Proficiencies, Augment, Weapons and Armor (with Passives, Pages and Dice), and Finishing Touches. Edits save automatically, and a checklist shows what's left. Party members can view each other's sheets; only the owner and the GM can edit, and only the GM can change Rank. At the table, a player's token takes its name and max Health, Stagger Resist, Sanity and Light from their character, and follows edits live.
+
+The ruleset's tables aren't written yet, so the numbers they'd provide (points per Rank, base Resources, max Passive Costs) are **placeholders in `shared/ruleset.ts`**. Fill them in there and the whole app follows.
+
 ### Players who can't connect
 
 Most networks allow direct connections. Some (many phone carriers, strict school or office Wi-Fi) block them; those players get stuck on "Reconnecting…". They need a **TURN relay**, which forwards their traffic. Firebase doesn't offer one. Options:

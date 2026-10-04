@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { doc, onSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, doc, onSnapshot, type DocumentData } from "firebase/firestore";
 import type { User } from "../shared/types.ts";
 import { db, friendlyError } from "./firebase.ts";
 
@@ -47,4 +47,18 @@ export function useDoc<T = DocumentData>(path: string | null): Live<T> {
     );
   }, [path]);
   return state;
+}
+
+/** Subscribes to every document in a collection, keyed by document id. */
+export function useCollection<T = DocumentData>(path: string | null): Record<string, T> | undefined {
+  const [docs, setDocs] = useState<Record<string, T> | undefined>(undefined);
+  useEffect(() => {
+    if (!path) return setDocs(undefined);
+    return onSnapshot(
+      collection(db, path),
+      (snap) => setDocs(Object.fromEntries(snap.docs.map((d) => [d.id, d.data() as T]))),
+      () => setDocs({}),
+    );
+  }, [path]);
+  return docs;
 }
