@@ -2,7 +2,7 @@
 // createGame function (for the starting table). Every action from a player or the GM
 // goes through applyAction, which checks whether that person may do it.
 // Combat turns, decks, Pages and clashes live in combat.ts.
-import type { Page, ResistanceSet } from "./character.ts";
+import type { DeckEntry, Page, ResistanceSet } from "./character.ts";
 import {
   activeToken,
   actingToken,
@@ -54,6 +54,7 @@ export interface SeatProfile {
   max: Pick<Resources, "maxHp" | "maxStagger" | "maxSanity" | "maxLight">;
   justice: number;
   resistances?: ResistanceSet;
+  staggerResistances?: ResistanceSet;
 }
 
 /**
@@ -73,6 +74,7 @@ export function seatPlayer(table: TableState, actor: Actor, profile?: SeatProfil
       token.resources = { ...token.resources, ...m, hp: m.maxHp, stagger: m.maxStagger, light: m.maxLight };
       token.justice = profile.justice;
       if (profile.resistances) token.resistances = profile.resistances;
+      if (profile.staggerResistances) token.staggerResistances = profile.staggerResistances;
     }
     table.tokens[token.id] = token;
     log(table, `${name} took a seat.`);
@@ -89,7 +91,9 @@ export function seatPlayer(table: TableState, actor: Actor, profile?: SeatProfil
     light: Math.min(r.light, m.maxLight),
     sanity: Math.min(r.sanity, m.maxSanity),
   };
-  const sameRes = JSON.stringify(existing.resistances ?? null) === JSON.stringify(profile.resistances ?? null);
+  const sameRes =
+    JSON.stringify([existing.resistances ?? null, existing.staggerResistances ?? null]) ===
+    JSON.stringify([profile.resistances ?? null, profile.staggerResistances ?? null]);
   const changed =
     existing.name !== name ||
     existing.justice !== profile.justice ||
@@ -100,6 +104,8 @@ export function seatPlayer(table: TableState, actor: Actor, profile?: SeatProfil
   existing.justice = profile.justice;
   if (profile.resistances) existing.resistances = profile.resistances;
   else delete existing.resistances;
+  if (profile.staggerResistances) existing.staggerResistances = profile.staggerResistances;
+  else delete existing.staggerResistances;
   return changed;
 }
 
@@ -223,16 +229,44 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
     case "setResistances": {
       gmOnly();
       const token = tokenOf(action.tokenId);
-      const r = action.resistances ?? ({} as ResistanceSet);
-      const num = (v: unknown) => Math.max(0, Math.min(10, Number(v) || 0));
-      token.resistances = { slash: num(r.slash), pierce: num(r.pierce), blunt: num(r.blunt) };
+      token.resistances = cleanResistances(action.resistances);
+      if (action.staggerResistances) token.staggerResistances = cleanResistances(action.staggerResistances);
       return true;
     }
-    case "setEnemyPages": {
+    case "setEnemyDeck": {
       gmOnly();
       const token = tokenOf(action.tokenId);
-      if (token.side !== "enemy") throw new ActionError("Players use their decks.");
-      token.pages = (Array.isArray(action.pages) ? action.pages : []).slice(0, 30) as Page[];
+      if (token.side !== "enemy") throw new ActionError("Players use their character's decks.");
+      token.pages = (Array.isArray(action.pages) ? action.pages : []).slice(0, 60) as Page[];
+      token.deck = cleanDeckEntries(action.deck);
+      return true;
+    }
+    case "spawnEnemy": {
+      gmOnly();
+      const t = action.template;
+      // Each copy is its own token with its own Health and so on; it shares only the starting values.
+      const same = Object.values(table.tokens).filter((x) => x.templateId === action.templateId).length;
+      const name = (String(t.name ?? "").trim().slice(0, 24) || "Enemy") + (same ? ` ${same + 1}` : "");
+      const token = makeToken(name, "enemy", clamp(action.x, 0, width - 1), clamp(action.y, 0, height - 1), String(t.color || "#d9534f"));
+      const n = (v: unknown, d: number) => Math.max(1, Math.round(Number(v) || d));
+      const maxHp = n(t.maxHp, 30);
+      const maxStagger = n(t.maxStagger, 20);
+      const maxLight = n(t.maxLight, 3);
+      const maxSanity = n(t.maxSanity, 15);
+      token.resources = { hp: maxHp, maxHp, stagger: maxStagger, maxStagger, light: maxLight, maxLight, sanity: 0, maxSanity };
+      token.justice = clamp(t.justice, -20, 50);
+      token.resistances = cleanResistances(t.resistances);
+      token.staggerResistances = cleanResistances(t.staggerResistances);
+      token.pages = (Array.isArray(t.pages) ? t.pages : []).slice(0, 60) as Page[];
+      token.deck = cleanDeckEntries(t.deck);
+      token.templateId = String(action.templateId);
+      // Find a free tile near where it was asked for.
+      for (let r = 0; occupied(table, token.x, token.y, token.id) && r < Math.max(width, height); r++) {
+        const spot = reachableTiles(table, token, r + 1).values().next().value;
+        if (spot) [token.x, token.y] = spot.split(",").map(Number);
+      }
+      table.tokens[token.id] = token;
+      say(`GM placed ${token.name}.`);
       return true;
     }
     case "startCombat": {
@@ -308,7 +342,7 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       dash(table, actor);
       return true;
     case "aim":
-      aim(table, actor, action.source, action.cardId, action.pageId);
+      aim(table, actor, action.source, action.cardId);
       return true;
     case "aimTarget":
       aimTarget(table, actor, String(action.tokenId));
@@ -321,11 +355,22 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       return true;
     }
     case "slot":
-      slot(table, actor, action.targets?.map(String));
+      slot(table, actor, action.targets?.map(String), ctx);
       return true;
     default:
       throw new ActionError("Unknown action.");
   }
+}
+
+function cleanResistances(r: Partial<ResistanceSet> | undefined): ResistanceSet {
+  const num = (v: unknown) => Math.max(0, Math.min(10, Number(v ?? 1)));
+  return { slash: num(r?.slash), pierce: num(r?.pierce), blunt: num(r?.blunt) };
+}
+
+function cleanDeckEntries(deck: unknown): DeckEntry[] {
+  return (Array.isArray(deck) ? deck : [])
+    .map((e) => ({ pageId: String(e?.pageId ?? ""), copies: Math.max(0, Math.min(99, Math.round(Number(e?.copies) || 0))) }))
+    .filter((e) => e.pageId && e.copies > 0);
 }
 
 /** Free tiles the token can reach with the given Movement Points, as "x,y". */

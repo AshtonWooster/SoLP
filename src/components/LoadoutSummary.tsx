@@ -1,10 +1,23 @@
 import { Link } from "react-router-dom";
 import type { Character } from "../../shared/character.ts";
-import { auxiliaryDeck, DECK_SIZE, deckSize, equipmentPages } from "../../shared/ruleset.ts";
+import { auxiliaryDeck, DECK_SIZE, deckSize, equipmentPages, isUsable } from "../../shared/ruleset.ts";
 import { PageSummary } from "./PageSummary.tsx";
 
 /** A player's decks, Trinket and Inventory at a glance, with links to edit them. */
-export function LoadoutSummary({ c, gameId, uid, inCombat }: { c: Character; gameId: string; uid: string; inCombat: boolean }) {
+export function LoadoutSummary({
+  c,
+  gameId,
+  uid,
+  inCombat,
+  onUse,
+}: {
+  c: Character;
+  gameId: string;
+  uid: string;
+  inCombat: boolean;
+  /** Use an item once (the GM marks which items are usable). */
+  onUse?: (itemId: string) => void;
+}) {
   const pages = new Map(equipmentPages(c).map((s) => [s.page.id, s.page]));
   const size = deckSize(c.deck);
   const aux = auxiliaryDeck(c);
@@ -53,9 +66,22 @@ export function LoadoutSummary({ c, gameId, uid, inCombat }: { c: Character; gam
         </div>
         <ul className="plain item-list">
           {c.inventory.items.map((i) => (
-            <li key={i.id}>
-              {i.name || "Unnamed"}
-              {i.stacking && <span className="muted"> ×{i.count}</span>} <span className="muted small">({i.kind})</span>
+            <li key={i.id} className="item-row">
+              <span>
+                {i.name || "Unnamed"}
+                {i.stacking && <span className="muted"> ×{i.count}</span>} <span className="muted small">({i.kind})</span>
+                {i.consumable && isUsable(i) && (
+                  <span className="muted small">
+                    {" "}
+                    · {i.uses ?? i.maxUses ?? 1}/{i.maxUses ?? 1} uses
+                  </span>
+                )}
+              </span>
+              {onUse && i.kind !== "tool" && isUsable(i) && (
+                <button type="button" onClick={() => onUse(i.id)}>
+                  Use
+                </button>
+              )}
             </li>
           ))}
           {c.inventory.items.length === 0 && <li className="muted">Empty</li>}

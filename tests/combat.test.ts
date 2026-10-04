@@ -51,11 +51,14 @@ function play(s: ReturnType<typeof setup>, pageId: string, targets: string[]) {
   s.act({ type: "slot", targets });
 }
 
-/** The Rat (GM) uses one of its pages. */
-function enemyPlay(s: ReturnType<typeof setup>, pageId: string, targets: string[]) {
-  s.act({ type: "aim", source: "enemy", pageId }, gm);
+/** An enemy (run by the GM) uses a Page from its hand. */
+function enemyUse(s: ReturnType<typeof setup>, tokenId: string, pageId: string, targets: string[]) {
+  const card = s.c().decks[tokenId]?.hand.find((x) => x.pageId === pageId);
+  assert.ok(card, `${pageId} in ${tokenId}'s hand`);
+  s.act({ type: "aim", source: "hand", cardId: card.id }, gm);
   s.act({ type: "slot", targets }, gm);
 }
+const enemyPlay = (s: ReturnType<typeof setup>, pageId: string, targets: string[]) => enemyUse(s, "rat", pageId, targets);
 
 const endTurn = (s: ReturnType<typeof setup>, who: Actor = gm) => s.act({ type: "endTurn" }, who);
 
@@ -103,7 +106,7 @@ test("slotting pays Light and holds the Page until the owner's next turn, then i
 });
 
 test("not enough Light, out of range, or not your turn: refused", () => {
-  const s = setup([page("big", "melee", [die("slash", 3)], 9), page("slash", "melee", [die("slash", 3)])]);
+  const s = setup([page("big", "melee", [die("slash", 3)], 9), page("slash", "melee", [die("slash", 3)])], [], ["big", "slash"]);
   assert.throws(() => play(s, "big", ["rat"]), /costs 9 Light/);
   s.table.tokens.rat.x = 8;
   assert.throws(() => play(s, "slash", ["rat"]), /out of range/);
@@ -216,8 +219,7 @@ test("leftover Defensive dice become Counter Dice, which answer One-Sided attack
   endTurn(s, p1);
   enemyPlay(s, "bite", ["roland"]); // Rat targets Roland.
   endTurn(s);
-  s.act({ type: "aim", source: "enemy", pageId: "maul" }, gm); // Wolf attacks Roland One-Sided.
-  s.act({ type: "slot", targets: ["roland"] }, gm);
+  enemyUse(s, "wolf", "maul", ["roland"]); // Wolf attacks Roland One-Sided.
   endTurn(s);
   play(s, "guard", ["rat"]); // Round 2, Roland: clash with the Rat's Bite.
   endTurn(s, p1);
@@ -253,8 +255,7 @@ test("Mass Attack (Summation), 2 targets: clashes wait for the Mass owner's turn
   endTurn(s, p1);
   enemyPlay(s, "bite", ["roland"]); // Clashes with the Sweep (it's aimed at the Rat)...
   endTurn(s);
-  s.act({ type: "aim", source: "enemy", pageId: "shield" }, gm);
-  s.act({ type: "slot", targets: ["roland"] }, gm);
+  enemyUse(s, "wolf", "shield", ["roland"]);
   endTurn(s);
   // ...and waited: Roland's turn resolves the Sweep. 10 vs Bite 3: Negated, Rat takes 5+5. 10 vs Shield 20: Wolf unaffected.
   assert.equal(s.hp("rat"), 20);
@@ -307,11 +308,106 @@ test("at 0 Health a character is Knocked Out: their Pages are discarded and thei
   assert.equal(activeToken(s.table)!.id, "roland", "the Rat's turn was skipped");
 });
 
-test("players can't use enemy Pages or act for someone else; the GM can", () => {
+test("players can't act on an enemy's turn; the GM uses the enemy's hand", () => {
   const s = setup([page("slash", "melee", [die("slash", 3)])], [page("bite", "melee", [die("pierce", 3)])]);
-  assert.throws(() => s.act({ type: "aim", source: "enemy", pageId: "bite" }), /Wrong kind/);
   endTurn(s, p1);
-  assert.throws(() => s.act({ type: "aim", source: "enemy", pageId: "bite" }), /isn't your turn/);
+  const card = s.c().decks.rat.hand[0];
+  assert.throws(() => s.act({ type: "aim", source: "hand", cardId: card.id }), /isn't your turn/);
   enemyPlay(s, "bite", ["roland"]);
   assert.equal(s.c().slots.length, 1);
+});
+
+test("Offensive dice also deal Stagger damage, scaled by Stagger Resistance; a losing Block reduces both", () => {
+  const s = setup([page("blunt", "melee", [die("blunt", 10)])]);
+  s.table.tokens.rat.resistances = { slash: 1, pierce: 1, blunt: 0.5 };
+  s.table.tokens.rat.staggerResistances = { slash: 1, pierce: 1, blunt: 2 };
+  play(s, "blunt", ["rat"]);
+  endTurn(s, p1);
+  endTurn(s);
+  assert.equal(s.hp("rat"), 25, "10 × 0.5");
+  assert.equal(s.table.tokens.rat.resources.stagger, 0, "10 × 2 = 20 Stagger");
+  assert.ok(s.table.tokens.rat.status?.staggered);
+
+  const t = setup([page("slash", "melee", [die("slash", 7)])], [page("guard", "melee", [die("block", 4)])]);
+  endTurn(t, p1);
+  enemyPlay(t, "guard", ["roland"]);
+  endTurn(t);
+  play(t, "slash", ["rat"]);
+  endTurn(t, p1);
+  assert.equal(t.hp("rat"), 27, "7 - 4 = 3 damage");
+  // Block lost (Sanity aside): 3 Stagger from the hit.
+  assert.equal(t.table.tokens.rat.resources.stagger, 17);
+});
+
+test("Mass Attack (Summation) tie: the attack still lands, but the defender's Page is unaffected", () => {
+  const s = setup([page("sweep", "massSummation", [die("slash", 3), die("slash", 3)])], [page("guard", "melee", [die("block", 6)])]);
+  s.table.tokens.wolf = token("wolf", "enemy", 2, 3, { justice: -200, pages: [page("howl", "melee", [die("blunt", 1)])] });
+  s.act({ type: "addCombatant", tokenId: "wolf" }, gm);
+  play(s, "sweep", ["rat", "wolf"]);
+  endTurn(s, p1);
+  enemyPlay(s, "guard", ["roland"]); // clashes with the Sweep, which waits
+  endTurn(s);
+  endTurn(s); // Wolf passes
+  // Roland's turn: Sweep 6 vs Guard 6, a tie. Both 3s still land on the Rat; its Guard stays slotted.
+  assert.equal(s.hp("rat"), 24);
+  const guard = s.c().slots.find((x) => x.ownerId === "rat");
+  assert.ok(guard && !guard.clashWith);
+});
+
+test("enemies have decks too: 3 Pages to start, 1 more each Upkeep, no size limit", () => {
+  const bite = page("bite", "melee", [die("pierce", 3)]);
+  const s = setup([page("slash", "melee", [die("slash", 3)])], [bite]);
+  s.table.tokens.rat.deck = [{ pageId: "bite", copies: 40 }];
+  // Re-run combat so the new deck is used.
+  s.act({ type: "endCombat" }, gm);
+  s.act({ type: "startCombat", tokenIds: ["roland", "rat"] }, gm);
+  assert.equal(s.c().decks.rat.hand.length, 3);
+  assert.equal(s.c().decks.rat.draw.length, 37);
+  endTurn(s, p1);
+  assert.equal(s.c().decks.rat.hand.length, 4);
+});
+
+test("placing an enemy template makes independent, numbered copies; removing one removes only it", () => {
+  const s = setup([page("slash", "melee", [die("slash", 3)])]);
+  const template = {
+    name: "Thug", color: "#a33", maxHp: 12, maxStagger: 8, maxLight: 2, maxSanity: 10, justice: 2,
+    resistances: { slash: 1, pierce: 2, blunt: 0.5 }, staggerResistances: { slash: 1, pierce: 1, blunt: 1 },
+    pages: [page("club", "melee", [die("blunt", 4)])], deck: [{ pageId: "club", copies: 20 }],
+  };
+  s.act({ type: "spawnEnemy", templateId: "thug", template, x: 8, y: 8 }, gm);
+  s.act({ type: "spawnEnemy", templateId: "thug", template, x: 8, y: 8 }, gm);
+  const thugs = Object.values(s.table.tokens).filter((t) => t.templateId === "thug");
+  assert.deepEqual(thugs.map((t) => t.name).sort(), ["Thug", "Thug 2"]);
+  assert.notDeepEqual([thugs[0].x, thugs[0].y], [thugs[1].x, thugs[1].y], "placed on different tiles");
+  assert.equal(thugs[0].resources.hp, 12);
+  s.act({ type: "setResources", tokenId: thugs[0].id, patch: { hp: 3 } }, gm);
+  assert.equal(thugs[1].resources.hp, 12, "each copy has its own Health");
+  assert.notEqual(thugs[0].pages, thugs[1].pages, "copies don't share Page lists");
+  s.act({ type: "removeToken", tokenId: thugs[0].id }, gm);
+  assert.ok(!s.table.tokens[thugs[0].id] && s.table.tokens[thugs[1].id]);
+  assert.throws(() => s.act({ type: "spawnEnemy", templateId: "thug", template, x: 1, y: 1 }), /GM only/);
+});
+
+test("using a Tool's Auxiliary Page tells the host which item, so its uses can count down", () => {
+  const used: string[] = [];
+  const table: TableState = {
+    map: { name: "m", width: 16, height: 10 },
+    tokens: {
+      roland: token("roland", "player", 2, 2, { ownerId: "p1", justice: 100 }),
+      rat: token("rat", "enemy", 3, 2, { justice: -100, pages: [page("bite", "melee", [die("pierce", 3)])] }),
+    },
+    log: [],
+  };
+  const grenade = page("grenade", "instant", [die("blunt", 5)]);
+  const ctx: EngineContext = {
+    loadout: (id) => (id === "roland" ? { pages: { grenade }, deck: [], aux: [{ pageId: "grenade", itemId: "item-1" }] } : undefined),
+    onToolUsed: (tokenId, itemId) => used.push(`${tokenId}:${itemId}`),
+  };
+  applyAction(table, { type: "startCombat", tokenIds: ["roland", "rat"] }, gm, ctx);
+  const card = table.combat!.decks.roland.aux[0];
+  applyAction(table, { type: "aim", source: "aux", cardId: card.id }, p1, ctx);
+  applyAction(table, { type: "slot", targets: ["rat"] }, p1, ctx);
+  assert.deepEqual(used, ["roland:item-1"]);
+  assert.equal(table.tokens.rat.resources.hp, 25);
+  assert.equal(table.combat!.decks.roland.aux.length, 0, "gone until combat ends");
 });

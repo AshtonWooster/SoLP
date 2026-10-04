@@ -43,8 +43,8 @@ function PageButton({
 }
 
 /**
- * Combat Actions for whoever's turn it is: use a Page from the hand, Auxiliary Deck or (for
- * enemies) their page list, pick targets, Dash, and end the turn.
+ * Combat Actions for whoever's turn it is: use a Page from the hand or Auxiliary Deck, pick
+ * targets, Dash, and end the turn. The GM uses this for enemies too.
  */
 export function ActionPanel({ table, token, canAct, send }: Props) {
   const c = table.combat!;
@@ -54,14 +54,14 @@ export function ActionPanel({ table, token, canAct, send }: Props) {
   const aim = c.aim?.tokenId === token.id ? c.aim : undefined;
   const light = token.resources.light;
   const pageOf = (card: Card) => c.pages[card.pageId];
-  const aimedPage = aim && (c.pages[aim.pageId] ?? token.pages?.find((p) => p.id === aim.pageId));
+  const aimedPage = aim && c.pages[aim.pageId];
   const targets = aimedPage ? validTargets(table, token, aimedPage) : [];
   const mass = aimedPage && isMassAttack(aimedPage.type);
   const pinned = pinnedBy(table, token);
   const mySlots = c.slots.filter((s) => s.ownerId === token.id);
   const counters = c.counters[token.id] ?? [];
-  const pick = (source: PageSource, card?: Card, page?: Page) =>
-    aim && (aim.cardId ? aim.cardId === card?.id : aim.pageId === page?.id) ? send({ type: "clearAim" }) : send({ type: "aim", source, cardId: card?.id, pageId: page?.id });
+  const pick = (source: PageSource, card: Card) =>
+    aim?.cardId === card.id ? send({ type: "clearAim" }) : send({ type: "aim", source, cardId: card.id });
 
   return (
     <div className="action-panel">
@@ -110,17 +110,7 @@ export function ActionPanel({ table, token, canAct, send }: Props) {
         </>
       )}
 
-      {token.side === "enemy" && (
-        <>
-          <h4>{token.name}'s Pages</h4>
-          <div className="hand">
-            {(token.pages ?? []).length === 0 && <p className="muted small">No Pages yet. Add some in this enemy's token panel.</p>}
-            {(token.pages ?? []).map((page) => (
-              <PageButton key={page.id} page={page} selected={aim?.pageId === page.id} affordable={page.cost <= light} disabled={!live} onPick={() => pick("enemy", undefined, page)} />
-            ))}
-          </div>
-        </>
-      )}
+      {!deck && <p className="muted small">{token.name} has no deck in this combat.</p>}
 
       {aim && aimedPage && live && (
         <div className="aim-box">

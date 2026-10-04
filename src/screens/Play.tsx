@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { Character } from "../../shared/character.ts";
-import { blankCharacter } from "../../shared/ruleset.ts";
+import { blankCharacter, useItemIn } from "../../shared/ruleset.ts";
+import { doc, updateDoc } from "firebase/firestore";
+import { db, friendlyError } from "../firebase.ts";
 import type { Token } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
 import { LoadoutSummary } from "../components/LoadoutSummary.tsx";
@@ -86,7 +88,17 @@ export function Play() {
       )}
 
       {character.data && user && (
-        <LoadoutSummary c={{ ...blankCharacter(user.id, ""), ...character.data }} gameId={id} uid={user.id} inCombat={!!combat} />
+        <LoadoutSummary
+          c={{ ...blankCharacter(user.id, ""), ...character.data }}
+          gameId={id}
+          uid={user.id}
+          inCombat={!!combat}
+          onUse={(itemId) =>
+            updateDoc(doc(db, "games", id, "characters", user.id), {
+              "inventory.items": useItemIn(character.data!.inventory?.items ?? [], itemId),
+            }).catch((e) => setError(friendlyError(e)))
+          }
+        />
       )}
 
       <section>

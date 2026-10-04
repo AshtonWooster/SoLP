@@ -60,6 +60,27 @@ export interface ResistanceSet {
 
 export interface Armor extends Equipment {
   resistances: ResistanceSet;
+  /** Stagger damage multipliers per Damage Type, applied like resistances. */
+  staggerResistances: ResistanceSet;
+}
+
+/** An enemy the GM designed, which can be placed on the map any number of times (shared/types.ts). */
+export interface EnemyTemplate {
+  name: string;
+  color: string;
+  maxHp: number;
+  maxStagger: number;
+  maxLight: number;
+  maxSanity: number;
+  justice: number;
+  resistances: ResistanceSet;
+  staggerResistances: ResistanceSet;
+  /** Every Page the enemy has. */
+  pages: Page[];
+  /** Copies of each Page in its Combat Deck. No size limit. */
+  deck: DeckEntry[];
+  notes: string;
+  updatedAt: number;
 }
 
 export interface Proficiency {
@@ -97,8 +118,13 @@ export interface InventoryItem {
   maxStack: number;
   /** The Tool's Page. */
   page?: Page;
-  /** Consumed when used, instead of reusable. */
+  /** Set by the GM: the item can be used (Tools are always usable through the Auxiliary Deck). */
+  usable?: boolean;
+  /** Set by the GM: the item runs out after maxUses uses. */
   consumable?: boolean;
+  maxUses?: number;
+  /** Uses left before it's used up (one item of a stack). */
+  uses?: number;
 }
 
 export interface Inventory {

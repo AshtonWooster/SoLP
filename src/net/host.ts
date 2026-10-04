@@ -25,7 +25,7 @@ import {
   type Loadout,
   type SeatProfile,
 } from "../../shared/engine.ts";
-import { auxiliaryDeck, cleanDeck, equipmentPages, maxResources } from "../../shared/ruleset.ts";
+import { auxiliaryDeck, cleanDeck, equipmentPages, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
   GmNotes,
@@ -266,7 +266,15 @@ export class Host {
 
   private profileOf(uid: string): SeatProfile | undefined {
     const c = this.characters.get(uid);
-    return c ? { name: c.name, max: maxResources(c), justice: c.primary.justice, resistances: c.armor?.resistances } : undefined;
+    return c
+      ? {
+          name: c.name,
+          max: maxResources(c),
+          justice: c.primary.justice,
+          resistances: c.armor?.resistances,
+          staggerResistances: c.armor?.staggerResistances,
+        }
+      : undefined;
   }
 
   /** Lets combat read each player's decks from their character sheet. */
@@ -279,9 +287,20 @@ export class Host {
       return {
         pages: Object.fromEntries([...equipmentPages(c).map((x) => x.page), ...aux.map((x) => x.page)].map((p) => [p.id, p])),
         deck: cleanDeck(c).flatMap((e) => Array(e.copies).fill(e.pageId)),
-        aux: aux.flatMap((x) => Array(x.copies).fill(x.page.id)),
+        aux: aux.flatMap((x) => Array.from({ length: x.copies }, () => ({ pageId: x.page.id, itemId: x.item.id }))),
         resistances: c.armor?.resistances,
+        staggerResistances: c.armor?.staggerResistances,
       };
+    },
+    // A consumable Tool used in combat counts down on the player's character sheet.
+    onToolUsed: (tokenId: string, itemId: string) => {
+      const ownerId = this.table?.tokens[tokenId]?.ownerId;
+      const c = ownerId ? this.characters.get(ownerId) : undefined;
+      if (!ownerId || !c?.inventory.items.some((i) => i.id === itemId && i.consumable)) return;
+      const items = useItemIn(c.inventory.items, itemId);
+      updateDoc(doc(db, "games", this.gameId, "characters", ownerId), { "inventory.items": items }).catch((err) =>
+        console.error("Couldn't update the Tool's uses", err),
+      );
     },
   };
 
@@ -363,11 +382,16 @@ export class Host {
   }
 }
 
+/** What players may see: draw piles keep their size but not their order, and enemies' hands are hidden. */
 function hideDrawPiles(table: TableState): TableState {
   const c = table.combat;
   if (!c) return table;
+  const hidden = () => ({ id: "hidden", pageId: "hidden" });
   const decks = Object.fromEntries(
-    Object.entries(c.decks).map(([id, d]) => [id, { ...d, draw: d.draw.map(() => ({ id: "hidden", pageId: "hidden" })) }]),
+    Object.entries(c.decks).map(([id, d]) => {
+      const enemy = table.tokens[id]?.side === "enemy";
+      return [id, { ...d, draw: d.draw.map(hidden), hand: enemy ? d.hand.map(hidden) : d.hand }];
+    }),
   );
   return { ...table, combat: { ...c, decks } };
 }

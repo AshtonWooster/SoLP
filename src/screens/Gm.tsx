@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { GameDoc, GmMeta, Resources, TableAction, TableState, Token } from "../../shared/types.ts";
-import { useAuth, useDoc } from "../api.ts";
+import { useAuth, useCollection, useDoc } from "../api.ts";
 import { activeToken } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
 import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
-import { PageEditor } from "../components/EquipmentEditor.tsx";
-import { blankPage, isMassAttack } from "../../shared/ruleset.ts";
+import { EnemyDeckEditor } from "../components/EnemyDeckEditor.tsx";
+import { blankEnemy, isMassAttack } from "../../shared/ruleset.ts";
+import type { EnemyTemplate } from "../../shared/character.ts";
 import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
@@ -90,6 +91,7 @@ export function Gm() {
 
       <section className="gm-side">
         {table && <CombatPanel table={table} act={act} />}
+        {table && <TemplatePanel gameId={id} table={table} act={act} />}
         <AddEnemy onAdd={(name) => act({ type: "addToken", name, side: "enemy", x: 10, y: 5 })} />
         {selected ? (
           <Override
@@ -216,23 +218,35 @@ function Override({
             ? `Slash ×${token.resistances.slash}, Pierce ×${token.resistances.pierce}, Blunt ×${token.resistances.blunt}`
             : "×1 (no Armor)"}
           , from their Armor
+          {token.staggerResistances &&
+            `. Stagger: Slash ×${token.staggerResistances.slash}, Pierce ×${token.staggerResistances.pierce}, Blunt ×${token.staggerResistances.blunt}`}
         </p>
       ) : (
-        <div className="row wrap">
-          {(["slash", "pierce", "blunt"] as const).map((k) => (
-            <label className="inline" key={k}>
-              {k[0].toUpperCase() + k.slice(1)} ×
-              <NumberField
-                value={token.resistances?.[k] ?? 1}
-                onCommit={(n) =>
-                  act({ type: "setResistances", tokenId: token.id, resistances: { slash: 1, pierce: 1, blunt: 1, ...token.resistances, [k]: n } })
-                }
-              />
-            </label>
+        <>
+          {(["resistances", "staggerResistances"] as const).map((field) => (
+            <div className="row wrap" key={field}>
+              <span className="muted small">{field === "resistances" ? "Damage" : "Stagger"}</span>
+              {(["slash", "pierce", "blunt"] as const).map((k) => (
+                <label className="inline" key={k}>
+                  {k[0].toUpperCase() + k.slice(1)} ×
+                  <NumberField
+                    value={token[field]?.[k] ?? 1}
+                    onCommit={(n) => {
+                      const base = { slash: 1, pierce: 1, blunt: 1 };
+                      const res = { ...base, ...token.resistances };
+                      const stag = { ...base, ...token.staggerResistances };
+                      if (field === "resistances") res[k] = n;
+                      else stag[k] = n;
+                      act({ type: "setResistances", tokenId: token.id, resistances: res, staggerResistances: stag });
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
           ))}
-        </div>
+        </>
       )}
-      {token.side === "enemy" && <EnemyPages token={token} act={act} />}
+      {token.side === "enemy" && <EnemyDeck token={token} act={act} />}
       <label className="muted">GM notes (hidden from players)</label>
       <textarea
         value={notes}
@@ -373,26 +387,50 @@ function CombatPanel({ table, act }: { table: TableState; act: (action: TableAct
   );
 }
 
-/** The Pages an enemy can use in combat. */
-function EnemyPages({ token, act }: { token: Token; act: (action: TableAction) => boolean }) {
-  const pages = token.pages ?? [];
-  const save = (next: typeof pages) => act({ type: "setEnemyPages", tokenId: token.id, pages: next });
+/** An enemy token's own Pages and deck (copied from its template, editable per token). */
+function EnemyDeck({ token, act }: { token: Token; act: (action: TableAction) => boolean }) {
   return (
     <details className="enemy-pages">
+      <summary>Pages and deck ({(token.pages ?? []).length} Pages)</summary>
+      <EnemyDeckEditor
+        pages={token.pages ?? []}
+        deck={token.deck ?? []}
+        onChange={(pages, deck) => act({ type: "setEnemyDeck", tokenId: token.id, pages, deck })}
+      />
+    </details>
+  );
+}
+
+/** The GM's enemy templates, ready to place on the map. */
+function TemplatePanel({ gameId, table, act }: { gameId: string; table: TableState; act: (action: TableAction) => boolean }) {
+  const templates = useCollection<EnemyTemplate>(`games/${gameId}/enemies`);
+  const list = Object.entries(templates ?? {}).sort((a, b) => a[1].name.localeCompare(b[1].name));
+  const place = (templateId: string, t: EnemyTemplate) => {
+    const { notes: _notes, updatedAt: _updatedAt, ...template } = { ...blankEnemy(), ...t };
+    act({ type: "spawnEnemy", templateId, template, x: table.map.width - 3, y: Math.floor(table.map.height / 2) });
+  };
+  return (
+    <details className="combat-panel template-panel" open>
       <summary>
-        Combat Pages ({pages.length})
+        <strong>Enemy templates</strong>{" "}
+        <a href={`/games/${gameId}/enemies`} target="_blank" rel="noreferrer" className="small">
+          Manage ↗
+        </a>
       </summary>
-      {pages.map((p, i) => (
-        <PageEditor
-          key={p.id}
-          page={p}
-          onChange={(np) => save(pages.map((x, j) => (j === i ? np : x)))}
-          onRemove={() => save(pages.filter((_, j) => j !== i))}
-        />
-      ))}
-      <button type="button" onClick={() => save([...pages, { ...blankPage("basic"), name: `Attack ${pages.length + 1}` }])}>
-        + Add Page
-      </button>
+      {templates && list.length === 0 && <p className="muted small">None yet. Create some under Manage.</p>}
+      <ul className="plain">
+        {list.map(([tid, t]) => (
+          <li key={tid}>
+            <span>
+              <span className="swatch" style={{ background: t.color }} /> {t.name || "Unnamed"}{" "}
+              <span className="muted small">
+                ×{Object.values(table.tokens).filter((x) => x.templateId === tid).length} on map
+              </span>
+            </span>
+            <button onClick={() => place(tid, t)}>Place</button>
+          </li>
+        ))}
+      </ul>
     </details>
   );
 }

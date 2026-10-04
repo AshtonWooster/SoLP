@@ -51,6 +51,10 @@ export function GamePage() {
                 Open the board
                 <small>Shared map, for the iPad or TV. Log in there as yourself.</small>
               </Link>
+              <Link className="big-button secondary" to={`/games/${id}/enemies`}>
+                Enemy templates
+                <small>Design enemies and their decks</small>
+              </Link>
             </div>
             <section className="panel">
               <h3>Invite players</h3>

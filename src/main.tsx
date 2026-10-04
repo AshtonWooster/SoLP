@@ -13,6 +13,7 @@ import { Board } from "./screens/Board.tsx";
 import { Gm } from "./screens/Gm.tsx";
 import { Play } from "./screens/Play.tsx";
 import { CharacterSheet } from "./screens/CharacterSheet.tsx";
+import { Enemies } from "./screens/Enemies.tsx";
 import "./styles.css";
 
 /** Sends logged-out visitors to the login page, then back here afterwards. */
@@ -48,6 +49,7 @@ function App() {
           <Route path="/games/:id/board" element={authed(<Board />)} />
           <Route path="/games/:id/play" element={authed(<Play />)} />
           <Route path="/games/:id/characters/:uid" element={authed(<CharacterSheet />)} />
+          <Route path="/games/:id/enemies" element={authed(<Enemies />)} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

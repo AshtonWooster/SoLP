@@ -10,6 +10,7 @@ import type {
   DeckEntry,
   Dice,
   DiceKind,
+  EnemyTemplate,
   Equipment,
   InventoryItem,
   Page,
@@ -145,7 +146,7 @@ export function blankItem(kind: InventoryItem["kind"]): InventoryItem {
     stacking: false,
     count: 1,
     maxStack: 1,
-    ...(kind === "tool" ? { page: { ...blankPage("basic"), type: "instant" as const }, consumable: false } : {}),
+    ...(kind === "tool" ? { page: { ...blankPage("basic"), type: "instant" as const } } : {}),
   };
 }
 
@@ -210,6 +211,55 @@ export function inventoryChecks(c: Character): Check[] {
   ];
 }
 
+/** Tools are used through the Auxiliary Deck; other items only once the GM marks them usable. */
+export const isUsable = (i: InventoryItem) => i.kind === "tool" || !!i.usable;
+
+/**
+ * Uses an item once. A consumable item counts down its uses; when the last is spent, one item
+ * of the stack is used up (or the item is gone). Returns the updated item, or null if none are left.
+ */
+export function useItem(item: InventoryItem): InventoryItem | null {
+  if (!item.consumable) return item;
+  const max = Math.max(1, item.maxUses ?? 1);
+  const left = (item.uses ?? max) - 1;
+  if (left > 0) return { ...item, uses: left };
+  if (item.stacking && item.count > 1) return { ...item, count: item.count - 1, uses: max };
+  return null;
+}
+
+/** Applies useItem to the item with this id in an inventory list. */
+export function useItemIn(items: InventoryItem[], itemId: string): InventoryItem[] {
+  return items.flatMap((i) => (i.id === itemId ? [useItem(i)].filter((x): x is InventoryItem => !!x) : [i]));
+}
+
+// ---- Enemies ----
+
+/** An enemy's Combat Deck: the copies the GM set, or one of each Page if none were set. No size limit. */
+export function enemyDeck(pages: Page[], deck: DeckEntry[] | undefined): string[] {
+  const ids = new Set(pages.map((p) => p.id));
+  const entries = deck?.length ? deck.filter((e) => ids.has(e.pageId)) : pages.map((p) => ({ pageId: p.id, copies: 1 }));
+  return entries.flatMap((e) => Array(Math.max(0, e.copies)).fill(e.pageId));
+}
+
+export function blankEnemy(): EnemyTemplate {
+  const attack = { ...blankPage("basic"), name: "Attack" };
+  return {
+    name: "",
+    color: "#d9534f",
+    maxHp: 30,
+    maxStagger: 20,
+    maxLight: 3,
+    maxSanity: 15,
+    justice: 0,
+    resistances: { slash: 1, pierce: 1, blunt: 1 },
+    staggerResistances: { slash: 1, pierce: 1, blunt: 1 },
+    pages: [attack],
+    deck: [{ pageId: attack.id, copies: 6 }],
+    notes: "",
+    updatedAt: Date.now(),
+  };
+}
+
 // ---- Blank pieces for the editor ----
 
 export function blankCharacter(ownerId: string, name: string): Character {
@@ -256,7 +306,11 @@ function blankEquipment(): Equipment {
   return { id: newId(), name: "", description: "", passives: [], pages: [blankPage("basic"), blankPage("special")] };
 }
 export const blankWeapon = (): Weapon => ({ ...blankEquipment(), hands: 1 });
-export const blankArmor = (): Armor => ({ ...blankEquipment(), resistances: { slash: 1, pierce: 1, blunt: 1 } });
+export const blankArmor = (): Armor => ({
+  ...blankEquipment(),
+  resistances: { slash: 1, pierce: 1, blunt: 1 },
+  staggerResistances: { slash: 1, pierce: 1, blunt: 1 },
+});
 
 // ---- Checks ----
 

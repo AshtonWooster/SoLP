@@ -324,3 +324,23 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .combat-log li.detail { color: var(--muted); padding-left: 10px; }
 .enemy-pages { display: flex; flex-direction: column; gap: 8px; }
 .enemy-pages summary { cursor: pointer; font-weight: 600; }
+.enemy-deck { display: flex; flex-direction: column; gap: 10px; }
+.enemy-page { display: flex; flex-direction: column; gap: 4px; }
+
+/* Enemy templates */
+.enemies { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+.enemies .sheet-header { grid-column: 1 / -1; }
+.template-list { display: flex; flex-direction: column; gap: 10px; }
+.template-item { width: 100%; text-align: left; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: none; }
+.template-item.active { border-color: var(--accent); }
+.template-item .small { width: 100%; }
+.template-main, .template-editor { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.template-editor h2 { margin: 0; }
+.template-editor input[type="color"] { width: 64px; height: 38px; padding: 2px; }
+.template-panel { display: flex; flex-direction: column; gap: 6px; }
+.template-panel li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
+@media (max-width: 800px) { .enemies { grid-template-columns: 1fr; } }
+.use-controls { align-items: center; }
+.badge-soft { font-size: 0.75rem; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; color: var(--muted); }
+.item-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.item-row button { padding: 0.25rem 0.7rem; }

@@ -141,6 +141,17 @@ test("decks lock for players during combat; the GM can still edit them", async (
   await assertSucceeds(updateDoc(ref("p1"), { deck: [{ pageId: "b", copies: 12 }] }));
 });
 
+test("enemy templates are GM-only", async () => {
+  const ref = (who: string) => doc(as(who), "games", GAME, "enemies", "thug");
+  await assertSucceeds(setDoc(ref("gm"), { name: "Thug", maxHp: 12 }));
+  await assertSucceeds(getDoc(ref("gm")));
+  await assertSucceeds(getDocs(collection(as("gm"), "games", GAME, "enemies")));
+  await assertFails(getDoc(ref("p1")));
+  await assertFails(getDocs(collection(as("p1"), "games", GAME, "enemies")));
+  await assertFails(setDoc(ref("p1"), { name: "Weak Thug", maxHp: 1 }));
+  await assertSucceeds(deleteDoc(ref("gm")));
+});
+
 test("only the GM sees the invite code and GM notes", async () => {
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "meta")));
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "notes")));

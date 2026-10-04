@@ -14,8 +14,9 @@
 //   games/{gameId}/session/host     SessionDoc         members read; GM write
 //   games/{gameId}/signals/{id}     SignalDoc          connection handshakes (see src/net)
 //   games/{gameId}/characters/{uid} Character          members read; owner or GM write (shared/character.ts)
+//   games/{gameId}/enemies/{id}     EnemyTemplate      GM only (shared/character.ts)
 
-import type { Dice, Page, ResistanceSet } from "./character.ts";
+import type { DeckEntry, Dice, Page, ResistanceSet } from "./character.ts";
 
 // ---- Accounts and games ----
 
@@ -97,8 +98,13 @@ export interface Token {
   justice?: number;
   /** Damage multipliers. Players' come from their Armor; the GM sets enemies'. Missing = 1. */
   resistances?: ResistanceSet;
-  /** Pages an enemy can use in combat (set by the GM). Players use their decks instead. */
+  /** Stagger damage multipliers, the same way. */
+  staggerResistances?: ResistanceSet;
+  /** An enemy's Pages and Combat Deck (players' come from their character sheet). */
   pages?: Page[];
+  deck?: DeckEntry[];
+  /** The enemy template this token was copied from. */
+  templateId?: string;
   status?: TokenStatus;
 }
 
@@ -132,6 +138,8 @@ export type TurnPhase = "resolve" | "upkeep" | "actions" | "endstep";
 export interface Card {
   id: string;
   pageId: string;
+  /** For Auxiliary Pages: the inventory Tool it comes from. */
+  itemId?: string;
 }
 
 /** A player's Pages during combat. The draw pile's order is hidden from other players. */
@@ -183,8 +191,8 @@ export interface Aim {
   targets: string[];
 }
 
-/** Where a Page being used comes from: a player's hand or Auxiliary Deck, or an enemy's page list. */
-export type PageSource = "hand" | "aux" | "enemy";
+/** Where a Page being used comes from: the hand or the Auxiliary Deck. */
+export type PageSource = "hand" | "aux";
 
 /** Present while combat is running (Act 8). */
 export interface CombatState {
@@ -198,7 +206,7 @@ export interface CombatState {
   movementLeft: number;
   /** Every Page in play, by id, copied from character sheets and enemy page lists. */
   pages: Record<string, Page>;
-  /** Players' decks, by token id. */
+  /** Everyone's decks in this combat, by token id. */
   decks: Record<string, DeckState>;
   slots: SlottedPage[];
   /** Counter Dice waiting on each character, by token id, in the order they were made. */
@@ -213,6 +221,9 @@ export interface TableState {
   log: string[];
   combat?: CombatState;
 }
+
+/** What a placed enemy copies from its template. */
+export type EnemyTemplateData = Omit<import("./character.ts").EnemyTemplate, "updatedAt" | "notes">;
 
 /** Partial resource edits the GM can apply to any token. */
 export type ResourcePatch = Partial<Resources>;
@@ -229,8 +240,11 @@ export type TableAction =
   | { type: "setResources"; tokenId: string; patch: ResourcePatch }
   | { type: "setNote"; tokenId: string; note: string }
   | { type: "setJustice"; tokenId: string; justice: number }
-  | { type: "setResistances"; tokenId: string; resistances: ResistanceSet }
-  | { type: "setEnemyPages"; tokenId: string; pages: Page[] }
+  | { type: "setResistances"; tokenId: string; resistances: ResistanceSet; staggerResistances?: ResistanceSet }
+  /** Replace an enemy token's Pages and deck. */
+  | { type: "setEnemyDeck"; tokenId: string; pages: Page[]; deck: DeckEntry[] }
+  /** Place a copy of an enemy template on the map. */
+  | { type: "spawnEnemy"; templateId: string; template: EnemyTemplateData; x: number; y: number }
   // Combat (Act 8). The GM runs it; whoever's turn it is can move, use Pages and end their turn.
   | { type: "startCombat"; tokenIds: string[] }
   | { type: "endCombat" }

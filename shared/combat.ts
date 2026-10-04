@@ -6,6 +6,7 @@ export type { Actor };
 import { newId, rollDie } from "./id.ts";
 import {
   DASH_LIGHT_COST,
+  enemyDeck,
   DASH_MOVEMENT,
   isMassAttack,
   isOffensive,
@@ -37,13 +38,16 @@ export interface Loadout {
   pages: Record<string, Page>;
   /** Combat Deck page ids, one entry per copy. */
   deck: string[];
-  /** Auxiliary Deck page ids, one entry per copy. */
-  aux: string[];
+  /** Auxiliary Deck: one entry per copy, with the inventory Tool it comes from. */
+  aux: { pageId: string; itemId: string }[];
   resistances?: ResistanceSet;
+  staggerResistances?: ResistanceSet;
 }
 
 export interface EngineContext {
   loadout(tokenId: string): Loadout | undefined;
+  /** A Tool's Auxiliary Page was used, so the host can count down the item's uses. */
+  onToolUsed?(tokenId: string, itemId: string): void;
 }
 
 // ---- Small helpers ----
@@ -84,19 +88,27 @@ const diceText = (d: Dice) => `${d.counter ? "Counter " : ""}${d.kind[0].toUpper
 
 // ---- Decks (Act 7, "Deck Interactions") ----
 
-function setUpDeck(c: CombatState, token: Token, loadout: Loadout | undefined) {
-  if (token.side !== "player" || !loadout) return;
+/** Enemies carry their own Pages and deck on the token; players' come from their character sheet. */
+function enemyLoadout(token: Token): Loadout {
+  const pages = token.pages ?? [];
+  return { pages: Object.fromEntries(pages.map((p) => [p.id, p])), deck: enemyDeck(pages, token.deck), aux: [] };
+}
+
+function setUpDeck(c: CombatState, token: Token, ctx: EngineContext | undefined) {
+  const loadout = token.side === "enemy" ? enemyLoadout(token) : ctx?.loadout(token.id);
+  if (!loadout) return;
   Object.assign(c.pages, loadout.pages);
   const deck: DeckState = {
     draw: shuffle(loadout.deck.map((pageId) => ({ id: newId(), pageId }))),
     hand: [],
     discard: [],
-    aux: loadout.aux.map((pageId) => ({ id: newId(), pageId })),
+    aux: loadout.aux.map((a) => ({ id: newId(), pageId: a.pageId, itemId: a.itemId })),
     auxUsed: [],
   };
   c.decks[token.id] = deck;
   for (let i = 0; i < STARTING_HAND; i++) draw(c, token.id);
   if (loadout.resistances) token.resistances = loadout.resistances;
+  if (loadout.staggerResistances) token.staggerResistances = loadout.staggerResistances;
 }
 
 /** Take the top Page of the Combat Deck into the hand. An empty deck reshuffles the discard pile. */
@@ -123,17 +135,22 @@ function discard(c: CombatState, slot: SlottedPage) {
 
 // ---- Resources and statuses ----
 
-function resistance(t: Token, kind: Dice["kind"]): number {
+function resistance(set: ResistanceSet | undefined, kind: Dice["kind"]): number {
   if (!isOffensive(kind)) return 1;
-  return t.resistances?.[kind as keyof ResistanceSet] ?? 1;
+  return set?.[kind as keyof ResistanceSet] ?? 1;
 }
 
-/** Offensive Dice deal (Final Power) × (target's Type Resistance), rounded down. */
+/**
+ * Offensive Dice deal (Final Power) × (target's Type Resistance) damage, and the same amount ×
+ * their Stagger Resistance as Stagger damage. Both round down.
+ */
 function dealDamage(table: TableState, target: Token, amount: number, kind: Dice["kind"]) {
-  const dmg = Math.max(0, Math.floor(amount * resistance(target, kind)));
+  const dmg = Math.max(0, Math.floor(amount * resistance(target.resistances, kind)));
+  const stagger = Math.max(0, Math.floor(amount * resistance(target.staggerResistances, kind)));
   const r = target.resources;
   r.hp = Math.max(0, r.hp - dmg);
   log(table, `  ${target.name} takes ${dmg} ${kind} damage (${r.hp}/${r.maxHp} Health).`);
+  staggerDamage(table, target, stagger);
   if (r.hp === 0 && !target.status?.knockedOut) {
     target.status = { ...target.status, knockedOut: true };
     log(table, `  ${target.name} is Knocked Out!`);
@@ -368,8 +385,10 @@ function resolveMass(table: TableState, slot: SlottedPage) {
         log(table, `  ${token.name} is unaffected.`);
         delete defence.clashWith;
       } else {
-        log(table, `  Draw: ${token.name}'s ${dp.name} is Negated and ${token.name} is unaffected.`);
-        removeSlot(c, defence);
+        // A tie: the Mass Attack still lands, but the defender's Page is left alone.
+        log(table, `  Tie: ${token.name}'s ${dp.name} is unaffected, but the attack still lands.`);
+        delete defence.clashWith;
+        hit.push(token);
       }
     }
     for (const t of hit) oneSided(table, owner, t, page, dice, powers);
@@ -500,7 +519,7 @@ export function startCombat(table: TableState, ids: string[], ctx?: EngineContex
   const order = sortOrder(table, ids.map((id) => rollSpeed(table.tokens[id])));
   const c: CombatState = { round: 1, order, turn: 0, phase: "resolve", movementLeft: 0, pages: {}, decks: {}, slots: [], counters: {} };
   table.combat = c;
-  for (const id of ids) setUpDeck(c, table.tokens[id], ctx?.loadout(id));
+  for (const id of ids) setUpDeck(c, table.tokens[id], ctx);
   log(table, `Combat started. Speed: ${order.map((x) => speedText(table.tokens[x.tokenId], x)).join(", ")}.`);
   runPhases(table);
 }
@@ -511,7 +530,7 @@ export function addCombatant(table: TableState, token: Token, ctx?: EngineContex
   const activeId = c.order[c.turn].tokenId;
   c.order = sortOrder(table, [...c.order, entry]);
   c.turn = c.order.findIndex((x) => x.tokenId === activeId);
-  setUpDeck(c, token, ctx?.loadout(token.id));
+  setUpDeck(c, token, ctx);
   log(table, `${speedText(token, entry)} joined the turn order.`);
 }
 
@@ -572,14 +591,9 @@ export function dash(table: TableState, actor: Actor) {
   log(table, `${token.name} Dashes: -${DASH_LIGHT_COST} Light, +${DASH_MOVEMENT} Movement.`);
 }
 
-/** The Page a player could use from the given source. */
-function pageFor(table: TableState, token: Token, source: PageSource, cardId?: string, pageId?: string): { page: Page; card?: Card } {
+/** The card being used from the hand or Auxiliary Deck. */
+function pageFor(table: TableState, token: Token, source: PageSource, cardId?: string): { page: Page; card: Card } {
   const c = table.combat!;
-  if (source === "enemy") {
-    const page = token.pages?.find((p) => p.id === pageId);
-    if (!page) throw new ActionError("That Page isn't on this enemy.");
-    return { page };
-  }
   const deck = c.decks[token.id];
   const card = (source === "aux" ? deck?.aux : deck?.hand)?.find((x) => x.id === cardId);
   if (!card) throw new ActionError(source === "aux" ? "That Page isn't in the Auxiliary Deck." : "That Page isn't in the hand.");
@@ -593,11 +607,10 @@ export function validTargets(table: TableState, user: Token, page: Page): Token[
   );
 }
 
-export function aim(table: TableState, actor: Actor, source: PageSource, cardId?: string, pageId?: string) {
+export function aim(table: TableState, actor: Actor, source: PageSource, cardId?: string) {
   const token = actingToken(table, actor);
-  if (source === "enemy" ? token.side !== "enemy" : token.side !== "player") throw new ActionError("Wrong kind of Page for this character.");
-  const { page, card } = pageFor(table, token, source, cardId, pageId);
-  table.combat!.aim = { tokenId: token.id, pageId: page.id, source, cardId: card?.id, targets: [] };
+  const { page, card } = pageFor(table, token, source === "aux" ? "aux" : "hand", cardId);
+  table.combat!.aim = { tokenId: token.id, pageId: page.id, source: source === "aux" ? "aux" : "hand", cardId: card.id, targets: [] };
 }
 
 export function aimTarget(table: TableState, actor: Actor, tokenId: string) {
@@ -614,14 +627,7 @@ export function aimTarget(table: TableState, actor: Actor, tokenId: string) {
 }
 
 function pageForAim(table: TableState, token: Token): Page {
-  const c = table.combat!;
-  const a = c.aim!;
-  if (a.source === "enemy") {
-    const p = token.pages?.find((x) => x.id === a.pageId);
-    if (!p) throw new ActionError("That Page isn't on this enemy.");
-    c.pages[p.id] = p;
-    return p;
-  }
+  const a = table.combat!.aim!;
   return pageFor(table, token, a.source, a.cardId).page;
 }
 
@@ -630,7 +636,7 @@ function pageForAim(table: TableState, token: Token): Page {
  * against the target(s). Slotting against a Speed Die that already holds a Page starts a Clash.
  * Instant Pages resolve right away and never clash.
  */
-export function slot(table: TableState, actor: Actor, targetIds?: string[]) {
+export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?: EngineContext) {
   const c = table.combat!;
   const token = actingToken(table, actor);
   const a = c.aim;
@@ -653,8 +659,10 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[]) {
   token.resources.light -= page.cost;
   const deck = c.decks[token.id];
   if (deck && card) {
-    if (a.source === "aux") deck.aux = deck.aux.filter((x) => x.id !== card.id);
-    else deck.hand = deck.hand.filter((x) => x.id !== card.id);
+    if (a.source === "aux") {
+      deck.aux = deck.aux.filter((x) => x.id !== card.id);
+      if (card.itemId) ctx?.onToolUsed?.(token.id, card.itemId);
+    } else deck.hand = deck.hand.filter((x) => x.id !== card.id);
   }
   delete c.aim;
   const entry: SlottedPage = {
