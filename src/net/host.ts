@@ -97,7 +97,7 @@ export class Host {
         getDoc(doc(db, "games", this.gameId, "gm", "notes")),
       ]);
       if (this.stopped) return;
-      this.table = (tableSnap.data() as TableState | undefined) ?? newTable();
+      this.table = upgradeTable((tableSnap.data() as TableState | undefined) ?? newTable());
       this.notes = (notesSnap.data() as GmNotes | undefined)?.tokens ?? {};
 
       // Load characters before anyone sits down, then follow edits to them.
@@ -385,6 +385,33 @@ export class Host {
   private send(peer: Peer, msg: HostMessage) {
     if (peer.channel?.readyState === "open") peer.channel.send(JSON.stringify(msg));
   }
+}
+
+/** Fill in what tables saved by older versions are missing, so screens can rely on it. */
+function upgradeTable(t: TableState): TableState {
+  t.tokens ??= {};
+  t.log ??= [];
+  t.map ??= newTable().map;
+  const c = t.combat;
+  if (c) {
+    c.order ??= [];
+    c.turn ??= 0;
+    c.round ??= 1;
+    c.phase ??= "actions";
+    c.movementLeft ??= 0;
+    c.pages ??= {};
+    c.decks ??= {};
+    c.slots ??= [];
+    c.counters ??= {};
+    for (const d of Object.values(c.decks)) {
+      d.draw ??= [];
+      d.hand ??= [];
+      d.discard ??= [];
+      d.aux ??= [];
+      d.auxUsed ??= [];
+    }
+  }
+  return t;
 }
 
 /** What players may see: draw piles keep their size but not their order, and enemies' hands are hidden. */
