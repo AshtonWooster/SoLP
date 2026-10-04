@@ -4,7 +4,7 @@
 // Effects_Passives_Proficiencies.md are empty). Every value marked PLACEHOLDER below stands in
 // for one of those; replace it here when the table is written and the whole app follows.
 import { newId } from "./id.ts";
-import type { Armor, Character, Dice, Equipment, Page, Passive, PrimaryStat, Weapon } from "./character.ts";
+import type { Armor, Character, DeckEntry, Dice, Equipment, InventoryItem, Page, Passive, PrimaryStat, Weapon } from "./character.ts";
 import type { Resources } from "./types.ts";
 
 /** Act 5, Step 1: "For most campaigns, it is encouraged to start at Rank 9." */
@@ -93,6 +93,87 @@ export function moveCost(from: { x: number; y: number }, to: { x: number; y: num
   return Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
 }
 
+// ---- Inventory and decks (Acts 6 and 7) ----
+
+/** "A character's Inventory consists of a starting maximum of 9 Slots." */
+export const INVENTORY_SLOTS = 9;
+/** "Combat Decks, by default, consist of 12 pages." */
+export const DECK_SIZE = 12;
+
+export function blankItem(kind: InventoryItem["kind"]): InventoryItem {
+  return {
+    id: newId(),
+    name: "",
+    description: "",
+    kind,
+    stacking: false,
+    count: 1,
+    maxStack: 1,
+    ...(kind === "tool" ? { page: { ...blankPage("basic"), type: "instant" as const }, consumable: false } : {}),
+  };
+}
+
+/** A Page the Combat Deck can use, with the Equipment it comes from. */
+export interface DeckSource {
+  page: Page;
+  from: string;
+}
+
+/** Combat Pages from current Equipment: every equipped Weapon and the Armor. */
+export function equipmentPages(c: Character): DeckSource[] {
+  const gear: Equipment[] = [...c.weapons, ...(c.armor ? [c.armor] : [])];
+  return gear.flatMap((e) => e.pages.map((page) => ({ page, from: e.name.trim() || "Unnamed equipment" })));
+}
+
+/** Basic Pages can be copied any number of times; Special Pages are unique. */
+export function maxCopies(page: Page): number {
+  return page.kind === "special" ? 1 : DECK_SIZE;
+}
+
+export function deckSize(deck: DeckEntry[]): number {
+  return deck.reduce((a, e) => a + e.copies, 0);
+}
+
+/** Drops entries for Pages no longer on the character's Equipment, and trims over-copied Special Pages. */
+export function cleanDeck(c: Character): DeckEntry[] {
+  const pages = new Map(equipmentPages(c).map((s) => [s.page.id, s.page]));
+  return c.deck
+    .filter((e) => pages.has(e.pageId) && e.copies > 0)
+    .map((e) => ({ ...e, copies: Math.min(e.copies, maxCopies(pages.get(e.pageId)!)) }));
+}
+
+/** The Auxiliary Deck: each Tool in the Inventory brings its Page (one copy per item in a stack). */
+export function auxiliaryDeck(c: Character): { item: InventoryItem; page: Page; copies: number }[] {
+  return c.inventory.items
+    .filter((i) => i.kind === "tool" && i.page)
+    .map((i) => ({ item: i, page: i.page!, copies: i.stacking ? i.count : 1 }));
+}
+
+export function deckChecks(c: Character): Check[] {
+  const pages = new Map(equipmentPages(c).map((s) => [s.page.id, s.page]));
+  const size = deckSize(c.deck);
+  const missing = c.deck.filter((e) => !pages.has(e.pageId)).length;
+  const overSpecial = c.deck.filter((e) => pages.get(e.pageId)?.kind === "special" && e.copies > 1);
+  return [
+    { step: "Decks", ok: size === DECK_SIZE, text: `Combat Deck: ${size} of ${DECK_SIZE} Pages` },
+    ...(missing ? [{ step: "Decks", ok: false, text: `${missing} Page${missing === 1 ? "" : "s"} in the deck no longer on your Equipment` }] : []),
+    ...overSpecial.map((e) => ({ step: "Decks", ok: false, text: `${pages.get(e.pageId)!.name || "A Special Page"} is unique: 1 copy only` })),
+  ];
+}
+
+export function inventoryChecks(c: Character): Check[] {
+  const inv = c.inventory;
+  return [
+    { step: "Inventory", ok: inv.items.length <= inv.slotCount, text: `Inventory: ${inv.items.length} of ${inv.slotCount} Slots used` },
+    ...inv.items
+      .filter((i) => i.stacking && i.count > i.maxStack)
+      .map((i) => ({ step: "Inventory", ok: false, text: `${i.name || "A stack"} holds ${i.count}; max is ${i.maxStack}` })),
+    ...(inv.trinket && inv.trinket.kind !== "trinket"
+      ? [{ step: "Inventory", ok: false, text: "Only a Trinket can go in the Trinket Slot" }]
+      : []),
+  ];
+}
+
 // ---- Blank pieces for the editor ----
 
 export function blankCharacter(ownerId: string, name: string): Character {
@@ -117,6 +198,8 @@ export function blankCharacter(ownerId: string, name: string): Character {
       relationships: "",
     },
     ahn: 0,
+    inventory: { slotCount: INVENTORY_SLOTS, items: [], trinket: null },
+    deck: [],
     updatedAt: Date.now(),
   };
 }
@@ -198,5 +281,7 @@ export function characterChecks(c: Character): Check[] {
     ...c.weapons.flatMap((w, i) => equipmentChecks("Equipment", `Weapon ${i + 1}`, w, c.rank)),
     ...(c.armor ? equipmentChecks("Equipment", "Armor", c.armor, c.rank) : []),
     { step: "Finishing Touches", ok: !!c.name.trim(), text: "Character has a name" },
+    ...inventoryChecks(c),
+    ...deckChecks(c),
   ];
 }

@@ -266,3 +266,33 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .board-turn { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .board-turn .big-button { padding: 0.8rem; }
 @media (max-width: 900px) { .board-layout { grid-template-columns: 1fr; } }
+
+/* Inventory and decks */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 8px 0 4px; }
+.tab { background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 14px; color: var(--muted); }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.notice { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 10px; padding: 10px 12px; }
+.inventory, .decks { display: flex; flex-direction: column; gap: 12px; }
+.item-card { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--bg); }
+.item-card.tool { border-left: 4px solid var(--sanity); }
+.item-card.trinket { border-left: 4px solid var(--accent); }
+.item-card textarea { min-height: 2.6rem; }
+.trinket-slot { border: 1px dashed var(--accent); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.trinket-slot h3 { margin: 0; }
+.deck { display: flex; flex-direction: column; gap: 8px; }
+.deck h3 { margin: 0; }
+.deck-count { font-weight: 700; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.deck-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.deck-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; }
+.deck-list li.in-deck { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+.deck-page { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.deck-copies { font-weight: 700; }
+.page-summary { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.page-cost { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--light); color: #1a1408; font-weight: 800; font-size: 0.85rem; }
+.page-title { display: flex; flex-direction: column; min-width: 0; }
+.page-title .small { overflow-wrap: anywhere; }
+.trinket-note { padding: 8px; border: 1px dashed var(--accent); border-radius: 10px; font-size: 0.9rem; }
+.loadout { display: flex; flex-direction: column; gap: 8px; }
+.loadout h3 { margin: 0; }
+.deck-list.compact li { padding: 6px 8px; }
+.item-list li { padding: 3px 0; }

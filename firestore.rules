@@ -17,6 +17,11 @@ service cloud.firestore {
     function isGm(gameId) {
       return signedIn() && game(gameId).gmId == request.auth.uid;
     }
+    // The GM's hosting tab saves the table (with any running combat) every few seconds.
+    function inCombat(gameId) {
+      let table = /databases/$(database)/documents/games/$(gameId)/table/state;
+      return exists(table) && get(table).data.get("combat", null) != null;
+    }
 
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
@@ -35,7 +40,7 @@ service cloud.firestore {
         allow read: if isMember(gameId);
         // Autosave from the GM's hosting tab.
         allow write: if doc == "state" && isGm(gameId)
-          && request.resource.data.keys().hasOnly(["map", "tokens", "log"]);
+          && request.resource.data.keys().hasOnly(["map", "tokens", "log", "combat"]);
       }
 
       // Present while a GM screen is hosting; devices watch it to know where to connect.
@@ -65,10 +70,13 @@ service cloud.firestore {
         allow create: if isMember(gameId) && request.auth.uid == uid
           && request.resource.data.ownerId == uid
           && request.resource.data.rank == 9;
+        // Players can't change their Combat Deck mid-combat (Act 6: edit decks while resting).
         allow update: if isGm(gameId)
           || (request.auth.uid == uid
               && request.resource.data.ownerId == uid
-              && request.resource.data.rank == resource.data.rank);
+              && request.resource.data.rank == resource.data.rank
+              && (!inCombat(gameId)
+                  || request.resource.data.get("deck", null) == resource.data.get("deck", null)));
         allow delete: if isGm(gameId) || (signedIn() && request.auth.uid == uid);
       }
 

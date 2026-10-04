@@ -79,6 +79,42 @@ export interface CharacterDetails {
   relationships: string;
 }
 
+/**
+ * Something in a character's Inventory (Act 7). Each takes one Slot; Stacking Items hold
+ * several of the same thing in one Slot, up to maxStack.
+ */
+export interface InventoryItem {
+  id: string;
+  name: string;
+  description: string;
+  /**
+   * item: a Material, Ammo or story piece. tool: brings a Page into the Auxiliary Deck.
+   * trinket: only active while in the Trinket Slot.
+   */
+  kind: "item" | "tool" | "trinket";
+  stacking: boolean;
+  count: number;
+  maxStack: number;
+  /** The Tool's Page. */
+  page?: Page;
+  /** Consumed when used, instead of reusable. */
+  consumable?: boolean;
+}
+
+export interface Inventory {
+  /** Starts at 9 (Act 7); the GM can change it. */
+  slotCount: number;
+  items: InventoryItem[];
+  /** The one active Trinket, if any. */
+  trinket: InventoryItem | null;
+}
+
+/** Copies of one Equipment Page in the Combat Deck. */
+export interface DeckEntry {
+  pageId: string;
+  copies: number;
+}
+
 export interface Character {
   ownerId: string;
   name: string;
@@ -94,5 +130,8 @@ export interface Character {
   details: CharacterDetails;
   /** Starting money. */
   ahn: number;
+  inventory: Inventory;
+  /** The Combat Deck (Act 6). The Auxiliary Deck is built from the inventory's Tools. */
+  deck: DeckEntry[];
   updatedAt: number;
 }
