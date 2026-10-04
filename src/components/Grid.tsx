@@ -3,12 +3,16 @@ import type { TableState, Token } from "../../shared/types.ts";
 interface Props {
   state: TableState;
   selectedId?: string | null;
+  /** Whose turn it is in combat; that token glows. */
+  activeId?: string;
+  /** Tiles the selected token can move to, as "x,y". */
+  reachable?: Set<string>;
   onTokenClick?: (t: Token) => void;
   onCellClick?: (x: number, y: number) => void;
 }
 
 /** The battle map: a tile grid with tokens on it. Used full-screen on the board, smaller on the GM screen. */
-export function Grid({ state, selectedId, onTokenClick, onCellClick }: Props) {
+export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick }: Props) {
   const { width, height } = state.map;
   const cells = [];
   for (let y = 0; y < height; y++) {
@@ -16,7 +20,7 @@ export function Grid({ state, selectedId, onTokenClick, onCellClick }: Props) {
       cells.push(
         <div
           key={`${x},${y}`}
-          className={"cell" + (onCellClick ? " clickable" : "")}
+          className={"cell" + (onCellClick ? " clickable" : "") + (reachable?.has(`${x},${y}`) ? " reachable" : "")}
           style={{ gridColumn: x + 1, gridRow: y + 1 }}
           onClick={() => onCellClick?.(x, y)}
         />,
@@ -33,7 +37,7 @@ export function Grid({ state, selectedId, onTokenClick, onCellClick }: Props) {
       {Object.values(state.tokens).map((t) => (
         <button
           key={t.id}
-          className={`token ${t.side}` + (t.id === selectedId ? " selected" : "")}
+          className={`token ${t.side}` + (t.id === selectedId ? " selected" : "") + (t.id === activeId ? " active" : "")}
           style={{ gridColumn: t.x + 1, gridRow: t.y + 1, background: t.color }}
           onClick={(e) => {
             e.stopPropagation();

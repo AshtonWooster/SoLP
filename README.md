@@ -44,7 +44,17 @@ Keep the GM screen open during play. If it closes, phones and the board show "Wa
 
 Each player makes one character per game from the game page ("Create my character"), following the six steps in Act 5 of the ruleset: Rank, Stats, Proficiencies, Augment, Weapons and Armor (with Passives, Pages and Dice), and Finishing Touches. Edits save automatically, and a checklist shows what's left. Party members can view each other's sheets; only the owner and the GM can edit, and only the GM can change Rank. At the table, a player's token takes its name and max Health, Stagger Resist, Sanity and Light from their character, and follows edits live.
 
-The ruleset's tables aren't written yet, so the numbers they'd provide (points per Rank, base Resources, max Passive Costs) are **placeholders in `shared/ruleset.ts`**. Fill them in there and the whole app follows.
+The ruleset's tables aren't written yet, so the numbers they'd provide (points per Rank, base Resources, max Passive Costs, base Movement) are **placeholders in `shared/ruleset.ts`**. Fill them in there and the whole app follows.
+
+### Combat
+
+From the GM screen, **Start combat**, tick who's in the fight, and **Roll Speed and start**. Everyone rolls 1d6 + Justice and acts from highest to lowest (Act 8). On a tie, players go before enemies; the GM can swap neighbours with ↑/↓ to settle any other tie.
+
+At the start of each turn the active character gets Movement Points (3 + Justice; the base is a placeholder in `shared/ruleset.ts`) and Upkeep restores 1 Light. On a player's turn their token glows on the board: they tap it, reachable tiles light up, and they tap one to move. They can also move with the phone's arrows, and end their turn from the board or their phone. Players can only move on their own turn during combat.
+
+The GM can move and edit anything at any time, press **Next turn** (e.g. after an enemy's turn), add or remove combatants, re-roll Speed, and **End combat**. Enemies' Justice is set in the GM's token panel; players' comes from their character sheet.
+
+`npm run test:engine` runs the combat rules tests.
 
 ### Players who can't connect
 

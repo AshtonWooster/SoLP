@@ -257,7 +257,7 @@ export class Host {
 
   private profileOf(uid: string): SeatProfile | undefined {
     const c = this.characters.get(uid);
-    return c ? { name: c.name, max: maxResources(c) } : undefined;
+    return c ? { name: c.name, max: maxResources(c), justice: c.primary.justice } : undefined;
   }
 
   /** Brings every seated player's token in line with their character sheet. */

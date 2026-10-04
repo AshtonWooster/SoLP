@@ -3,7 +3,7 @@
 // The ruleset doesn't have its tables yet ("Stats table", "Max Costs table", and
 // Effects_Passives_Proficiencies.md are empty). Every value marked PLACEHOLDER below stands in
 // for one of those; replace it here when the table is written and the whole app follows.
-import { newId } from "./engine.ts";
+import { newId } from "./id.ts";
 import type { Armor, Character, Dice, Equipment, Page, Passive, PrimaryStat, Weapon } from "./character.ts";
 import type { Resources } from "./types.ts";
 
@@ -54,12 +54,9 @@ export function rankTable(rank: number): RankTable {
   };
 }
 
-/**
- * Act 5, Step 3: "choose a number of Proficiencies equal to Rank*2".
- * Read literally, a Rank 9 character starts with 18. Act 2 says each Rank Up adds 2.
- */
+/** Proficiencies: 2 at Rank 9, then 2 more at each Rank Up (4 at Rank 8, 6 at Rank 7, ...). */
 export function proficiencyCount(rank: number): number {
-  return rank * 2;
+  return 2 + Math.max(0, STARTING_RANK - rank) * 2;
 }
 
 /** Act 2: Fortitude raises max Health, Prudence max Sanity, Temperance max Stagger Resist. */
@@ -71,6 +68,29 @@ export function maxResources(c: Pick<Character, "rank" | "primary">): Pick<Resou
     maxSanity: t.baseSanity + c.primary.prudence,
     maxLight: t.baseLight,
   };
+}
+
+// ---- Combat (Act 8) ----
+
+/** Combat Start: every character rolls 1d6 + Justice for Speed. */
+export const SPEED_DIE = 6;
+
+/**
+ * PLACEHOLDER: "Every turn a character gets a number of Movement Points, increased by their
+ * Justice and Passives." The base number isn't in the ruleset yet.
+ */
+export const BASE_MOVEMENT = 3;
+
+export function movementPoints(justice: number): number {
+  return BASE_MOVEMENT + Math.max(0, justice);
+}
+
+/** Upkeep: "characters restore, by default, 1 Light." */
+export const UPKEEP_LIGHT = 1;
+
+/** "Characters can move tiles in any direction", so a diagonal step costs 1 like any other. */
+export function moveCost(from: { x: number; y: number }, to: { x: number; y: number }): number {
+  return Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
 }
 
 // ---- Blank pieces for the editor ----

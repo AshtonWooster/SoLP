@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { GameDoc, GmMeta, Resources, TableAction, Token } from "../../shared/types.ts";
+import type { GameDoc, GmMeta, Resources, TableAction, TableState, Token } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
+import { activeToken } from "../../shared/engine.ts";
 import { Grid } from "../components/Grid.tsx";
+import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
 import { useHost } from "../net/hooks.ts";
@@ -66,6 +68,7 @@ export function Gm() {
           <Grid
             state={table}
             selectedId={selectedId}
+            activeId={table.combat ? activeToken(table)?.id : undefined}
             onTokenClick={(t) => setSelectedId(t.id === selectedId ? null : t.id)}
             onCellClick={(x, y) => selectedId && act({ type: "move", tokenId: selectedId, x, y })}
           />
@@ -74,6 +77,7 @@ export function Gm() {
       </section>
 
       <section className="gm-side">
+        {table && <CombatPanel table={table} act={act} />}
         <AddEnemy onAdd={(name) => act({ type: "addToken", name, side: "enemy", x: 10, y: 5 })} />
         {selected ? (
           <Override
@@ -179,6 +183,14 @@ function Override({
           <NumberField value={token.resources[max]} onCommit={(n) => set(max, n)} />
         </div>
       ))}
+      <div className="resource-row">
+        <label>Justice</label>
+        {token.side === "player" && token.ownerId ? (
+          <span className="muted small">{token.justice ?? 0}, from their character sheet</span>
+        ) : (
+          <NumberField value={token.justice ?? 0} onCommit={(n) => act({ type: "setJustice", tokenId: token.id, justice: n })} />
+        )}
+      </div>
       <label className="muted">GM notes (hidden from players)</label>
       <textarea
         value={notes}
@@ -191,6 +203,124 @@ function Override({
       >
         Remove token
       </button>
+    </div>
+  );
+}
+
+/** Start combat, run the turn order, and end combat. */
+function CombatPanel({ table, act }: { table: TableState; act: (action: TableAction) => boolean }) {
+  const tokens = Object.values(table.tokens);
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [adding, setAdding] = useState("");
+  const combat = table.combat;
+
+  if (!combat) {
+    if (!picking) {
+      return (
+        <div className="combat-panel">
+          <button
+            className="big-button"
+            onClick={() => {
+              setPicked(new Set(tokens.map((t) => t.id)));
+              setPicking(true);
+            }}
+          >
+            Start combat
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="combat-panel">
+        <h3>Who's in this fight?</h3>
+        <p className="muted small">Each rolls 1d6 + Justice for Speed.</p>
+        <ul className="pick-list">
+          {tokens.map((t) => (
+            <li key={t.id}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={picked.has(t.id)}
+                  onChange={(e) => {
+                    const next = new Set(picked);
+                    if (e.target.checked) next.add(t.id);
+                    else next.delete(t.id);
+                    setPicked(next);
+                  }}
+                />
+                <span className="swatch" style={{ background: t.color }} /> {t.name}
+                <span className="muted small">({t.side}, Justice {t.justice ?? 0})</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        <div className="row">
+          <button
+            className="big-button"
+            disabled={picked.size === 0}
+            onClick={() => act({ type: "startCombat", tokenIds: [...picked] }) && setPicking(false)}
+          >
+            Roll Speed and start
+          </button>
+          <button onClick={() => setPicking(false)}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
+  const outside = tokens.filter((t) => !combat.order.some((c) => c.tokenId === t.id));
+  const active = activeToken(table);
+  return (
+    <div className="combat-panel">
+      <div className="row-between">
+        <h3>Combat · Round {combat.round}</h3>
+        <button className="danger" onClick={() => confirm("End combat?") && act({ type: "endCombat" })}>
+          End combat
+        </button>
+      </div>
+      {active && (
+        <p className="muted small">
+          {active.name}'s turn · {combat.movementLeft} Movement left
+        </p>
+      )}
+      <TurnOrder
+        table={table}
+        controls={(tokenId, i) => (
+          <>
+            <button aria-label="Move up" disabled={i === 0} onClick={() => act({ type: "reorderCombatant", tokenId, dir: -1 })}>
+              ↑
+            </button>
+            <button aria-label="Move down" disabled={i === combat.order.length - 1} onClick={() => act({ type: "reorderCombatant", tokenId, dir: 1 })}>
+              ↓
+            </button>
+            <button aria-label="Remove from turn order" onClick={() => act({ type: "removeCombatant", tokenId })}>
+              ✕
+            </button>
+          </>
+        )}
+      />
+      <div className="row">
+        <button className="big-button" onClick={() => act({ type: "endTurn" })}>
+          Next turn
+        </button>
+        <button onClick={() => act({ type: "rerollSpeed" })}>Re-roll Speed</button>
+      </div>
+      {outside.length > 0 && (
+        <div className="row">
+          <select aria-label="Add to turn order" value={adding} onChange={(e) => setAdding(e.target.value)}>
+            <option value="">Add to turn order…</option>
+            {outside.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <button disabled={!adding} onClick={() => act({ type: "addCombatant", tokenId: adding }) && setAdding("")}>
+            Add
+          </button>
+        </div>
+      )}
     </div>
   );
 }

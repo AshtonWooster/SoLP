@@ -91,6 +91,28 @@ export interface Token {
   resources: Resources;
   /** User who controls this token, if any. */
   ownerId?: string;
+  /** Added to Speed rolls and Movement Points. Players' comes from their character; the GM sets enemies'. */
+  justice?: number;
+}
+
+/** One character in the turn order. */
+export interface Combatant {
+  tokenId: string;
+  /** The d6 result. Speed = roll + bonus. */
+  roll: number;
+  bonus: number;
+  speed: number;
+}
+
+/** Present while combat is running (Act 8). */
+export interface CombatState {
+  round: number;
+  /** Highest Speed first. */
+  order: Combatant[];
+  /** Index into order of whoever's turn it is. */
+  turn: number;
+  /** Movement Points the active character has left this turn. */
+  movementLeft: number;
 }
 
 /** Everything on the table that every member may see. GM-only data lives under games/{id}/gm. */
@@ -98,6 +120,7 @@ export interface TableState {
   map: { name: string; width: number; height: number };
   tokens: Record<string, Token>;
   log: string[];
+  combat?: CombatState;
 }
 
 /** Partial resource edits the GM can apply to any token. */
@@ -113,7 +136,19 @@ export type TableAction =
   | { type: "addToken"; name: string; side: Side; x: number; y: number }
   | { type: "removeToken"; tokenId: string }
   | { type: "setResources"; tokenId: string; patch: ResourcePatch }
-  | { type: "setNote"; tokenId: string; note: string };
+  | { type: "setNote"; tokenId: string; note: string }
+  | { type: "setJustice"; tokenId: string; justice: number }
+  // Combat (Act 8). The GM runs it; whoever's turn it is can move and end their turn.
+  | { type: "startCombat"; tokenIds: string[] }
+  | { type: "endCombat" }
+  | { type: "addCombatant"; tokenId: string }
+  | { type: "removeCombatant"; tokenId: string }
+  /** Swap a combatant with its neighbour, for breaking Speed ties. */
+  | { type: "reorderCombatant"; tokenId: string; dir: -1 | 1 }
+  | { type: "rerollSpeed" }
+  | { type: "endTurn" }
+  /** Move the active character to a tile, spending Movement Points. Used from the board and phones. */
+  | { type: "turnMove"; x: number; y: number };
 
 /** Which screen a connecting device is: a player's phone or the shared board (GM only). */
 export type View = "play" | "board";

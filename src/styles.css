@@ -242,3 +242,27 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .page-card.basic { border-left-color: var(--muted); }
 .dice-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .player-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+
+/* Combat */
+.cell.reachable { background: color-mix(in srgb, var(--accent) 28%, transparent); cursor: pointer; }
+.cell.reachable:hover { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.token.active { box-shadow: 0 0 0 3px var(--accent), 0 0 18px 4px color-mix(in srgb, var(--accent) 70%, transparent); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 3px var(--accent), 0 0 6px 1px color-mix(in srgb, var(--accent) 40%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .token.active { animation: none; } }
+.turn-order { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.turn-order li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; border: 1px solid transparent; }
+.turn-order li.current { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.turn-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-speed { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 1.8rem; text-align: right; }
+.turn-order li button { padding: 0.15rem 0.45rem; font-size: 0.8rem; }
+.combat-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.combat-panel h3 { margin: 0; }
+.combat-banner { border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; background: color-mix(in srgb, var(--accent) 12%, transparent); display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.combat-banner.waiting { border-color: var(--line); background: var(--panel); }
+.pick-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow: auto; }
+.pick-list label { display: flex; align-items: center; gap: 8px; }
+.board-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; align-items: start; }
+.board-side { display: flex; flex-direction: column; gap: 10px; }
+.board-turn { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.board-turn .big-button { padding: 0.8rem; }
+@media (max-width: 900px) { .board-layout { grid-template-columns: 1fr; } }
