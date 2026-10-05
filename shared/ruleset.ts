@@ -12,7 +12,9 @@ import type {
   DiceKind,
   EnemyTemplate,
   Equipment,
+  Inventory,
   InventoryItem,
+  ItemTemplate,
   Page,
   PageType,
   Passive,
@@ -187,6 +189,97 @@ export function cleanDeck(c: Character): DeckEntry[] {
   return c.deck
     .filter((e) => pages.has(e.pageId) && e.copies > 0)
     .map((e) => ({ ...e, copies: Math.min(e.copies, maxCopies(pages.get(e.pageId)!)) }));
+}
+
+// ---- The GM's item library ----
+
+export const ITEM_KINDS: { value: InventoryItem["kind"]; label: string; hint: string }[] = [
+  { value: "tool", label: "Usable", hint: "A Page with dice, used from the Auxiliary Deck" },
+  { value: "item", label: "Item", hint: "Material, Ammo or story piece" },
+  { value: "trinket", label: "Trinket", hint: "Only active in the Trinket Slot" },
+];
+
+export function blankTemplate(kind: InventoryItem["kind"] = "item"): ItemTemplate {
+  const { id: _id, count: _count, ...rest } = blankItem(kind);
+  return { ...rest, name: "", updatedAt: Date.now() };
+}
+
+/** Keeps only known, well-typed fields of an imported or edited library item. */
+export function cleanTemplate(raw: unknown): ItemTemplate | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const kind = r.kind === "tool" || r.kind === "trinket" ? r.kind : "item";
+  const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : d);
+  const str = (v: unknown, max = 4000) => (typeof v === "string" ? v.slice(0, max) : "");
+  const t: ItemTemplate = {
+    name: str(r.name, 120),
+    description: str(r.description),
+    kind,
+    stacking: !!r.stacking,
+    maxStack: Math.max(1, num(r.maxStack, 1)),
+    updatedAt: Date.now(),
+  };
+  if (r.stacking !== true) t.maxStack = 1;
+  const image = str(r.image, 2000);
+  if (/^https?:\/\//.test(image)) t.image = image;
+  if (kind === "tool") {
+    const p = (r.page ?? {}) as Partial<Page>;
+    t.page = {
+      ...blankPage("basic"),
+      type: "instant",
+      ...p,
+      id: typeof p.id === "string" && p.id ? p.id : newId(),
+      name: t.name,
+      dice: Array.isArray(p.dice) ? p.dice.slice(0, 12).map((d) => ({ ...blankDice(), ...d, id: typeof d?.id === "string" ? d.id : newId() })) : [],
+      effect: str(p.effect),
+    };
+    if (t.image) t.page.image = t.image;
+    else delete t.page.image;
+  }
+  if (r.usable === true) t.usable = true;
+  if (r.consumable === true) {
+    t.consumable = true;
+    t.maxUses = Math.max(1, num(r.maxUses, 1));
+  }
+  return t;
+}
+
+/**
+ * An inventory item with its details taken from the GM's library, so the GM's edits reach every
+ * inventory. The player's own count and uses are kept (clamped to the library's limits).
+ */
+export function linkItem(item: InventoryItem, library: Record<string, ItemTemplate> | undefined): InventoryItem {
+  const t = item.templateId ? library?.[item.templateId] : undefined;
+  if (!t) return item;
+  const { updatedAt: _u, ...details } = t;
+  const maxStack = t.stacking ? Math.max(1, t.maxStack) : 1;
+  const linked: InventoryItem = { ...details, id: item.id, templateId: item.templateId, count: Math.min(Math.max(1, item.count), maxStack) };
+  if (t.consumable) linked.uses = Math.min(item.uses ?? t.maxUses ?? 1, t.maxUses ?? 1);
+  if (t.page) linked.page = { ...t.page, name: t.name, ...(t.image ? { image: t.image } : {}) };
+  return linked;
+}
+
+/** The character with every inventory item brought up to date from the GM's library. */
+export function linkInventory(c: Character, library: Record<string, ItemTemplate> | undefined): Character {
+  if (!library) return c;
+  const inv = c.inventory;
+  return { ...c, inventory: { ...inv, items: inv.items.map((i) => linkItem(i, library)), trinket: inv.trinket ? linkItem(inv.trinket, library) : null } };
+}
+
+/**
+ * Add one of a library item to an inventory: onto an existing stack of it with room, otherwise
+ * into a free Slot. Returns the new item list, or why it can't be added.
+ */
+export function addFromLibrary(inv: Inventory, templateId: string, t: ItemTemplate): { items: InventoryItem[] } | { error: string } {
+  if (t.stacking) {
+    const stack = inv.items.find((i) => i.templateId === templateId && i.count < Math.max(1, t.maxStack));
+    if (stack) return { items: inv.items.map((i) => (i === stack ? { ...i, count: i.count + 1 } : i)) };
+  }
+  if (inv.items.length >= inv.slotCount) return { error: `All ${inv.slotCount} Slots are full.` };
+  const { updatedAt: _u, ...details } = t;
+  const item: InventoryItem = { ...details, id: newId(), templateId, count: 1 };
+  if (t.consumable) item.uses = t.maxUses ?? 1;
+  return { items: [...inv.items, item] };
 }
 
 /** The Auxiliary Deck: each Tool in the Inventory brings its Page (one copy per item in a stack). */

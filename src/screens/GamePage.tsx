@@ -55,6 +55,10 @@ export function GamePage() {
                 Enemy templates
                 <small>Design enemies and their decks</small>
               </Link>
+              <Link className="big-button secondary" to={`/games/${id}/items`}>
+                Item library
+                <small>Make the items players add to their inventories</small>
+              </Link>
             </div>
             <section className="panel">
               <h3>Invite players</h3>

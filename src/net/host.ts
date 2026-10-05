@@ -13,7 +13,7 @@ import {
   where,
   type DocumentChange,
 } from "firebase/firestore";
-import type { Character } from "../../shared/character.ts";
+import type { Character, ItemTemplate } from "../../shared/character.ts";
 import {
   ActionError,
   applyAction,
@@ -26,7 +26,7 @@ import {
   type SeatProfile,
 } from "../../shared/engine.ts";
 import { currentMapId } from "../../shared/maps.ts";
-import { auxiliaryDeck, cleanDeck, equipmentPages, maxResources, useItemIn } from "../../shared/ruleset.ts";
+import { auxiliaryDeck, cleanDeck, equipmentPages, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
   GmNotes,
@@ -65,6 +65,7 @@ export class Host {
   private notes: Record<string, string> = {};
   /** Characters by owner, kept live so tokens follow edits to a character sheet. */
   private characters = new Map<string, Character>();
+  private library: Record<string, ItemTemplate> | undefined;
   private peers = new Set<Peer>();
   private handled = new Set<string>();
   private unsubs: (() => void)[] = [];
@@ -101,6 +102,14 @@ export class Host {
       this.table = upgradeTable((tableSnap.data() as TableState | undefined) ?? newTable());
       this.notes = (notesSnap.data() as GmNotes | undefined)?.tokens ?? {};
 
+      // The GM's item library: inventories take their items' details from it.
+      this.unsubs.push(
+        onSnapshot(
+          collection(db, "games", this.gameId, "items"),
+          (snap) => (this.library = Object.fromEntries(snap.docs.map((d) => [d.id, d.data() as ItemTemplate]))),
+          () => {},
+        ),
+      );
       // Load characters before anyone sits down, then follow edits to them.
       await new Promise<void>((resolve) => {
         this.unsubs.push(
@@ -265,6 +274,12 @@ export class Host {
     this.publish();
   }
 
+  /** A player's character, with inventory details from the GM's item library. */
+  private character(uid: string): Character | undefined {
+    const c = this.characters.get(uid);
+    return c ? linkInventory(c, this.library) : undefined;
+  }
+
   private profileOf(uid: string): SeatProfile | undefined {
     const c = this.characters.get(uid);
     return c
@@ -283,7 +298,7 @@ export class Host {
   private ctx: EngineContext = {
     loadout: (tokenId: string): Loadout | undefined => {
       const ownerId = this.table?.tokens[tokenId]?.ownerId;
-      const c = ownerId ? this.characters.get(ownerId) : undefined;
+      const c = ownerId ? this.character(ownerId) : undefined;
       if (!c) return undefined;
       const aux = auxiliaryDeck(c);
       return {
@@ -301,8 +316,9 @@ export class Host {
     // A consumable Tool used in combat counts down on the player's character sheet.
     onToolUsed: (tokenId: string, itemId: string) => {
       const ownerId = this.table?.tokens[tokenId]?.ownerId;
-      const c = ownerId ? this.characters.get(ownerId) : undefined;
+      const c = ownerId ? this.character(ownerId) : undefined;
       if (!ownerId || !c?.inventory.items.some((i) => i.id === itemId && i.consumable)) return;
+      // The saved copies get the library's current details too; they stay linked by templateId.
       const items = useItemIn(c.inventory.items, itemId);
       updateDoc(doc(db, "games", this.gameId, "characters", ownerId), { "inventory.items": items }).catch((err) =>
         console.error("Couldn't update the Tool's uses", err),

@@ -668,3 +668,70 @@ button.pv-card:hover { filter: brightness(1.12); }
 .equip-card .equip-res h4 { margin: 4px 0; font-size: 0.85rem; }
 .equip-card .passives h4 { margin: 0; }
 .equip-card .passive { background: #0b0f18; }
+
+/* ---- Items: cards, the GM's library, and the inventory tab ---- */
+.item-kind-icon { flex: none; display: inline-grid; place-items: center; color: var(--item-color, var(--muted)); }
+.item-kind-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.item-kind-icon.trinket, .kind-trinket { --item-color: #e0b04f; }
+.item-kind-icon.tool, .kind-tool { --item-color: #6fb4ff; }
+.item-kind-icon.item, .kind-item { --item-color: #c9b9a6; }
+.pv-card.item-card-ui { --pv-frame: var(--item-color); }
+.pv-card.item-card-ui.selected { --pv-frame: var(--accent); }
+.pv-card.item-card-ui.full { border: 2px solid var(--pv-frame); border-radius: 10px; box-shadow: 0 0 14px color-mix(in srgb, var(--pv-frame) 30%, transparent); }
+.pv-card.item-card-ui .pv-art .item-kind-icon { opacity: 0.6; }
+.item-kind-label { display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pv-frame); }
+.pv-card.thumb .item-kind-label { font-size: 0.6rem; }
+.item-card-body { display: flex; flex-direction: column; gap: 8px; }
+.item-desc { margin: 0; white-space: pre-wrap; font-size: 0.9rem; line-height: 1.35; color: #e9dccb; }
+.item-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.item-note { font-size: 0.68rem; color: var(--accent); font-weight: 700; }
+.pv-dice-list.compact { gap: 6px; }
+.pv-dice-list.compact .pv-range { font-size: 1rem; line-height: 24px; }
+.pv-dice-list.compact .pv-die-text { padding-top: 3px; font-size: 0.82rem; }
+.item-kind-hint { margin: -2px 0 0; }
+.item-edit-opts { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 0.85rem; }
+.item-editor { display: flex; flex-direction: column; gap: 6px; }
+.item-editor .save-state { align-self: flex-end; font-size: 0.8rem; color: var(--muted); min-height: 1em; }
+.chip.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.library-filters { gap: 6px; align-items: center; }
+.library-filters input { flex: 1 1 160px; min-width: 0; }
+.library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 10px; align-items: start; }
+.library-grid .pv-card.thumb { width: 100%; }
+.library-new { width: 100%; min-height: 150px; font-size: 1rem; }
+.items-page { max-width: 1200px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.items-actions { gap: 8px; align-items: center; margin-top: 8px; }
+.items-studio { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
+
+.inv-tab { display: grid; grid-template-columns: minmax(230px, 25%) minmax(0, 1fr); gap: 18px; align-items: start; }
+.inv-list { display: flex; flex-direction: column; gap: 4px; max-height: 75vh; overflow-y: auto; padding-right: 2px; }
+.inv-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.inv-head h3 { margin: 0; }
+.inv-slots { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.inv-section { margin-top: 8px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.inv-row { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 2px 4px 2px 2px; border: 2px solid color-mix(in srgb, var(--item-color, var(--line)) 60%, transparent); border-radius: 7px; background: linear-gradient(90deg, color-mix(in srgb, var(--item-color, var(--line)) 22%, var(--panel)), var(--panel) 70%); }
+.inv-row.equipped { box-shadow: 0 0 0 1px var(--accent), 0 0 10px #e0b04f55; }
+.inv-row.empty { border-style: dashed; border-color: var(--line); background: none; color: var(--muted); font-size: 0.82rem; padding-left: 10px; }
+.inv-count { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; background: #0b0f18; color: var(--text); font-weight: 800; font-size: 0.85rem; }
+.inv-name { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 2px 2px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.inv-actions { flex: none; display: inline-flex; align-items: center; gap: 2px; }
+.inv-actions button.icon { padding: 0.1rem 0.4rem; font-size: 0.8rem; }
+.inv-actions .stepper button { padding: 0 0.4rem; }
+.inv-library { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.inv-library-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.inv-library-head h3 { margin: 0; }
+.inv-library .library-grid { max-height: 70vh; overflow-y: auto; padding: 4px; }
+.library-pick .pv-card { cursor: pointer; }
+.inv-peek { position: fixed; z-index: 60; pointer-events: none; animation: fx-pop 0.12s ease-out; }
+@media (max-width: 760px) {
+  .inv-tab, .items-studio { grid-template-columns: 1fr; }
+  .inv-list { max-height: none; }
+}
+.inv-actions .stepper { gap: 2px; }
+.inv-actions .stepper button { width: 24px; height: 24px; font-size: 0.9rem; }
+.inv-actions .stepper-value { display: none; }
+/* The Inventory tab uses the whole width: the list on the left, the library on the right. */
+.sheet.wide { max-width: 1400px; grid-template-columns: minmax(0, 1fr); }
+.sheet.wide .sheet-summary { display: none; }
+.sheet.wide .sheet-body { grid-column: 1; grid-row: 2; }
+.inv-row .inv-actions .stepper { display: none; }
+.inv-row:hover .inv-actions .stepper, .inv-row:focus-within .inv-actions .stepper { display: inline-flex; }

@@ -113,8 +113,12 @@ export interface CharacterDetails {
  */
 export interface InventoryItem {
   id: string;
+  /** The GM's library item this was added from; its details come from the library while it exists. */
+  templateId?: string;
   name: string;
   description: string;
+  /** Card art (4:3). */
+  image?: string;
   /**
    * item: a Material, Ammo or story piece. tool: brings a Page into the Auxiliary Deck.
    * trinket: only active while in the Trinket Slot.
@@ -133,6 +137,13 @@ export interface InventoryItem {
   /** Uses left before it's used up (one item of a stack). */
   uses?: number;
 }
+
+/**
+ * An item in the GM's library (games/{id}/items/{itemId}). Every item is shown as a card:
+ * a Usable item ("tool") is a Page with dice that goes in the Auxiliary Deck; other Items and
+ * Trinkets just have a description.
+ */
+export type ItemTemplate = Omit<InventoryItem, "id" | "templateId" | "count" | "uses"> & { updatedAt?: number };
 
 export interface Inventory {
   /** Starts at 9 (Act 7); the GM can change it. */
