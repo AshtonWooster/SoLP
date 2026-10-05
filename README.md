@@ -52,7 +52,7 @@ The ruleset's tables aren't written yet, so the numbers they'd provide (points p
 
 The character sheet has **Inventory** and **Decks** tabs (Acts 6 and 7):
 
-- **Inventory:** 9 Slots (the GM can change the count), each holding an Item or a Tool. Stacking items hold several in one Slot up to a max. Tools carry a Page. The **Trinket Slot** holds one Trinket, which is always active while equipped.
+- **Inventory:** 9 Slots (the GM can change the count). Each holds one item, or a stack of one stacking item up to its max. The **Trinket Slot** holds one Trinket, which is always active while equipped. Players fill it from the GM's item library on the Inventory tab: their items as a slim list on the left (hover one for its full card) and the GM's items on the right (click to add).
 - **Combat Deck:** 12 Pages built from your Equipment: any number of copies of Basic Pages, one of each Special Page.
 - **Auxiliary Deck:** built automatically from your Inventory's Tools (one copy per item in a stack). The equipped Trinket isn't a card; it's always on.
 
@@ -109,11 +109,15 @@ Player characters come along when the map changes, keeping their Health, Light, 
 
 On the game page, **Enemy templates** (GM only) lets the GM design enemies: Health, Stagger Resist, Light, Sanity, Justice, damage and Stagger resistances, notes, and a Combat Deck of Pages with any number of copies (no size limit). On the GM screen, **Place** puts a copy on the map. Each copy is its own token ("Thug", "Thug 2", ...) with its own Health, deck and so on; removing the token removes only that copy. Editing a placed enemy (token panel → Pages and deck) doesn't change its template.
 
-### Usable items
+### Item library
 
-The GM can mark any inventory item **Usable**, and usable items **Consumable** with a number of uses. Players tap **Use** on their sheet or phone; when a consumable's uses run out, one item of the stack is used up (or the item is gone). Tools are used through the Auxiliary Deck in combat and count down the same way when consumable.
+On the game page, **Item library** (GM only) is where the GM makes every item in the game; players can't create their own. Items are cards, edited in place like Pages:
 
-`npm run test:engine` runs the rules tests (combat, decks, clashes).
+- **Usable:** a Page with a Light cost, type and dice. It goes in the Auxiliary Deck in combat, and can be **Consumable** with a number of uses (players can also tap **Use** outside combat).
+- **Item:** a Material, Ammo or story piece, with a description.
+- **Trinket:** a description; active only in the Trinket Slot.
+
+Any of them can be **Stacking**, up to a max per Slot. Inventories link to the library, so the GM's edits reach every inventory holding the item. Libraries are per game: **Export items** saves them to a file, **Import items** loads one, and **Copy items from another game** copies the library of another game you GM. The GM can also edit any player's inventory from their sheet.
 
 ### Players who can't connect
 

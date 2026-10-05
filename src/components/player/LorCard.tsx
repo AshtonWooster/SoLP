@@ -77,7 +77,7 @@ export function PvCard({
 const KINDS: DiceKind[] = ["slash", "pierce", "blunt", "block", "evade"];
 
 /** One die on the card being edited: type (tap the icon), Power range, Counter, and its effect. */
-function DieEditor({ dice, onChange, onRemove }: { dice: Dice; onChange: (d: Dice) => void; onRemove: () => void }) {
+export function DieEditor({ dice, onChange, onRemove }: { dice: Dice; onChange: (d: Dice) => void; onRemove: () => void }) {
   const lo = 1 + dice.basePower;
   const hi = dice.sides + dice.basePower;
   // Typing a range sets the die: the low end fixes Base Power, the spread fixes the die size.
@@ -126,6 +126,48 @@ function DieEditor({ dice, onChange, onRemove }: { dice: Dice; onChange: (d: Dic
   );
 }
 
+/** The 4:3 art area of a card being edited: tap it to upload an image (without a folder, it only shows the art). */
+export function ArtPicker({ folder, image, fallback, onChange }: { folder?: string; image?: string; fallback: string; onChange: (image: string | undefined) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!folder) return <div className="pv-art">{image ? <img src={image} alt="" /> : <span className="pc-icon big">{fallback}</span>}</div>;
+  return (
+    <>
+      <label className={"pv-art pickable" + (busy ? " busy" : "")} title={image ? "Change art" : "Add art"}>
+        {image ? <img src={image} alt="" /> : <span className="pv-art-hint">{busy ? "Uploading…" : "Tap to add art (4:3)"}</span>}
+        {busy && image && <span className="pv-art-hint over">Uploading…</span>}
+        <input
+          type="file"
+          accept="image/*"
+          hidden
+          aria-label="Page art"
+          disabled={busy}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            setBusy(true);
+            setError("");
+            try {
+              onChange(await uploadImage(folder, file));
+            } catch (err) {
+              setError(friendlyError(err));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      </label>
+      {image && (
+        <button type="button" className="link small pv-art-remove" onClick={() => onChange(undefined)}>
+          Remove art
+        </button>
+      )}
+      {error && <span className="error small">{error}</span>}
+    </>
+  );
+}
+
 /**
  * Edit a Page right on the card: type the cost and name where they show, tap the art to upload
  * an image, tap a die's icon to change its type, and type its range and effect.
@@ -142,8 +184,6 @@ export function PageCardEditor({
   /** Where art uploads go; without it the art can't be changed. */
   artFolder?: string;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
   const set = (patch: Partial<Page>) => onChange({ ...page, ...patch });
   return (
     <div className={`pv-card edit full ${page.kind}`}>
@@ -160,41 +200,7 @@ export function PageCardEditor({
         </select>
       </div>
       <input className="pv-name pv-name-input" aria-label="Page name" placeholder="Page name" value={page.name} onChange={(e) => set({ name: e.target.value })} />
-      {artFolder ? (
-        <label className={"pv-art pickable" + (busy ? " busy" : "")} title={page.image ? "Change art" : "Add art"}>
-          {page.image ? <img src={page.image} alt="" /> : <span className="pv-art-hint">{busy ? "Uploading…" : "Tap to add art (4:3)"}</span>}
-          {busy && page.image && <span className="pv-art-hint over">Uploading…</span>}
-          <input
-            type="file"
-            accept="image/*"
-            hidden
-            aria-label="Page art"
-            disabled={busy}
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (!file) return;
-              setBusy(true);
-              setError("");
-              try {
-                set({ image: await uploadImage(artFolder, file) });
-              } catch (err) {
-                setError(friendlyError(err));
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-        </label>
-      ) : (
-        <div className="pv-art">{page.image ? <img src={page.image} alt="" /> : <span className="pc-icon big">{TYPE_ICONS[page.type]}</span>}</div>
-      )}
-      {page.image && artFolder && (
-        <button type="button" className="link small pv-art-remove" onClick={() => set({ image: undefined })}>
-          Remove art
-        </button>
-      )}
-      {error && <span className="error small">{error}</span>}
+      <ArtPicker folder={artFolder} image={page.image} fallback={TYPE_ICONS[page.type]} onChange={(image) => set({ image })} />
       <ul className="pv-edit-dice">
         {page.dice.map((d, i) => (
           <DieEditor

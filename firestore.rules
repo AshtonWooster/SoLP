@@ -82,6 +82,12 @@ service cloud.firestore {
         allow delete: if isGm(gameId) || (signedIn() && request.auth.uid == uid);
       }
 
+      // The GM's item library: players browse it to fill their inventories; only the GM edits it.
+      match /items/{itemId} {
+        allow read: if isMember(gameId);
+        allow write: if isGm(gameId);
+      }
+
       // Enemy templates: only the GM sees or edits them.
       match /enemies/{templateId} {
         allow read, write: if isGm(gameId);

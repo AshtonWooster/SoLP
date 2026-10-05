@@ -155,6 +155,18 @@ test("enemy templates are GM-only", async () => {
   await assertSucceeds(deleteDoc(ref("gm")));
 });
 
+test("item library: members browse it, only the GM creates and edits items", async () => {
+  const ref = (who: string) => doc(as(who), "games", GAME, "items", "potion");
+  await assertSucceeds(setDoc(ref("gm"), { name: "Potion", kind: "item", stacking: true, maxStack: 3 }));
+  await assertSucceeds(getDocs(collection(as("p1"), "games", GAME, "items")));
+  await assertSucceeds(getDoc(ref("p1")));
+  await assertFails(setDoc(doc(as("p1"), "games", GAME, "items", "homebrew"), { name: "Infinite Ahn" }));
+  await assertFails(setDoc(ref("p1"), { name: "Potion", maxStack: 99 }));
+  await assertFails(deleteDoc(ref("p1")));
+  await assertFails(getDocs(collection(as("stranger"), "games", GAME, "items")));
+  await assertSucceeds(deleteDoc(ref("gm")));
+});
+
 test("only the GM sees the invite code and GM notes", async () => {
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "meta")));
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "notes")));

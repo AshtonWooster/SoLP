@@ -89,7 +89,7 @@ export function InfoPanel({ panel, c, sheetUrl, onOpenPage, onUseItem, onRaiseSt
             <span className="nd-extra">
               <span className="muted small">{i.kind === "tool" ? "Tool" : i.kind === "trinket" ? "Trinket" : "Item"}</span>
               {i.consumable && isUsable(i) && <span className="muted small"> · {i.uses ?? i.maxUses ?? 1}/{i.maxUses ?? 1} uses</span>}
-              {onUseItem && i.kind !== "tool" && isUsable(i) && (
+              {onUseItem && i.consumable && isUsable(i) && (
                 <button type="button" onClick={() => onUseItem(i.id)}>
                   Use
                 </button>

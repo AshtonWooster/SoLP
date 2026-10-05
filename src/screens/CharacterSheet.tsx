@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
-import type { Character } from "../../shared/character.ts";
+import type { Character, ItemTemplate } from "../../shared/character.ts";
 import { newId } from "../../shared/engine.ts";
 import {
   blankArmor,
@@ -15,13 +15,14 @@ import {
   RANKS,
   rankTable,
   SECONDARY_STATS,
+  linkInventory,
 } from "../../shared/ruleset.ts";
 import type { GameDoc, TableState } from "../../shared/types.ts";
-import { useAuth, useDoc } from "../api.ts";
+import { useAuth, useCollection, useDoc } from "../api.ts";
 import { DeckEditor } from "../components/DeckEditor.tsx";
 import { EquipmentStudio, PageEditor, PassiveList } from "../components/EquipmentEditor.tsx";
 import { ImageUpload } from "../components/ImageUpload.tsx";
-import { InventoryEditor } from "../components/InventoryEditor.tsx";
+import { InventoryTab } from "../components/items/InventoryTab.tsx";
 import { NumberInput, Section, Stepper, TextField } from "../components/Fields.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
@@ -141,6 +142,8 @@ export function CharacterSheet() {
   const tab: Tab = TABS.some(([t]) => t === params.get("tab")) ? (params.get("tab") as Tab) : "sheet";
   // Decks can't change mid-combat (Act 6). The GM's table saves combat state every few seconds.
   const table = useDoc<TableState>(`games/${id}/table/state`);
+  // The GM's item library: inventory items take their details from it.
+  const library = useCollection<ItemTemplate>(`games/${id}/items`);
   const decksLocked = !!table.data?.combat && !isGm;
 
   if (game.error || error) {
@@ -194,7 +197,7 @@ export function CharacterSheet() {
 
   const t = rankTable(c.rank);
   const max = maxResources(c);
-  const checks = characterChecks(c);
+  const checks = characterChecks(linkInventory(c, library));
   const ready = checks.every((ch) => ch.ok);
   const primaryLeft = t.primaryPoints - Object.values(c.primary).reduce((a, b) => a + b, 0);
   const secondaryLeft = t.secondaryPoints - Object.values(c.secondary).reduce((a, b) => a + b, 0);
@@ -204,7 +207,7 @@ export function CharacterSheet() {
   return (
     <>
       <TopBar />
-      <main className="sheet">
+      <main className={"sheet" + (tab === "inventory" ? " wide" : "")}>
         <header className="sheet-header">
           <Link to={`/games/${id}`} className="muted">← {game.data!.name}</Link>
           <h1>{c.name.trim() || "Unnamed character"}</h1>
@@ -263,8 +266,8 @@ export function CharacterSheet() {
 
         {tab === "inventory" && (
           <fieldset disabled={!canEdit} className="sheet-body">
-            <Section id="inventory" title="Inventory" intro="Items and Tools take one Slot each. Tools add their Page to your Auxiliary Deck. Your one Trinket is active only while in the Trinket Slot.">
-              <InventoryEditor c={c} canSetSlots={isGm} update={update} />
+            <Section id="inventory" title="Inventory" intro="Each Slot holds one item, or a stack of one stacking item. Usable items add their Page to your Auxiliary Deck. Your one Trinket is active only while in the Trinket Slot. Hover an item to see its card.">
+              <InventoryTab c={c} library={library} gameId={id} isGm={isGm} canEdit={canEdit} update={update} />
             </Section>
           </fieldset>
         )}
@@ -273,7 +276,7 @@ export function CharacterSheet() {
           <fieldset disabled={!canEdit || decksLocked} className="sheet-body">
             {decksLocked && <div className="notice">Combat is on. Decks can be changed again once it ends.</div>}
             <Section id="decks" title="Decks" intro="You have two decks: a Combat Deck built from your Equipment's Pages, and an Auxiliary Deck from the Tools in your Inventory.">
-              <DeckEditor c={c} update={update} />
+              <DeckEditor c={linkInventory(c, library)} update={update} />
             </Section>
             <Section id="ego" title="E.G.O. Pages" intro="Unique Pages from your character's progression, made with your GM. In combat they're available from the start, and each can be used once per combat.">
               {(c.ego ?? []).map((p, i) => (

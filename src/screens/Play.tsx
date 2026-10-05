@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { doc, updateDoc } from "firebase/firestore";
-import type { Character, Page } from "../../shared/character.ts";
+import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
-import { blankCharacter, DASH_LIGHT_COST, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
+import { blankCharacter, linkInventory, DASH_LIGHT_COST, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import type { Card, PageSource, TableAction } from "../../shared/types.ts";
-import { useAuth, useDoc } from "../api.ts";
+import { useAuth, useCollection, useDoc } from "../api.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { Waiting } from "../components/Waiting.tsx";
@@ -65,7 +65,8 @@ export function Play() {
   const { table } = useClashPlayback(snapshot.table);
   const combat = table?.combat;
   const mine = table ? Object.values(table.tokens).find((t) => t.ownerId === user?.id) : undefined;
-  const c: Character | undefined = characterDoc.data && user ? { ...blankCharacter(user.id, ""), ...characterDoc.data } : undefined;
+  const library = useCollection<ItemTemplate>(`games/${id}/items`);
+  const c: Character | undefined = characterDoc.data && user ? linkInventory({ ...blankCharacter(user.id, ""), ...characterDoc.data }, library) : undefined;
   const deck = combat && mine ? combat.decks?.[mine.id] : undefined;
   const active = table ? activeToken(table) : undefined;
   const myTurn = !!mine && active?.id === mine.id;
@@ -180,8 +181,9 @@ export function Play() {
   };
 
   const useItem = (itemId: string) => {
-    if (!user || !characterDoc.data) return;
-    updateDoc(doc(db, "games", id, "characters", user.id), { "inventory.items": useItemIn(characterDoc.data.inventory?.items ?? [], itemId) }).catch((e) =>
+    if (!user || !c) return;
+    // Uses count down against the item's current details from the library.
+    updateDoc(doc(db, "games", id, "characters", user.id), { "inventory.items": useItemIn(c.inventory.items, itemId) }).catch((e) =>
       setError(friendlyError(e)),
     );
   };
