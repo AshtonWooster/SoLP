@@ -30,7 +30,8 @@ const SAVE_DELAY_MS = 600;
 const TABS = [
   ["profile", "Profile"],
   ["loadout", "Augment, Weapons & Armor"],
-  ["deck", "Deck & Inventory"],
+  ["deck", "Combat Deck"],
+  ["inventory", "Inventory"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 type Update = (fn: (d: NpcTemplate) => void) => void;
@@ -297,7 +298,7 @@ function LoadoutTab({ t, update, gameId, gear }: { t: NpcTemplate; update: Updat
   );
 }
 
-function DeckInventoryTab({ t, update, gameId, gear, items }: { t: NpcTemplate; update: Update; gameId: string; gear: GearEntry[]; items: Record<string, ItemTemplate> | undefined }) {
+function DeckTab({ t, update, gameId, gear }: { t: NpcTemplate; update: Update; gameId: string; gear: GearEntry[] }) {
   const [peek, setPeek] = useState<Peek>(null);
   const [open, setOpen] = useState<string | null>(null);
   const sources = npcPages(t);
@@ -420,9 +421,6 @@ function DeckInventoryTab({ t, update, gameId, gear, items }: { t: NpcTemplate; 
           />
         </div>
       </div>
-      <section className="npc-inventory" id="inventory">
-        <InventoryTab c={t} library={items} gameId={gameId} isGm canEdit update={update} />
-      </section>
       {peek &&
         createPortal(
           <div className="inv-peek" style={{ top: peek.top, left: peek.left, width: PEEK_WIDTH }} aria-hidden="true">
@@ -484,7 +482,12 @@ export function NpcEditor({
       </nav>
       {tab === "profile" && <ProfileTab t={t} update={update} gameId={gameId} />}
       {tab === "loadout" && <LoadoutTab t={t} update={update} gameId={gameId} gear={gear} />}
-      {tab === "deck" && <DeckInventoryTab t={t} update={update} gameId={gameId} gear={gear} items={items} />}
+      {tab === "deck" && <DeckTab t={t} update={update} gameId={gameId} gear={gear} />}
+      {tab === "inventory" && (
+        <section className="npc-inventory" id="inventory">
+          <InventoryTab c={t} library={items} gameId={gameId} isGm canEdit update={update} />
+        </section>
+      )}
     </div>
   );
 }

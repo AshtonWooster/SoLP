@@ -118,7 +118,8 @@ On the game page, **Character editor** (GM only) is where the GM builds enemies,
 
 - **Profile:** portrait, name, side, token color, Rank and GM notes; Primary and Secondary Stats set freely (no point budget); and Health, Stagger Resist, Sanity and Light, worked out from Rank and Stats like a player's. Type over any of them to override it (**Reset** goes back to the calculated number). Damage and Stagger resistances come from the Armor unless overridden.
 - **Augment, Weapons & Armor:** the same Augment and equipment editors players use, plus a **Reuse gear** library of every Augment, Weapon and Armor already built in the game, on the GM's characters or the players'. Picking one copies it onto the character (so editing the copy leaves the original alone).
-- **Deck & Inventory:** the Combat Deck as a list of the Pages in it (no size limit), and every Page the character has (from its Weapons and Armor, and its own) with − and + under it to set copies, the character's own Pages (tap to edit, **+** for a new one), a **Reuse Pages** library of every Page in the game, and an Inventory with Ahn, filled from the item library.
+- **Combat Deck:** a list of the Pages in it (no size limit), and every Page the character has (from its Weapons and Armor, and its own) with − and + under it to set copies, the character's own Pages (tap to edit, **+** for a new one), and a **Reuse Pages** library of every Page in the game.
+- **Inventory:** the character's Ahn and Inventory, filled from the item library.
 
 **Export** saves one character to a JSON file and **Export all** saves every one; **Import** adds the characters in such a file (gear, decks and inventory included), and the GM can copy all characters from another game they run. **Duplicate** makes a copy to tweak.
 
