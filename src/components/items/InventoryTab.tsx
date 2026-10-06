@@ -4,18 +4,13 @@ import { Link } from "react-router-dom";
 import type { Character, InventoryItem, ItemTemplate } from "../../../shared/character.ts";
 import { addFromLibrary, isUsable, ITEM_KINDS, linkInventory, useItemIn } from "../../../shared/ruleset.ts";
 import { Stepper } from "../Fields.tsx";
+import { PEEK_WIDTH, peekPosition } from "../peek.ts";
 import { ItemCard, ItemKindIcon } from "./ItemCard.tsx";
 
 type Peek = { item: InventoryItem | ItemTemplate; top: number; left: number } | null;
-const PEEK_WIDTH = 300;
 
-/** Where to show the full card for a hovered row: beside it, kept on screen. */
 function peekAt(el: HTMLElement, item: InventoryItem | ItemTemplate): Peek {
-  const r = el.getBoundingClientRect();
-  const right = r.right + 12;
-  const left = right + PEEK_WIDTH < window.innerWidth ? right : Math.max(8, r.left - PEEK_WIDTH - 12);
-  const top = Math.max(8, Math.min(r.top - 40, window.innerHeight - 520));
-  return { item, top, left };
+  return { item, ...peekPosition(el) };
 }
 
 function InventoryRow({

@@ -735,3 +735,30 @@ button.pv-card:hover { filter: brightness(1.12); }
 .sheet.wide .sheet-body { grid-column: 1; grid-row: 2; }
 .inv-row .inv-actions .stepper { display: none; }
 .inv-row:hover .inv-actions .stepper, .inv-row:focus-within .inv-actions .stepper { display: inline-flex; }
+
+/* ---- Equipment & Decks tab ---- */
+.deck-tab { grid-template-columns: minmax(240px, 25%) minmax(0, 1fr); }
+.deck-row.basic { --item-color: #6fb4ff; }
+.deck-row.special { --item-color: #b48cff; }
+.deck-row-dice { flex: none; display: inline-flex; gap: 2px; }
+.deck-row-dice .dice-icon { border-width: 1.5px; border-radius: 4px; }
+.deck-row-cost { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--p-light); color: #1a1408; font-weight: 800; font-size: 0.78rem; }
+.deck-row .inv-actions { display: none; }
+.deck-row:hover .inv-actions, .deck-row:focus-within .inv-actions { display: inline-flex; }
+.deck-aux { display: flex; flex-direction: column; gap: 4px; }
+.deck-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.plain-fieldset { border: none; padding: 0; margin: 0; min-width: 0; }
+.ego-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-items: start; }
+.thumb-wrap { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.thumb-deck { border: none; padding: 0; margin: 0; display: flex; justify-content: center; }
+.thumb-deck .stepper { gap: 2px; }
+.thumb-deck .stepper button { width: 26px; height: 24px; font-size: 0.9rem; }
+.thumb-deck .stepper-value { min-width: 1.4rem; font-size: 0.9rem; }
+.thumb-wrap.in-deck .pv-card.thumb { box-shadow: 0 0 0 2px var(--ok), 0 0 10px #6cc07055; }
+.editor-deck { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 8px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.9rem; }
+.page-hover { display: flex; flex-direction: column; gap: 6px; background: #070b14; border-radius: 10px; }
+.page-hover .pv-card { border: 2px solid var(--pv-frame); border-radius: 10px; }
+.page-hover-detail { padding: 6px 10px 10px; border: 1px solid #ffffff1a; border-radius: 10px; display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 760px) {
+  .deck-tab { grid-template-columns: 1fr; }
+}
