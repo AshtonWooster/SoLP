@@ -2,25 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import type { Character, ItemTemplate } from "../../shared/character.ts";
-import { newId } from "../../shared/engine.ts";
-import {
-  blankCharacter,
-  characterChecks,
-  maxResources,
-  PRIMARY_STATS,
-  proficiencyCount,
-  RANKS,
-  rankTable,
-  SECONDARY_STATS,
-  linkInventory,
-} from "../../shared/ruleset.ts";
+import { blankCharacter, characterChecks, linkInventory } from "../../shared/ruleset.ts";
 import type { GameDoc, TableState } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { DeckTab } from "../components/DeckTab.tsx";
-import { PassiveList } from "../components/EquipmentEditor.tsx";
-import { ImageUpload } from "../components/ImageUpload.tsx";
+import { AugmentTab } from "../components/creator/AugmentTab.tsx";
+import { CharacterCreator, type CreatorStep } from "../components/creator/CharacterCreator.tsx";
 import { InventoryTab } from "../components/items/InventoryTab.tsx";
-import { NumberInput, Section, Stepper, TextField } from "../components/Fields.tsx";
+import { Section } from "../components/Fields.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
 
@@ -111,21 +100,14 @@ function useCharacter(gameId: string, uid: string, fallbackName: string, canEdit
 
 const TABS = [
   ["sheet", "Character"],
-  ["inventory", "Inventory"],
+  ["augment", "Augment & Proficiencies"],
   ["decks", "Equipment & Decks"],
+  ["inventory", "Inventory"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
+const CREATOR_STEPS: CreatorStep[] = ["intro", "license", "stats", "story", "summary"];
 
-const STEPS = [
-  ["rank", "1 · Rank"],
-  ["stats", "2 · Stats"],
-  ["proficiencies", "3 · Proficiencies"],
-  ["augment", "4 · Augment"],
-  ["equipment", "5 · Equipment"],
-  ["details", "6 · Finishing Touches"],
-] as const;
-
-/** Character creation and editing, following Act 5 of the ruleset step by step. */
+/** Character creation and editing: a stepped creator, then a tab each for the rest (Act 5). */
 export function CharacterSheet() {
   const { id = "", uid = "" } = useParams();
   const { user } = useAuth();
@@ -177,10 +159,14 @@ export function CharacterSheet() {
           {isMine ? (
             <>
               <h1>Create your character</h1>
-              <p className="muted">
-                You'll go through the six steps from the rulebook. Everything saves as you go, so you can stop and come back anytime.
-              </p>
-              <button className="big-button" onClick={create}>
+              <p className="muted">Everything saves as you go, so you can stop and come back anytime.</p>
+              <button
+                className="big-button"
+                onClick={() => {
+                  create();
+                  setParams({ step: "intro" }, { replace: true });
+                }}
+              >
                 Start
               </button>
             </>
@@ -192,18 +178,20 @@ export function CharacterSheet() {
     );
   }
 
-  const t = rankTable(c.rank);
-  const max = maxResources(c);
   const checks = characterChecks(linkInventory(c, library));
-  const ready = checks.every((ch) => ch.ok);
-  const primaryLeft = t.primaryPoints - Object.values(c.primary).reduce((a, b) => a + b, 0);
-  const secondaryLeft = t.secondaryPoints - Object.values(c.secondary).reduce((a, b) => a + b, 0);
-  const profMax = proficiencyCount(c.rank);
+  // A new character starts on the intro (Start opens it); coming back later opens the summary.
+  const stepParam = params.get("step") as CreatorStep | null;
+  const step: CreatorStep = stepParam && CREATOR_STEPS.includes(stepParam) ? stepParam : c.name.trim() ? "summary" : "intro";
+  const setStep = (s: CreatorStep) => {
+    setParams({ step: s }, { replace: true });
+    window.scrollTo({ top: 0 });
+  };
+  const goTab = (t: Tab) => setParams(t === "sheet" ? {} : { tab: t }, { replace: true });
 
   return (
     <>
       <TopBar />
-      <main className={"sheet" + (tab === "inventory" || tab === "decks" ? " wide" : "")}>
+      <main className={"sheet wide" + (tab === "sheet" ? " creator-mode" : "")}>
         <header className="sheet-header">
           <Link to={`/games/${id}`} className="muted">← {game.data!.name}</Link>
           <h1>{c.name.trim() || "Unnamed character"}</h1>
@@ -216,55 +204,24 @@ export function CharacterSheet() {
           {!canEdit && <p className="muted">Only {owner.displayName} and the GM can edit this sheet.</p>}
           <nav className="tabs" role="tablist">
             {TABS.map(([t, label]) => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={tab === t}
-                className={tab === t ? "tab active" : "tab"}
-                onClick={() => setParams(t === "sheet" ? {} : { tab: t }, { replace: true })}
-              >
+              <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "tab active" : "tab"} onClick={() => goTab(t)}>
                 {label}
               </button>
             ))}
           </nav>
-          {tab === "sheet" && (
-            <nav className="step-nav">
-              {STEPS.map(([anchor, label]) =>
-                anchor === "equipment" ? (
-                  <a key={anchor} href="?tab=decks" onClick={(e) => (e.preventDefault(), setParams({ tab: "decks" }, { replace: true }))}>
-                    {label}
-                  </a>
-                ) : (
-                  <a key={anchor} href={`#${anchor}`}>
-                    {label}
-                  </a>
-                ),
-              )}
-            </nav>
-          )}
         </header>
 
-        <aside className="sheet-summary panel">
-          <div className="summary-stats">
-            <div><span className="muted">Health</span><strong>{max.maxHp}</strong></div>
-            <div><span className="muted">Stagger</span><strong>{max.maxStagger}</strong></div>
-            <div><span className="muted">Sanity</span><strong>{max.maxSanity}</strong></div>
-            <div><span className="muted">Light</span><strong>{max.maxLight}</strong></div>
-            <div><span className="muted">Speed</span><strong>1d6+{c.primary.justice}</strong></div>
-          </div>
-          <details open={!ready && tab === "sheet"} key={tab}>
-            <summary className={ready ? "ok-text" : "warn-text"}>
-              {ready ? "✓ Ready for the table" : `${checks.filter((ch) => !ch.ok).length} left to finish`}
-            </summary>
-            <ul className="checklist">
-              {checks.map((ch, i) => (
-                <li key={i} className={ch.ok ? "ok" : "todo"}>
-                  {ch.ok ? "✓" : "○"} {ch.text}
-                </li>
-              ))}
-            </ul>
-          </details>
-        </aside>
+        {tab === "sheet" && (
+          <fieldset disabled={!canEdit} className="sheet-body">
+            <CharacterCreator c={c} update={update} isGm={isGm} canEdit={canEdit} gameId={id} uid={uid} checks={checks} step={step} setStep={setStep} goTab={goTab} />
+          </fieldset>
+        )}
+
+        {tab === "augment" && (
+          <fieldset disabled={!canEdit} className="sheet-body">
+            <AugmentTab c={c} update={update} />
+          </fieldset>
+        )}
 
         {tab === "inventory" && (
           <fieldset disabled={!canEdit} className="sheet-body">
@@ -278,130 +235,6 @@ export function CharacterSheet() {
           <fieldset disabled={!canEdit} className="sheet-body">
             <DeckTab c={linkInventory(c, library)} update={update} gameId={id} uid={uid} decksLocked={decksLocked} />
           </fieldset>
-        )}
-
-        {tab === "sheet" && (
-        <fieldset disabled={!canEdit} className="sheet-body">
-          <Section id="rank" title="1 · Rank" intro="Your Fixer Grade (or equivalent). It sets how many points and how much Passive Cost you get. Agree on it with your GM.">
-            {isGm ? (
-              <label className="inline">
-                Rank
-                <select value={c.rank} onChange={(e) => update((d) => void (d.rank = Number(e.target.value)))}>
-                  {RANKS.map((r) => (
-                    <option key={r} value={r}>
-                      Rank {r}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <p>
-                <strong>Rank {c.rank}</strong> <span className="muted">(only the GM can change this)</span>
-              </p>
-            )}
-            <ul className="plain muted small">
-              <li>Primary Stat Points: {t.primaryPoints}</li>
-              <li>Secondary Stat Points: {t.secondaryPoints}</li>
-              <li>Proficiencies: {profMax}</li>
-              <li>Max Passive Cost: Augment {t.augmentMaxCost}, each piece of Equipment {t.equipmentMaxCost}</li>
-            </ul>
-          </Section>
-
-          <Section id="stats" title="2 · Stats" intro="Spend your points. Primary Stats shape your Resources; Secondary Stats shape Story Rolls.">
-            <h3>
-              Primary <span className={primaryLeft < 0 ? "error" : "muted"}>· {primaryLeft} left</span>
-            </h3>
-            {PRIMARY_STATS.map((s) => (
-              <div className="stat-row" key={s.key}>
-                <div>
-                  <strong>{s.label}</strong>
-                  <div className="muted small">{s.effect}</div>
-                </div>
-                <Stepper label={s.label} value={c.primary[s.key]} max={c.primary[s.key] + Math.max(0, primaryLeft)} onChange={(n) => update((d) => void (d.primary[s.key] = n))} />
-              </div>
-            ))}
-            <h3>
-              Secondary <span className={secondaryLeft < 0 ? "error" : "muted"}>· {secondaryLeft} left</span>
-            </h3>
-            {SECONDARY_STATS.map((s) => (
-              <div className="stat-row" key={s.key}>
-                <div>
-                  <strong>{s.label}</strong>
-                  <div className="muted small">{s.effect}</div>
-                </div>
-                <Stepper
-                  label={s.label}
-                  value={c.secondary[s.key] ?? 0}
-                  max={(c.secondary[s.key] ?? 0) + Math.max(0, secondaryLeft)}
-                  onChange={(n) => update((d) => void (d.secondary[s.key] = n))}
-                />
-              </div>
-            ))}
-          </Section>
-
-          <Section
-            id="proficiencies"
-            title="3 · Proficiencies"
-            intro={`Choose ${profMax}. They reflect your background, like a workshop Fixer with Proficiencies in modifying weapons. Each one may need minimum Stats.`}
-          >
-            <p className={c.proficiencies.length > profMax ? "error" : "muted"}>
-              {c.proficiencies.length} of {profMax} chosen
-            </p>
-            {c.proficiencies.map((p, i) => (
-              <div className="row" key={p.id}>
-                <input
-                  aria-label="Proficiency"
-                  placeholder="Proficiency"
-                  value={p.name}
-                  onChange={(e) => update((d) => void (d.proficiencies[i].name = e.target.value))}
-                />
-                <input
-                  aria-label="Notes"
-                  placeholder="Notes or requirement"
-                  value={p.description}
-                  onChange={(e) => update((d) => void (d.proficiencies[i].description = e.target.value))}
-                />
-                <button type="button" className="icon" aria-label="Remove proficiency" onClick={() => update((d) => void d.proficiencies.splice(i, 1))}>
-                  ✕
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              disabled={c.proficiencies.length >= profMax}
-              onClick={() => update((d) => void d.proficiencies.push({ id: newId(), name: "", description: "" }))}
-            >
-              + Add proficiency
-            </button>
-          </Section>
-
-          <Section id="augment" title="4 · Augment" intro="Your unique modification. Slot Passives up to your max Passive Cost. Work with your GM on something that fits your build and story.">
-            <TextField label="Augment name" value={c.augment.name} onChange={(v) => update((d) => void (d.augment.name = v))} />
-            <TextField label="Description" multiline value={c.augment.description} onChange={(v) => update((d) => void (d.augment.description = v))} />
-            <PassiveList passives={c.augment.passives} max={t.augmentMaxCost} onChange={(p) => update((d) => void (d.augment.passives = p))} />
-          </Section>
-
-          <Section id="details" title="6 · Finishing Touches" intro="Who your character is. These help your GM weave you into the City.">
-            <ImageUpload folder={`games/${id}/users/${uid}/portrait`} label="Portrait" value={c.portrait} onChange={(url) => update((d) => void (url ? (d.portrait = url) : delete d.portrait))} />
-            <TextField label="Name" value={c.name} onChange={(v) => update((d) => void (d.name = v))} />
-            <div className="row wrap">
-              <TextField label="Age" value={c.details.age} onChange={(v) => update((d) => void (d.details.age = v))} />
-              <TextField label="Height" value={c.details.height} onChange={(v) => update((d) => void (d.details.height = v))} />
-            </div>
-            <TextField label="Occupation" value={c.details.occupation} onChange={(v) => update((d) => void (d.details.occupation = v))} placeholder="Office, Syndicate, Wing…" />
-            <div className="row wrap">
-              <TextField label="Birthplace" value={c.details.birthplace} onChange={(v) => update((d) => void (d.details.birthplace = v))} />
-              <TextField label="Residence" value={c.details.residence} onChange={(v) => update((d) => void (d.details.residence = v))} />
-            </div>
-            <TextField label="Appearance" multiline value={c.details.appearance} onChange={(v) => update((d) => void (d.details.appearance = v))} />
-            <TextField label="Personality" multiline value={c.details.personality} onChange={(v) => update((d) => void (d.details.personality = v))} placeholder="How do they handle stress, excitement, fear?" />
-            <TextField label="Relationships" multiline value={c.details.relationships} onChange={(v) => update((d) => void (d.details.relationships = v))} />
-            <label className="field">
-              <span>Starting Ahn</span>
-              <NumberInput label="Starting Ahn" value={c.ahn} min={0} onChange={(n) => update((d) => void (d.ahn = Math.max(0, Math.round(n))))} />
-            </label>
-          </Section>
-        </fieldset>
         )}
       </main>
     </>

@@ -30,7 +30,7 @@ It's for:
 **Games and characters**
 - Create a game as GM, or join by invite code or QR code.
 - Three views of one live table: **GM screen** (laptop), **Board** (iPad/TV) and **Player screen** (phone).
-- Guided character creation following the rulebook's six steps, with a live checklist.
+- Interactive character creation: a Fixer License ID card, stat allocation, personality, and a summary of everything with what's left.
 - A *Library of Ruina*-style card editor: type cost, name, dice ranges and effects right on the card, and tap the art to upload an image.
 - Weapons and Armor with their own Rank and Passives, with cost limits checked as you go.
 - Inventory, a Trinket Slot, Combat and Auxiliary Decks, and portraits on tokens.

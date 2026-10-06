@@ -42,13 +42,20 @@ Keep the GM screen open during play. If it closes, phones and the board show "Wa
 
 ### Characters
 
-Each player makes one character per game from the game page ("Create my character"), following the six steps in Act 5 of the ruleset: Rank, Stats, Proficiencies, Augment, Weapons and Armor (with Passives, Pages and Dice), and Finishing Touches. Edits save automatically, and a checklist shows what's left. Party members can view each other's sheets; only the owner and the GM can edit, and only the GM can change Rank. At the table, a player's token takes its name and max Health, Stagger Resist, Sanity and Light from their character, and follows edits live.
+Each player makes one character per game from the game page ("Create my character"), covering the steps in Act 5 of the ruleset. The **Character** tab is a stepped creator: a short intro on making a character, then pages you can move between with **Back**/**Next** or the step bar (each step shows ✓ once it's done):
+
+1. **Fixer License**: an ID card where you tap the photo to upload a portrait and fill in name, occupation, age, height, birthplace, residence, appearance and starting Ahn. It shows your Rank (Grade), which only the GM can change.
+2. **Stats**: spend Primary and Secondary points, with live Health, Stagger, Sanity, Light and Speed.
+3. **Personality**: personality and relationships.
+4. **Summary**: everything on one page, plus a "still to do" list where each item links to the step or tab that fixes it.
+
+A new character opens on the intro; coming back later opens the Summary. **Augment & Proficiencies**, **Equipment & Decks** and **Inventory** each have their own tab. Edits save automatically. Party members can view each other's sheets; only the owner and the GM can edit, and only the GM can change Rank. At the table, a player's token takes its name and max Health, Stagger Resist, Sanity and Light from their character, and follows edits live.
 
 The ruleset's tables aren't written yet, so the numbers they'd provide (points per Rank, base Resources, max Passive Costs, base Movement) are **placeholders in `shared/ruleset.ts`**. Fill them in there and the whole app follows.
 
 ### Inventory and decks
 
-**Weapons and Armor** (step 5) are on the **Equipment & Decks** tab, laid out like the Inventory: the Combat Deck as a slim list on the left (copies, name, dice and cost; hover a row for its card), with the Auxiliary Deck and Trinket below it. On the right is the equipment editor, where − and + under each Page set its copies in the deck. The editor works like a card editor: the selected Page sits on the left as a Library of Ruina-style card you type on directly (cost, name, type, each die's type, range and effect, the Page effect); tap its art to upload an image. On the right, each weapon and armor shows its Passives and its Pages as small cards: tap one to edit it, or **+** to add a Page. The big **+** at the bottom adds a blank weapon or armor, which opens on the left as its own card: name, its own **Rank** (which sets its max Passive Cost; the Max Costs table is a placeholder in `shared/ruleset.ts` until the ruleset fills it in), hands or resistances, description, and Passives added one at a time (name, cost, description). Negative Passives can add up to the same max. Tap a weapon or armor on the right to edit it again. A die's range (e.g. 2-7) sets its size and Base Power (1d6+1). E.G.O. Pages, Tools and enemy Pages use the same card editor.
+**Weapons and Armor** are on the **Equipment & Decks** tab, laid out like the Inventory: the Combat Deck as a slim list on the left (copies, name, dice and cost; hover a row for its card), with the Auxiliary Deck and Trinket below it. On the right is the equipment editor, where − and + under each Page set its copies in the deck. The editor works like a card editor: the selected Page sits on the left as a Library of Ruina-style card you type on directly (cost, name, type, each die's type, range and effect, the Page effect); tap its art to upload an image. On the right, each weapon and armor shows its Passives and its Pages as small cards: tap one to edit it, or **+** to add a Page. The big **+** at the bottom adds a blank weapon or armor, which opens on the left as its own card: name, its own **Rank** (which sets its max Passive Cost; the Max Costs table is a placeholder in `shared/ruleset.ts` until the ruleset fills it in), hands or resistances, description, and Passives added one at a time (name, cost, description). Negative Passives can add up to the same max. Tap a weapon or armor on the right to edit it again. A die's range (e.g. 2-7) sets its size and Base Power (1d6+1). E.G.O. Pages, Tools and enemy Pages use the same card editor.
 
 The character sheet has **Inventory** and **Decks** tabs (Acts 6 and 7):
 
@@ -95,7 +102,7 @@ Opening panels and popups never clears the selection, ends the turn or changes t
 
 **Dice effects:** each die on a Page can have its own effect text (e.g. "On Hit: Inflict 1 Fragile next Scene"), shown next to it when the Page is enlarged. Effects are text for now; they don't trigger automatically.
 
-**Portraits and Page art:** players upload a portrait on their sheet (Finishing Touches) and 4:3 landscape art on each Page. The GM uploads enemy portraits and Page art in the templates. Images are under 5 MB and stored in Firebase Storage. Portraits show on tokens.
+**Portraits and Page art:** players upload a portrait on their sheet (the photo on the Fixer License) and 4:3 landscape art on each Page. The GM uploads enemy portraits and Page art in the templates. Images are under 5 MB and stored in Firebase Storage. Portraits show on tokens.
 
 **Effects** are set by the GM in the token panel on the GM screen (name, count, description, duration) for now; they're shown to players but don't trigger anything automatically yet.
 
