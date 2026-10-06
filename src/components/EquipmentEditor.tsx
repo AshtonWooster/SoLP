@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { Armor, Dice, DiceKind, Equipment, Page, PageType, Passive, Weapon } from "../../shared/character.ts";
-import { blankArmor, blankPage, blankPassive, blankWeapon, equipmentMaxCost, RANKS } from "../../shared/ruleset.ts";
+import { blankArmor, blankPage, blankPassive, blankWeapon, clonePage, equipmentMaxCost, RANKS } from "../../shared/ruleset.ts";
 import { NumberInput, Stepper, TextField } from "./Fields.tsx";
+import { ResistanceGrid } from "./LorIcons.tsx";
 import { PageCardEditor, PvCard } from "./player/LorCard.tsx";
 
 export const PAGE_TYPES: { value: PageType; label: string }[] = [
@@ -131,34 +132,17 @@ function EquipmentCardEditor<T extends Weapon | Armor>({
           </select>
         </label>
       )}
-      {"resistances" in item &&
-        (
-          [
-            ["resistances", "Resistances", "Damage taken is multiplied by these. Lower is tougher."],
-            ["staggerResistances", "Stagger resistances", "Stagger damage taken is multiplied by these, the same way."],
-          ] as const
-        ).map(([field, title, hint]) => (
-          <div key={field} className="equip-res">
-            <h4 title={hint}>{title}</h4>
-            <div className="row wrap">
-              {(["slash", "pierce", "blunt"] as const).map((k) => {
-                const r = item[field] ?? { slash: 1, pierce: 1, blunt: 1 };
-                return (
-                  <label className="inline" key={k}>
-                    {k[0].toUpperCase() + k.slice(1)} ×
-                    <NumberInput
-                      label={`${field === "resistances" ? "" : "stagger "}${k} resistance`}
-                      value={r[k]}
-                      step={0.1}
-                      min={0}
-                      onChange={(v) => onChange({ ...item, [field]: { ...r, [k]: Math.max(0, v) } })}
-                    />
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      {"resistances" in item && (
+        <div className="equip-res">
+          <h4 title="Damage (red) and Stagger damage (yellow) taken are multiplied by these. Lower is tougher.">Resistances</h4>
+          <ResistanceGrid
+            resistances={item.resistances ?? { slash: 1, pierce: 1, blunt: 1 }}
+            staggerResistances={item.staggerResistances ?? { slash: 1, pierce: 1, blunt: 1 }}
+            labelFor={(field, k) => `${field === "resistances" ? "" : "stagger "}${k} resistance`}
+            onChange={(field, r) => onChange({ ...item, [field]: r })}
+          />
+        </div>
+      )}
       <textarea className="pv-effect-in" aria-label={`${label} description`} placeholder="Description" value={item.description} onChange={(e) => set({ description: e.target.value })} />
       <PassiveList passives={item.passives} max={max} onChange={(passives) => set({ passives })} />
       <div className="pv-edit-foot">
@@ -172,6 +156,9 @@ function EquipmentCardEditor<T extends Weapon | Armor>({
     </div>
   );
 }
+
+/** Drag data type for a Page being dragged between pieces of equipment. */
+const PAGE_DRAG = "application/x-solp-page";
 
 /** Lets the studio add Pages to the Combat Deck: copies of each, the most allowed, and whether decks are locked (combat). */
 export interface DeckHooks {
@@ -190,11 +177,14 @@ function EquipmentBox<T extends Weapon | Armor>({
   onSelect,
   onSelectPage,
   onChange,
+  onDropPage,
   deck,
 }: {
   item: T;
   characterRank: number;
   deck?: DeckHooks;
+  /** A Page from another piece of equipment was dropped here: copy it in. */
+  onDropPage: (fromEquipId: string, pageId: string) => void;
   /** The equipment itself is open in the editor. */
   selected: boolean;
   selectedPageId?: string;
@@ -206,8 +196,28 @@ function EquipmentBox<T extends Weapon | Armor>({
   const label = isWeapon ? "Weapon" : "Armor";
   const max = equipmentMaxCost(item, characterRank);
   const passiveCost = item.passives.reduce((a, p) => a + p.cost, 0);
+  const [dropping, setDropping] = useState(false);
+  const accepts = (e: React.DragEvent) => e.dataTransfer.types.includes(PAGE_DRAG) && !e.dataTransfer.types.includes(`${PAGE_DRAG}-from-${item.id}`.toLowerCase());
   return (
-    <section className={`equip-box ${isWeapon ? "weapon" : "armor"}${selected ? " selected" : ""}`}>
+    <section
+      className={`equip-box ${isWeapon ? "weapon" : "armor"}${selected ? " selected" : ""}${dropping ? " drop-target" : ""}`}
+      onDragOver={(e) => {
+        if (!accepts(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setDropping(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false);
+      }}
+      onDrop={(e) => {
+        setDropping(false);
+        if (!accepts(e)) return;
+        e.preventDefault();
+        const { from, pageId } = JSON.parse(e.dataTransfer.getData(PAGE_DRAG)) as { from: string; pageId: string };
+        onDropPage(from, pageId);
+      }}
+    >
       <button type="button" className="equip-head" aria-pressed={selected} aria-label={`Edit ${item.name || `this ${label.toLowerCase()}`}`} onClick={onSelect}>
         <span className="equip-kind">{label}</span>
         <strong className="equip-name">{item.name || "Unnamed"}</strong>
@@ -222,7 +232,18 @@ function EquipmentBox<T extends Weapon | Armor>({
       </button>
       <div className="equip-pages">
         {item.pages.map((p) => (
-          <div key={p.id} className={"thumb-wrap" + (deck?.copies(p.id) ? " in-deck" : "")}>
+          <div
+            key={p.id}
+            className={"thumb-wrap" + (deck?.copies(p.id) ? " in-deck" : "")}
+            draggable
+            title="Drag onto another weapon or armor to copy it there"
+            onDragStart={(e) => {
+              e.dataTransfer.setData(PAGE_DRAG, JSON.stringify({ from: item.id, pageId: p.id }));
+              // Lets other boxes tell, while dragging, that the Page came from here.
+              e.dataTransfer.setData(`${PAGE_DRAG}-from-${item.id}`.toLowerCase(), "");
+              e.dataTransfer.effectAllowed = "copy";
+            }}
+          >
             <PvCard page={p} size="thumb" selected={p.id === selectedPageId} onClick={() => onSelectPage(p.id)} />
             {deck && (
               <fieldset className="thumb-deck" disabled={deck.locked} title="Copies in the Combat Deck">
@@ -291,6 +312,15 @@ export function EquipmentStudio({
     if (armor && item.id === armor.id) onArmor(item as Armor);
     else onWeapons(weapons.map((w) => (w.id === item.id ? (item as Weapon) : w)));
   };
+  /** Copies a Page onto another piece of equipment and opens the copy. */
+  const copyPage = (fromEquipId: string, pageId: string, toEquipId: string) => {
+    const src = all.find((e) => e.id === fromEquipId)?.pages.find((p) => p.id === pageId);
+    const target = all.find((e) => e.id === toEquipId);
+    if (!src || !target || fromEquipId === toEquipId) return;
+    const copy = clonePage(src);
+    change({ ...target, pages: [...target.pages, copy] });
+    setPicked({ equipId: target.id, pageId: copy.id });
+  };
   const remove = (item: Weapon | Armor) => {
     if (armor && item.id === armor.id) onArmor(null);
     else onWeapons(weapons.filter((w) => w.id !== item.id));
@@ -308,6 +338,21 @@ export function EquipmentStudio({
               onChange={(np) => change({ ...owner, pages: owner.pages.map((p) => (p.id === np.id ? np : p)) })}
               onRemove={() => change({ ...owner, pages: owner.pages.filter((p) => p.id !== page.id) })}
             />
+            {all.length > 1 && (
+              <label className="editor-copy">
+                <span>Copy this Page to</span>
+                <select aria-label="Copy this Page to" value="" onChange={(e) => copyPage(owner.id, page.id, e.target.value)}>
+                  <option value="">Pick a weapon or armor…</option>
+                  {all
+                    .filter((e) => e.id !== owner.id)
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name || ("hands" in e ? "Unnamed weapon" : "Unnamed armor")}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
             {deck && (
               <fieldset className="editor-deck" disabled={deck.locked}>
                 <span>Copies in the Combat Deck</span>
@@ -333,6 +378,7 @@ export function EquipmentStudio({
               onSelect={() => setPicked({ equipId: item.id })}
               onSelectPage={(pageId) => setPicked({ equipId: item.id, pageId })}
               onChange={change}
+              onDropPage={(from, pageId) => copyPage(from, pageId, item.id)}
               deck={deck}
             />
           ))}

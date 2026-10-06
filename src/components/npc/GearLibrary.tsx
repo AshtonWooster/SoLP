@@ -104,15 +104,16 @@ export function GearLibrary({
     <section className="gear-library" aria-label={title}>
       <h3>{title}</h3>
       {hint && <p className="muted small">{hint}</p>}
-      <div className="row wrap library-filters">
-        <input aria-label={`Search ${title.toLowerCase()}`} placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
-        {kinds.length > 1 &&
-          (["all", ...kinds] as const).map((k) => (
+      <input className="gear-search" aria-label={`Search ${title.toLowerCase()}`} placeholder={`Search ${title.toLowerCase().replace("reuse ", "")}`} value={search} onChange={(e) => setSearch(e.target.value)} />
+      {kinds.length > 1 && (
+        <div className="row wrap library-filters">
+          {(["all", ...kinds] as const).map((k) => (
             <button key={k} type="button" className={"chip" + (kind === k ? " active" : "")} onClick={() => setKind(k)}>
               {k === "all" ? "All" : KIND_LABEL[k]}
             </button>
           ))}
-      </div>
+        </div>
+      )}
       {shown.length === 0 ? (
         <p className="muted small">{entries.some((e) => kinds.includes(e.kind)) ? "Nothing matches." : "Nothing to reuse yet. Anything built on your characters or your players' shows up here."}</p>
       ) : kinds.length === 1 && kinds[0] === "page" ? (
