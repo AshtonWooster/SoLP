@@ -4,10 +4,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import type { Character, ItemTemplate } from "../../shared/character.ts";
 import { newId } from "../../shared/engine.ts";
 import {
-  blankArmor,
   blankCharacter,
-  blankPage,
-  blankWeapon,
   characterChecks,
   maxResources,
   PRIMARY_STATS,
@@ -19,8 +16,8 @@ import {
 } from "../../shared/ruleset.ts";
 import type { GameDoc, TableState } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
-import { DeckEditor } from "../components/DeckEditor.tsx";
-import { EquipmentStudio, PageEditor, PassiveList } from "../components/EquipmentEditor.tsx";
+import { DeckTab } from "../components/DeckTab.tsx";
+import { PassiveList } from "../components/EquipmentEditor.tsx";
 import { ImageUpload } from "../components/ImageUpload.tsx";
 import { InventoryTab } from "../components/items/InventoryTab.tsx";
 import { NumberInput, Section, Stepper, TextField } from "../components/Fields.tsx";
@@ -115,7 +112,7 @@ function useCharacter(gameId: string, uid: string, fallbackName: string, canEdit
 const TABS = [
   ["sheet", "Character"],
   ["inventory", "Inventory"],
-  ["decks", "Decks"],
+  ["decks", "Equipment & Decks"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -201,13 +198,12 @@ export function CharacterSheet() {
   const ready = checks.every((ch) => ch.ok);
   const primaryLeft = t.primaryPoints - Object.values(c.primary).reduce((a, b) => a + b, 0);
   const secondaryLeft = t.secondaryPoints - Object.values(c.secondary).reduce((a, b) => a + b, 0);
-  const hands = c.weapons.reduce((a, w) => a + w.hands, 0);
   const profMax = proficiencyCount(c.rank);
 
   return (
     <>
       <TopBar />
-      <main className={"sheet" + (tab === "inventory" ? " wide" : "")}>
+      <main className={"sheet" + (tab === "inventory" || tab === "decks" ? " wide" : "")}>
         <header className="sheet-header">
           <Link to={`/games/${id}`} className="muted">← {game.data!.name}</Link>
           <h1>{c.name.trim() || "Unnamed character"}</h1>
@@ -233,11 +229,17 @@ export function CharacterSheet() {
           </nav>
           {tab === "sheet" && (
             <nav className="step-nav">
-              {STEPS.map(([anchor, label]) => (
-                <a key={anchor} href={`#${anchor}`}>
-                  {label}
-                </a>
-              ))}
+              {STEPS.map(([anchor, label]) =>
+                anchor === "equipment" ? (
+                  <a key={anchor} href="?tab=decks" onClick={(e) => (e.preventDefault(), setParams({ tab: "decks" }, { replace: true }))}>
+                    {label}
+                  </a>
+                ) : (
+                  <a key={anchor} href={`#${anchor}`}>
+                    {label}
+                  </a>
+                ),
+              )}
             </nav>
           )}
         </header>
@@ -273,25 +275,8 @@ export function CharacterSheet() {
         )}
 
         {tab === "decks" && (
-          <fieldset disabled={!canEdit || decksLocked} className="sheet-body">
-            {decksLocked && <div className="notice">Combat is on. Decks can be changed again once it ends.</div>}
-            <Section id="decks" title="Decks" intro="You have two decks: a Combat Deck built from your Equipment's Pages, and an Auxiliary Deck from the Tools in your Inventory.">
-              <DeckEditor c={linkInventory(c, library)} update={update} />
-            </Section>
-            <Section id="ego" title="E.G.O. Pages" intro="Unique Pages from your character's progression, made with your GM. In combat they're available from the start, and each can be used once per combat.">
-              {(c.ego ?? []).map((p, i) => (
-                <PageEditor
-                  key={p.id}
-                  page={p}
-                  artFolder={`games/${id}/users/${uid}/art`}
-                  onChange={(np) => update((d) => void (d.ego[i] = np))}
-                  onRemove={() => update((d) => void d.ego.splice(i, 1))}
-                />
-              ))}
-              <button type="button" onClick={() => update((d) => void (d.ego = [...(d.ego ?? []), { ...blankPage("special"), name: "E.G.O." }]))}>
-                + Add E.G.O. Page
-              </button>
-            </Section>
+          <fieldset disabled={!canEdit} className="sheet-body">
+            <DeckTab c={linkInventory(c, library)} update={update} gameId={id} uid={uid} decksLocked={decksLocked} />
           </fieldset>
         )}
 
@@ -394,25 +379,6 @@ export function CharacterSheet() {
             <TextField label="Augment name" value={c.augment.name} onChange={(v) => update((d) => void (d.augment.name = v))} />
             <TextField label="Description" multiline value={c.augment.description} onChange={(v) => update((d) => void (d.augment.description = v))} />
             <PassiveList passives={c.augment.passives} max={t.augmentMaxCost} onChange={(p) => update((d) => void (d.augment.passives = p))} />
-          </Section>
-
-          <Section
-            id="equipment"
-            title="5 · Weapons and Armor"
-            intro="Up to two hands of Weapons and one Armor. Each gets Passives up to the max cost, plus one Basic Page and one Special Page made with your GM. Start weaker than your ideal gear to leave room for upgrades."
-          >
-            <p className={hands > 2 ? "error" : "muted"}>
-              Weapons use {hands} of 2 hands{c.armor ? "" : " · no armor yet"}.
-            </p>
-            <EquipmentStudio
-              weapons={c.weapons}
-              armor={c.armor}
-              characterRank={c.rank}
-              artFolder={`games/${id}/users/${uid}/art`}
-              canAddWeapon={hands < 2}
-              onWeapons={(w) => update((d) => void (d.weapons = w))}
-              onArmor={(a) => update((d) => void (d.armor = a))}
-            />
           </Section>
 
           <Section id="details" title="6 · Finishing Touches" intro="Who your character is. These help your GM weave you into the City.">

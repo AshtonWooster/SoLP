@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Armor, Dice, DiceKind, Equipment, Page, PageType, Passive, Weapon } from "../../shared/character.ts";
 import { blankArmor, blankPage, blankPassive, blankWeapon, equipmentMaxCost, RANKS } from "../../shared/ruleset.ts";
-import { NumberInput, TextField } from "./Fields.tsx";
+import { NumberInput, Stepper, TextField } from "./Fields.tsx";
 import { PageCardEditor, PvCard } from "./player/LorCard.tsx";
 
 export const PAGE_TYPES: { value: PageType; label: string }[] = [
@@ -173,6 +173,14 @@ function EquipmentCardEditor<T extends Weapon | Armor>({
   );
 }
 
+/** Lets the studio add Pages to the Combat Deck: copies of each, the most allowed, and whether decks are locked (combat). */
+export interface DeckHooks {
+  copies: (pageId: string) => number;
+  max: (page: Page) => number;
+  set: (pageId: string, copies: number) => void;
+  locked: boolean;
+}
+
 /** One weapon or armor on the right of the studio: tap it to edit it; its Pages as cards (tap to edit, + to add). */
 function EquipmentBox<T extends Weapon | Armor>({
   item,
@@ -182,9 +190,11 @@ function EquipmentBox<T extends Weapon | Armor>({
   onSelect,
   onSelectPage,
   onChange,
+  deck,
 }: {
   item: T;
   characterRank: number;
+  deck?: DeckHooks;
   /** The equipment itself is open in the editor. */
   selected: boolean;
   selectedPageId?: string;
@@ -212,7 +222,14 @@ function EquipmentBox<T extends Weapon | Armor>({
       </button>
       <div className="equip-pages">
         {item.pages.map((p) => (
-          <PvCard key={p.id} page={p} size="thumb" selected={p.id === selectedPageId} onClick={() => onSelectPage(p.id)} />
+          <div key={p.id} className={"thumb-wrap" + (deck?.copies(p.id) ? " in-deck" : "")}>
+            <PvCard page={p} size="thumb" selected={p.id === selectedPageId} onClick={() => onSelectPage(p.id)} />
+            {deck && (
+              <fieldset className="thumb-deck" disabled={deck.locked} title="Copies in the Combat Deck">
+                <Stepper label={`copies of ${p.name || "page"}`} value={deck.copies(p.id)} max={deck.max(p)} onChange={(n) => deck.set(p.id, n)} />
+              </fieldset>
+            )}
+          </div>
         ))}
         <button
           type="button"
@@ -244,7 +261,10 @@ export function EquipmentStudio({
   canAddWeapon,
   onWeapons,
   onArmor,
+  deck,
 }: {
+  /** With these, Pages can be added to the Combat Deck right from the studio. */
+  deck?: DeckHooks;
   weapons: Weapon[];
   armor: Armor | null;
   /** Equipment without its own Rank uses this. */
@@ -280,13 +300,21 @@ export function EquipmentStudio({
     <div className="equip-studio">
       <div className="equip-editor">
         {page && owner ? (
-          <PageCardEditor
-            key={page.id}
-            page={page}
-            artFolder={artFolder}
-            onChange={(np) => change({ ...owner, pages: owner.pages.map((p) => (p.id === np.id ? np : p)) })}
-            onRemove={() => change({ ...owner, pages: owner.pages.filter((p) => p.id !== page.id) })}
-          />
+          <>
+            <PageCardEditor
+              key={page.id}
+              page={page}
+              artFolder={artFolder}
+              onChange={(np) => change({ ...owner, pages: owner.pages.map((p) => (p.id === np.id ? np : p)) })}
+              onRemove={() => change({ ...owner, pages: owner.pages.filter((p) => p.id !== page.id) })}
+            />
+            {deck && (
+              <fieldset className="editor-deck" disabled={deck.locked}>
+                <span>Copies in the Combat Deck</span>
+                <Stepper label={`deck copies of ${page.name || "page"}`} value={deck.copies(page.id)} max={deck.max(page)} onChange={(n) => deck.set(page.id, n)} />
+              </fieldset>
+            )}
+          </>
         ) : owner ? (
           <EquipmentCardEditor key={owner.id} item={owner} characterRank={characterRank} onChange={change} onRemove={() => remove(owner)} />
         ) : (
@@ -305,6 +333,7 @@ export function EquipmentStudio({
               onSelect={() => setPicked({ equipId: item.id })}
               onSelectPage={(pageId) => setPicked({ equipId: item.id, pageId })}
               onChange={change}
+              deck={deck}
             />
           ))}
           {all.length === 0 && <p className="muted">No equipment yet.</p>}
