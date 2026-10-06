@@ -4,6 +4,7 @@ import { type Check, maxResources, PRIMARY_STATS, proficiencyCount, RANKS, rankT
 import { friendlyError } from "../../firebase.ts";
 import { Stepper } from "../Fields.tsx";
 import { uploadImage } from "../ImageUpload.tsx";
+import { StatIcon } from "../LorIcons.tsx";
 
 export type CreatorStep = "intro" | "license" | "stats" | "story" | "summary";
 export type SheetTab = "sheet" | "augment" | "inventory" | "decks";
@@ -187,7 +188,9 @@ function StatsStep({ c, update }: Pick<Props, "c" | "update">) {
           <div className="primary-tiles">
             {PRIMARY_STATS.map((s) => (
               <div className="primary-tile" key={s.key}>
-                <span className="tile-name">{s.label}</span>
+                <span className="tile-name">
+                  <StatIcon stat={s.key} /> {s.label}
+                </span>
                 <span className="tile-value">{c.primary[s.key]}</span>
                 <span className="muted small">{s.effect}</span>
                 <Stepper label={s.label} value={c.primary[s.key]} max={c.primary[s.key] + Math.max(0, primaryLeft)} onChange={(n) => update((d) => void (d.primary[s.key] = n))} />
@@ -277,7 +280,9 @@ function SummaryStep({ c, update, isGm, gameId, uid, checks, setStep, goTab }: P
             <div className="summary-stats-grid">
               {PRIMARY_STATS.map((s) => (
                 <div key={s.key}>
-                  <span className="muted small">{s.label}</span>
+                  <span className="muted small">
+                    <StatIcon stat={s.key} size={14} /> {s.label}
+                  </span>
                   <strong>{c.primary[s.key]}</strong>
                 </div>
               ))}

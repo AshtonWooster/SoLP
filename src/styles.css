@@ -934,3 +934,29 @@ button.pv-card:hover { filter: brightness(1.12); }
 .npc-id > * { flex: none; }
 .npc-id input[type="color"] { width: 64px; min-height: 38px; padding: 2px; cursor: pointer; }
 .npc-inventory { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+
+/* Library of Ruina icons: stat emblems and resistance shields */
+.stat-icon { vertical-align: -4px; flex: none; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5)); }
+.tile-name { display: inline-flex; align-items: center; gap: 6px; }
+.summary-stats-grid .stat-icon { vertical-align: -2px; }
+.resist-grid { display: flex; flex-wrap: wrap; gap: 6px 20px; }
+.resist-col { display: flex; flex-direction: column; gap: 4px; }
+.resist-line { display: grid; grid-template-columns: 26px 4.2rem auto; align-items: center; gap: 6px; font-family: Georgia, "Times New Roman", serif; }
+.resist-line input[type="number"] { width: 4.2rem; padding: 0.15rem 0.3rem; text-align: right; font-family: system-ui, sans-serif; }
+.resist-word { font-size: 0.9rem; }
+.resist-col.damage .resist-word { color: #f07a5f; }
+.resist-col.stagger .resist-word { color: #f2d43a; }
+.resist-icon { display: block; filter: drop-shadow(0 0 3px rgba(229, 69, 47, 0.35)); }
+.resist-col.stagger .resist-icon { filter: drop-shadow(0 0 3px rgba(242, 212, 58, 0.35)); }
+.equip-card .resist-line input[type="number"] { background: #0b0f18; }
+.gear-search { width: 100%; }
+.equip-box.drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.thumb-wrap[draggable="true"] { cursor: grab; }
+.editor-copy { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0 0; font-size: 0.9rem; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.editor-copy select { max-width: 60%; }
+.thumb-from { text-align: center; max-width: 108px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.npc-own-pages .thumb-wrap .stepper { justify-content: center; }
+.equip-card .resist-grid { gap: 6px 12px; }
+.equip-card .resist-line { grid-template-columns: 24px 3.4rem auto; gap: 5px; }
+.equip-card .resist-line input[type="number"] { width: 3.4rem; }
+.equip-card .resist-word { font-size: 0.8rem; }

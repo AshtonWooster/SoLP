@@ -20,6 +20,7 @@ import { DeckRow, type Peek, PageHoverCard } from "../DeckTab.tsx";
 import { EquipmentStudio, PageEditor, PassiveList } from "../EquipmentEditor.tsx";
 import { NumberInput, Stepper } from "../Fields.tsx";
 import { ImageUpload } from "../ImageUpload.tsx";
+import { ResistanceGrid, StatIcon } from "../LorIcons.tsx";
 import { InventoryTab } from "../items/InventoryTab.tsx";
 import { PEEK_WIDTH } from "../peek.ts";
 import { PvCard } from "../player/LorCard.tsx";
@@ -101,26 +102,28 @@ function ResourceOverride({ label, cls, calculated, override, onChange }: { labe
   );
 }
 
-function ResistanceOverride({ label, calculated, override, onChange }: { label: string; calculated: ResistanceSet; override?: ResistanceSet; onChange: (r: ResistanceSet | undefined) => void }) {
-  const value = override ?? calculated;
+/** Damage and Stagger resistances: the Armor's, unless the GM typed over them. */
+function ResistanceOverride({ t, update }: { t: NpcTemplate; update: Update }) {
+  const s = npcStats(t);
+  const overridden = !!(t.overrides.resistances || t.overrides.staggerResistances);
   return (
     <div className="npc-resist">
-      <span className="muted small">{label}</span>
-      <div className="row wrap">
-        {(["slash", "pierce", "blunt"] as const).map((k) => (
-          <label className="inline" key={k}>
-            {k[0].toUpperCase() + k.slice(1)} ×
-            <NumberInput label={`${label} ${k}`} value={value[k]} step={0.1} min={0} onChange={(n) => onChange({ ...value, [k]: Math.max(0, n) })} />
-          </label>
-        ))}
-        {override ? (
-          <button type="button" className="link small" onClick={() => onChange(undefined)}>
+      <div className="row-between">
+        <span className="muted small">Resistances</span>
+        {overridden ? (
+          <button type="button" className="link small" onClick={() => update((d) => void (delete d.overrides.resistances, delete d.overrides.staggerResistances))}>
             Use the Armor's
           </button>
         ) : (
-          <span className="muted small">from Armor</span>
+          <span className="muted small">{t.armor ? `from ${t.armor.name || "Armor"}` : "no Armor"}</span>
         )}
       </div>
+      <ResistanceGrid
+        resistances={s.resistances}
+        staggerResistances={s.staggerResistances}
+        labelFor={(field, k) => `${field === "resistances" ? "Damage" : "Stagger"} resistances ${k}`}
+        onChange={(field, r) => update((d) => void (d.overrides[field] = r))}
+      />
     </div>
   );
 }
@@ -187,7 +190,9 @@ function ProfileTab({ t, update, gameId }: { t: NpcTemplate; update: Update; gam
           <div className="npc-stat-grid">
             {PRIMARY_STATS.map((st) => (
               <div className="primary-tile" key={st.key}>
-                <span className="tile-name">{st.label}</span>
+                <span className="tile-name">
+                  <StatIcon stat={st.key} /> {st.label}
+                </span>
                 <span className="tile-value">{t.primary[st.key]}</span>
                 <span className="muted small">{st.effect}</span>
                 <Stepper label={st.label} value={t.primary[st.key]} max={99} onChange={(n) => update((d) => void (d.primary[st.key] = n))} />
@@ -225,18 +230,7 @@ function ProfileTab({ t, update, gameId }: { t: NpcTemplate; update: Update; gam
               <span className="rb-val">1d6+{t.primary.justice}</span>
             </div>
           </div>
-          <ResistanceOverride
-            label="Damage resistances"
-            calculated={s.calculated.resistances}
-            override={t.overrides.resistances}
-            onChange={(r) => update((d) => void (r ? (d.overrides.resistances = r) : delete d.overrides.resistances))}
-          />
-          <ResistanceOverride
-            label="Stagger resistances"
-            calculated={s.calculated.staggerResistances}
-            override={t.overrides.staggerResistances}
-            onChange={(r) => update((d) => void (r ? (d.overrides.staggerResistances = r) : delete d.overrides.staggerResistances))}
-          />
+          <ResistanceOverride t={t} update={update} />
         </section>
       </div>
     </div>
@@ -326,35 +320,57 @@ function DeckInventoryTab({ t, update, gameId, gear, items }: { t: NpcTemplate; 
             <h3>Combat Deck</h3>
             <span className="muted">{total} Pages</span>
           </div>
-          <p className="muted small">No size limit. With no copies set, it uses one of each Page. GM characters draw 3 to start and 1 each Upkeep.</p>
-          {sources.length === 0 && <div className="inv-row empty">No Pages yet</div>}
-          {sources.map(({ page, from }) => (
-            <DeckRow
-              key={page.id}
-              page={page}
-              copies={copies(page.id)}
-              note={from ? `on ${from}` : undefined}
-              onPeek={setPeek}
-              controls={
-                <>
-                  <button type="button" className="icon" aria-label={`One less ${page.name || "page"}`} disabled={copies(page.id) === 0} onClick={() => setCopies(page.id, copies(page.id) - 1)}>
-                    −
-                  </button>
-                  <button type="button" className="icon" aria-label={`One more ${page.name || "page"}`} onClick={() => setCopies(page.id, copies(page.id) + 1)}>
-                    +
-                  </button>
-                </>
-              }
-            />
-          ))}
+          <p className="muted small">No size limit. GM characters draw 3 to start and 1 each Upkeep.</p>
+          {total === 0 && <div className="inv-row empty">{sources.length ? "Empty: in play it uses one of each Page" : "No Pages yet"}</div>}
+          {sources
+            .filter(({ page }) => copies(page.id) > 0)
+            .map(({ page, from }) => (
+              <DeckRow
+                key={page.id}
+                page={page}
+                copies={copies(page.id)}
+                note={from ? `on ${from}` : undefined}
+                onPeek={setPeek}
+                controls={
+                  <>
+                    <button type="button" className="icon" aria-label={`One less ${page.name || "page"}`} onClick={() => setCopies(page.id, copies(page.id) - 1)}>
+                      −
+                    </button>
+                    <button type="button" className="icon" aria-label={`One more ${page.name || "page"}`} onClick={() => setCopies(page.id, copies(page.id) + 1)}>
+                      +
+                    </button>
+                    <button type="button" className="icon" aria-label={`Take ${page.name || "page"} out of the deck`} onClick={() => setCopies(page.id, 0)}>
+                      ✕
+                    </button>
+                  </>
+                }
+              />
+            ))}
         </aside>
         <div className="npc-pages">
           <section className="sheet-section">
-            <h2>Own Pages</h2>
-            <p className="muted small">Pages that aren't on a Weapon or Armor, like a beast's claws. Tap one to edit it.</p>
+            <h2>Pages</h2>
+            <p className="muted small">Use − and + under a Page to set its copies in the deck. Own Pages aren't on a Weapon or Armor, like a beast's claws: tap one to edit it. Equipment Pages are edited on the Augment, Weapons &amp; Armor tab.</p>
+            {sources.some((x) => x.from) && (
+              <div className="npc-own-pages">
+                {sources
+                  .filter((x) => x.from)
+                  .map(({ page, from }) => (
+                    <div key={page.id} className={"thumb-wrap" + (copies(page.id) ? " in-deck" : "")}>
+                      <PvCard page={page} size="thumb" />
+                      <span className="muted small thumb-from">{from}</span>
+                      <Stepper label={`copies of ${page.name || "page"}`} value={copies(page.id)} max={99} onChange={(n) => setCopies(page.id, n)} />
+                    </div>
+                  ))}
+              </div>
+            )}
+            <h4>Own Pages</h4>
             <div className="npc-own-pages">
               {t.pages.map((p) => (
-                <PvCard key={p.id} page={p} size="thumb" selected={p.id === open} onClick={() => setOpen(p.id === open ? null : p.id)} />
+                <div key={p.id} className={"thumb-wrap" + (copies(p.id) ? " in-deck" : "")}>
+                  <PvCard page={p} size="thumb" selected={p.id === open} onClick={() => setOpen(p.id === open ? null : p.id)} />
+                  <Stepper label={`copies of ${p.name || "page"}`} value={copies(p.id)} max={99} onChange={(n) => setCopies(p.id, n)} />
+                </div>
               ))}
               <button
                 type="button"
