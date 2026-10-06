@@ -118,6 +118,7 @@ button:disabled { opacity: 0.6; cursor: default; }
   justify-content: center;
 }
 .token.enemy { border-radius: 18%; }
+.token.neutral { border-radius: 30%; border-style: dashed; }
 .token.selected { outline: 3px solid var(--accent); outline-offset: 2px; }
 .token-name {
   position: absolute;
@@ -312,19 +313,8 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .enemy-deck { display: flex; flex-direction: column; gap: 10px; }
 .enemy-page { display: flex; flex-direction: column; gap: 4px; }
 
-/* Enemy templates */
-.enemies { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px 24px; align-items: start; }
-.enemies .sheet-header { grid-column: 1 / -1; }
-.template-list { display: flex; flex-direction: column; gap: 10px; }
-.template-item { width: 100%; text-align: left; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: none; }
-.template-item.active { border-color: var(--accent); }
-.template-item .small { width: 100%; }
-.template-main, .template-editor { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.template-editor h2 { margin: 0; }
-.template-editor input[type="color"] { width: 64px; height: 38px; padding: 2px; }
 .template-panel { display: flex; flex-direction: column; gap: 6px; }
 .template-panel li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
-@media (max-width: 800px) { .enemies { grid-template-columns: 1fr; } }
 .use-controls { align-items: center; }
 .badge-soft { font-size: 0.75rem; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; color: var(--muted); }
 .item-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -869,3 +859,78 @@ button.pv-card:hover { filter: brightness(1.12); }
 .augment-card h4 { margin: 6px 0 0; }
 .augment-name { font-size: 1.4rem; font-weight: 800; }
 .primary-tile .stepper-value { display: none; }
+
+/* ---- Character editor (the GM's enemies, allies and others) ---- */
+.npcs { max-width: 1500px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+.npcs .sheet-header { grid-column: 1 / -1; }
+.npc-list { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; padding: 2px; }
+.npc-preview { display: flex; align-items: center; gap: 10px; text-align: left; padding: 6px; border-radius: 12px; border: 1px solid var(--line); border-left: 4px solid var(--npc-color, var(--line)); background: var(--panel); width: 100%; transition: border-color 0.15s, transform 0.15s; }
+.npc-preview:hover { transform: translateX(2px); }
+.npc-preview.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); border-left-color: var(--npc-color, var(--accent)); }
+.npc-portrait { flex: none; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; display: grid; place-items: center; background: color-mix(in srgb, var(--npc-color, var(--line)) 35%, var(--bg)); font-size: 1.4rem; font-weight: 800; }
+.npc-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.npc-preview-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.npc-preview-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-badge { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; margin-right: 2px; }
+.side-badge.enemy { color: var(--hp); }
+.side-badge.ally { color: #4fb3bf; }
+.side-badge.neutral { color: var(--muted); }
+.npc-main { min-width: 0; }
+.npc-empty { padding: 40px 0; text-align: center; }
+.npc-editor { display: flex; flex-direction: column; gap: 12px; }
+.npc-editor-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.npc-editor-title { display: flex; align-items: baseline; gap: 10px; }
+.npc-editor-title h2 { margin: 0; }
+.npc-profile { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
+.npc-id { display: flex; flex-direction: column; gap: 10px; }
+.npc-id input[type="color"] { width: 64px; height: 38px; padding: 2px; }
+.npc-id select { width: 100%; }
+.npc-numbers { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.npc-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.npc-res-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.npc-res { gap: 4px; }
+.npc-res input[type="number"] { width: 5rem; text-align: center; font-size: 1.2rem; font-weight: 800; padding: 0.2rem; }
+.npc-res.overridden { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.npc-res .link { padding: 0; }
+.npc-resist { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid var(--line); }
+.npc-resist .link { padding: 0; }
+.npc-loadout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.npc-loadout-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.npc-loadout-side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.gear-library { display: flex; flex-direction: column; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.gear-library h3 { margin: 0; }
+.gear-library p { margin: 0; }
+.gear-library .library-filters input { flex: 1; min-width: 0; }
+.gear-grid { display: flex; flex-direction: column; gap: 8px; }
+.gear-card { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); border-left: 4px solid var(--gear, var(--line)); background: var(--bg); }
+.gear-card.augment { --gear: #b07de0; }
+.gear-card.weapon { --gear: var(--hp); }
+.gear-card.armor { --gear: var(--sanity); }
+.gear-card-head { display: flex; gap: 8px; align-items: baseline; }
+.gear-kind { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; color: var(--gear); }
+.gear-name { font-size: 1.05rem; }
+.gear-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }
+.gear-card-foot button { padding: 0.2rem 0.8rem; }
+.gear-page { display: flex; flex-direction: column; gap: 2px; text-align: center; }
+.gear-pages { max-height: 60vh; overflow-y: auto; padding: 4px; }
+.npc-deck-tab { display: flex; flex-direction: column; gap: 16px; }
+.npc-pages { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.npc-own-pages { display: flex; flex-wrap: wrap; gap: 10px; }
+.npc-own-pages .pv-card.thumb { width: 108px; }
+.inv-ahn { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--accent) 8%, var(--panel)); font-weight: 700; }
+.inv-ahn > span { color: var(--accent); }
+.inv-ahn input[type="number"] { width: 7rem; text-align: right; }
+.ahn-line { margin: 0 0 8px; }
+@media (max-width: 1100px) {
+  .npc-profile, .npc-loadout { grid-template-columns: minmax(0, 1fr); }
+  .npc-loadout-side { position: static; max-height: none; }
+}
+@media (max-width: 800px) {
+  .npcs { grid-template-columns: minmax(0, 1fr); }
+  .npc-list { position: static; max-height: 40vh; }
+  .npc-numbers { grid-template-columns: minmax(0, 1fr); }
+}
+.npc-deck-tab .deck-row .inv-actions { display: inline-flex; }
+.npc-id > * { flex: none; }
+.npc-id input[type="color"] { width: 64px; min-height: 38px; padding: 2px; cursor: pointer; }
+.npc-inventory { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }

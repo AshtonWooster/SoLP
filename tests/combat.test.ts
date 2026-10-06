@@ -572,3 +572,12 @@ test("each recorded die carries both characters' state after it, so damage can b
   assert.equal(fx.rounds[1].after!.rat.resources.hp, s.hp("rat"));
   assert.equal(fx.rounds[0].after!.roland.resources.sanity, 1, "Clash Win +1 Sanity");
 });
+
+test("sides: allies are with the party, neutrals oppose everyone", async () => {
+  const { opposed } = await import("../shared/combat.ts");
+  assert.equal(opposed("player", "ally"), false);
+  assert.equal(opposed("player", "enemy"), true);
+  assert.equal(opposed("ally", "enemy"), true);
+  assert.equal(opposed("neutral", "player"), true);
+  assert.equal(opposed("enemy", "enemy"), false);
+});

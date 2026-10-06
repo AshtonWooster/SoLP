@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { Character } from "../../../shared/character.ts";
 import { type Check, maxResources, PRIMARY_STATS, proficiencyCount, RANKS, rankTable, SECONDARY_STATS } from "../../../shared/ruleset.ts";
 import { friendlyError } from "../../firebase.ts";
-import { NumberInput, Stepper } from "../Fields.tsx";
+import { Stepper } from "../Fields.tsx";
 import { uploadImage } from "../ImageUpload.tsx";
 
 export type CreatorStep = "intro" | "license" | "stats" | "story" | "summary";
@@ -128,10 +128,6 @@ export function FixerLicense({ c, update, isGm, gameId, uid, readOnly }: Pick<Pr
           <LicenseField label="Height" value={c.details.height} onChange={set("height")} readOnly={readOnly} />
           <LicenseField label="Birthplace" value={c.details.birthplace} onChange={set("birthplace")} readOnly={readOnly} placeholder="District" />
           <LicenseField label="Residence" value={c.details.residence} onChange={set("residence")} readOnly={readOnly} placeholder="District" />
-          <label className="license-field">
-            <span>Ahn</span>
-            {readOnly ? <strong>{c.ahn}</strong> : <NumberInput label="Starting Ahn" value={c.ahn} min={0} onChange={(n) => update((d) => void (d.ahn = Math.max(0, Math.round(n))))} />}
-          </label>
         </div>
       </div>
       <label className="license-field wide license-appearance">
@@ -311,7 +307,7 @@ function SummaryStep({ c, update, isGm, gameId, uid, checks, setStep, goTab }: P
               {c.armor ? c.armor.name || "Unnamed armor" : "no armor"}
             </p>
             <p className="muted small">
-              Combat Deck {c.deck.reduce((n, e) => n + e.copies, 0)} Pages · Inventory {c.inventory.items.length}/{c.inventory.slotCount} Slots
+              Combat Deck {c.deck.reduce((n, e) => n + e.copies, 0)} Pages · {c.ahn} Ahn · Inventory {c.inventory.items.length}/{c.inventory.slotCount} Slots
               {c.inventory.trinket ? ` · Trinket: ${c.inventory.trinket.name}` : ""} · Max Passive Cost {t.equipmentMaxCost}
             </p>
           </section>

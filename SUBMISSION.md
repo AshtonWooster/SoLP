@@ -45,7 +45,7 @@ It's for:
 - One persistent phone screen: resources, Speed Dice, End Turn, Dash, Story Roll and your hand as cards. Pick a die, a target and a Page to slot it.
 - See every character's slotted Pages, targets and responses, plus your Effects.
 - The GM can override anything: Health, Stagger, positions, turn order, Effects.
-- Enemy templates with their own decks, placed as independent copies.
+- A Character editor for enemies, allies and NPCs: reuse any Weapon, Armor, Augment or Page already built in the game, override Resources, and export or import characters to share with other GMs.
 - Multiple maps with custom backgrounds, like Roll20 pages. Players come along when the GM switches, and each map remembers where everyone stood.
 
 ## What technology stack did you use?

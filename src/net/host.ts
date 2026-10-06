@@ -443,7 +443,7 @@ function hideDrawPiles(full: TableState): TableState {
   const hidden = () => ({ id: "hidden", pageId: "hidden" });
   const decks = Object.fromEntries(
     Object.entries(c.decks).map(([id, d]) => {
-      const enemy = table.tokens[id]?.side === "enemy";
+      const enemy = !!table.tokens[id] && table.tokens[id].side !== "player";
       return [id, { ...d, draw: d.draw.map(hidden), hand: enemy ? d.hand.map(hidden) : d.hand }];
     }),
   );

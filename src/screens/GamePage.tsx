@@ -51,9 +51,9 @@ export function GamePage() {
                 Open the board
                 <small>Shared map, for the iPad or TV. Log in there as yourself.</small>
               </Link>
-              <Link className="big-button secondary" to={`/games/${id}/enemies`}>
-                Enemy templates
-                <small>Design enemies and their decks</small>
+              <Link className="big-button secondary" to={`/games/${id}/npcs`}>
+                Character editor
+                <small>Build enemies, allies and other characters to place on the map</small>
               </Link>
               <Link className="big-button secondary" to={`/games/${id}/items`}>
                 Item library

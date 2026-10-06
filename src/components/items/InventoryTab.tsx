@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import type { Character, InventoryItem, ItemTemplate } from "../../../shared/character.ts";
 import { addFromLibrary, isUsable, ITEM_KINDS, linkInventory, useItemIn } from "../../../shared/ruleset.ts";
-import { Stepper } from "../Fields.tsx";
+import { NumberInput, Stepper } from "../Fields.tsx";
 import { PEEK_WIDTH, peekPosition } from "../peek.ts";
 import { ItemCard, ItemKindIcon } from "./ItemCard.tsx";
 
@@ -126,6 +126,10 @@ export function InventoryTab({
             {inv.items.length} / {inv.slotCount} Slots
           </span>
         </div>
+        <label className="inv-ahn">
+          <span>Ahn</span>
+          {canEdit ? <NumberInput label="Ahn" value={c.ahn ?? 0} min={0} onChange={(n) => update((d) => void (d.ahn = Math.max(0, Math.round(n))))} /> : <strong>{c.ahn ?? 0}</strong>}
+        </label>
         {isGm && (
           <span className="inline small inv-slots">
             Slots

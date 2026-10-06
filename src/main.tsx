@@ -13,10 +13,16 @@ import { Board } from "./screens/Board.tsx";
 import { Gm } from "./screens/Gm.tsx";
 import { Play } from "./screens/Play.tsx";
 import { CharacterSheet } from "./screens/CharacterSheet.tsx";
-import { Enemies } from "./screens/Enemies.tsx";
+import { Npcs } from "./screens/Npcs.tsx";
 import { Items } from "./screens/Items.tsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import "./styles.css";
+
+/** The enemy templates page became the Character editor. */
+function OldEnemiesLink() {
+  const location = useLocation();
+  return <Navigate to={location.pathname.replace(/\/enemies$/, "/npcs")} replace />;
+}
 
 /** Sends logged-out visitors to the login page, then back here afterwards. */
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -51,7 +57,8 @@ function App() {
           <Route path="/games/:id/board" element={authed(<Board />)} />
           <Route path="/games/:id/play" element={authed(<Play />)} />
           <Route path="/games/:id/characters/:uid" element={authed(<CharacterSheet />)} />
-          <Route path="/games/:id/enemies" element={authed(<Enemies />)} />
+          <Route path="/games/:id/npcs" element={authed(<Npcs />)} />
+          <Route path="/games/:id/enemies" element={<OldEnemiesLink />} />
           <Route path="/games/:id/items" element={authed(<Items />)} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -7,8 +7,8 @@ import { aimTargets, Grid } from "../components/Grid.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
 import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { EnemyDeckEditor } from "../components/EnemyDeckEditor.tsx";
-import { blankEnemy, isMassAttack } from "../../shared/ruleset.ts";
-import type { EnemyTemplate } from "../../shared/character.ts";
+import { isMassAttack, normalizeNpc, NPC_SIDES, npcSpawnData } from "../../shared/ruleset.ts";
+import type { NpcTemplate } from "../../shared/character.ts";
 import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ImageUpload } from "../components/ImageUpload.tsx";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
@@ -254,7 +254,7 @@ function Override({
           ))}
         </>
       )}
-      {token.side === "enemy" && <EnemyDeck token={token} act={act} />}
+      {token.side !== "player" && <EnemyDeck token={token} act={act} />}
       <EffectsEditor token={token} act={act} />
       <label className="muted">GM notes (hidden from players)</label>
       <textarea
@@ -349,7 +349,7 @@ function CombatPanel({ table, act }: { table: TableState; act: (action: TableAct
           {active.name}'s turn · {PHASE_LABELS[combat.phase]} · {combat.movementLeft} Movement left
         </p>
       )}
-      {active?.side === "enemy" && <ActionPanel table={table} token={active} canAct send={(a) => void act(a)} />}
+      {active && active.side !== "player" && <ActionPanel table={table} token={active} canAct send={(a) => void act(a)} />}
       {active?.side === "player" && combat.aim && (
         <p className="muted small">
           {active.name} is aiming {combat.pages[combat.aim.pageId]?.name}. Lit tokens can be clicked to target for them.
@@ -410,30 +410,30 @@ function EnemyDeck({ token, act }: { token: Token; act: (action: TableAction) =>
   );
 }
 
-/** The GM's enemy templates, ready to place on the map. */
+/** The GM's characters (enemies, allies and others), ready to place on the map. */
 function TemplatePanel({ gameId, table, act }: { gameId: string; table: TableState; act: (action: TableAction) => boolean }) {
-  const templates = useCollection<EnemyTemplate>(`games/${gameId}/enemies`);
-  const list = Object.entries(templates ?? {}).sort((a, b) => a[1].name.localeCompare(b[1].name));
-  const place = (templateId: string, t: EnemyTemplate) => {
-    const { notes: _notes, updatedAt: _updatedAt, ...template } = { ...blankEnemy(), ...t };
-    act({ type: "spawnEnemy", templateId, template, x: table.map.width - 3, y: Math.floor(table.map.height / 2) });
-  };
+  const templates = useCollection<NpcTemplate>(`games/${gameId}/enemies`);
+  const list = Object.entries(templates ?? {})
+    .map(([tid, raw]) => [tid, normalizeNpc(raw)] as const)
+    .sort((a, b) => a[1].name.localeCompare(b[1].name));
+  const place = (templateId: string, t: NpcTemplate) =>
+    act({ type: "spawnEnemy", templateId, template: npcSpawnData(t), x: t.side === "enemy" ? table.map.width - 3 : 2, y: Math.floor(table.map.height / 2) });
   return (
     <details className="combat-panel template-panel" open>
       <summary>
-        <strong>Enemy templates</strong>{" "}
-        <a href={`/games/${gameId}/enemies`} target="_blank" rel="noreferrer" className="small">
+        <strong>Characters</strong>{" "}
+        <a href={`/games/${gameId}/npcs`} target="_blank" rel="noreferrer" className="small">
           Manage ↗
         </a>
       </summary>
-      {templates && list.length === 0 && <p className="muted small">None yet. Create some under Manage.</p>}
+      {templates && list.length === 0 && <p className="muted small">None yet. Make some under Manage.</p>}
       <ul className="plain">
         {list.map(([tid, t]) => (
           <li key={tid}>
             <span>
               <span className="swatch" style={{ background: t.color }} /> {t.name || "Unnamed"}{" "}
               <span className="muted small">
-                ×{Object.values(table.tokens).filter((x) => x.templateId === tid).length} on map
+                {NPC_SIDES.find((s) => s.value === t.side)?.label} · ×{Object.values(table.tokens).filter((x) => x.templateId === tid).length} on map
               </span>
             </span>
             <button onClick={() => place(tid, t)}>Place</button>

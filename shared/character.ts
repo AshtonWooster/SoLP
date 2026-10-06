@@ -70,26 +70,6 @@ export interface Armor extends Equipment {
   staggerResistances: ResistanceSet;
 }
 
-/** An enemy the GM designed, which can be placed on the map any number of times (shared/types.ts). */
-export interface EnemyTemplate {
-  name: string;
-  color: string;
-  maxHp: number;
-  maxStagger: number;
-  maxLight: number;
-  maxSanity: number;
-  justice: number;
-  resistances: ResistanceSet;
-  staggerResistances: ResistanceSet;
-  /** Every Page the enemy has. */
-  pages: Page[];
-  /** Copies of each Page in its Combat Deck. No size limit. */
-  deck: DeckEntry[];
-  notes: string;
-  portrait?: string;
-  updatedAt: number;
-}
-
 export interface Proficiency {
   id: string;
   name: string;
@@ -182,4 +162,32 @@ export interface Character {
   /** Portrait image URL. */
   portrait?: string;
   updatedAt: number;
+}
+
+/** Who a GM-made character fights for: enemies oppose the party, allies side with it. */
+export type NpcSide = "enemy" | "ally" | "neutral";
+
+/** Values the GM set by hand, replacing the ones worked out from Rank, Stats and Armor. */
+export interface NpcOverrides {
+  maxHp?: number;
+  maxStagger?: number;
+  maxSanity?: number;
+  maxLight?: number;
+  resistances?: ResistanceSet;
+  staggerResistances?: ResistanceSet;
+}
+
+/**
+ * A character the GM made: an enemy, ally or anyone else (games/{gameId}/enemies/{id}). Built like
+ * a player's character, without the point budgets; place copies of it on the map from the GM screen.
+ */
+export interface NpcTemplate extends Character {
+  side: NpcSide;
+  /** Token color. */
+  color: string;
+  /** Only the GM sees these. */
+  notes: string;
+  /** Pages of its own, besides the ones on its Weapons and Armor. */
+  pages: Page[];
+  overrides: NpcOverrides;
 }

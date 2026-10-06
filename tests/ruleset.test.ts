@@ -4,6 +4,12 @@ import { test } from "node:test";
 import {
   auxiliaryDeck,
   blankArmor,
+  blankNpc,
+  cloneEquipment,
+  maxResources,
+  normalizeNpc,
+  npcSpawnData,
+  npcStats,
   blankCharacter,
   blankItem,
   blankPage,
@@ -119,4 +125,45 @@ test("usable items: consumable ones count down, then one of the stack is used up
   const lamp = { ...blankItem("item"), usable: true };
   assert.equal(useItem(lamp), lamp, "not consumable: never runs out");
   assert.deepEqual(useItemIn([salve, lamp], "s").map((i) => i.uses), [1, undefined]);
+});
+
+test("GM characters: an old enemy template keeps its numbers as overrides", () => {
+  const page = { ...blankPage("basic"), name: "Claw" };
+  const t = normalizeNpc({ name: "Thug", color: "#123456", maxHp: 12, maxStagger: 9, maxLight: 4, maxSanity: 15, justice: 2, resistances: { slash: 0.5, pierce: 1, blunt: 1 }, staggerResistances: { slash: 1, pierce: 1, blunt: 1 }, pages: [page], deck: [{ pageId: page.id, copies: 3 }], notes: "n" });
+  assert.equal(t.side, "enemy");
+  assert.equal(t.rank, 9);
+  assert.equal(t.primary.justice, 2);
+  assert.deepEqual(t.overrides, { maxHp: 12, maxStagger: 9, maxLight: 4, maxSanity: 15, resistances: { slash: 0.5, pierce: 1, blunt: 1 } });
+  assert.equal("maxHp" in t, false);
+  const spawn = npcSpawnData(t);
+  assert.equal(spawn.maxHp, 12);
+  assert.equal(spawn.justice, 2);
+  assert.deepEqual(spawn.staggerResistances, { slash: 1, pierce: 1, blunt: 1 });
+  assert.deepEqual(spawn.pages.map((p) => p.name), ["Claw"]);
+});
+
+test("GM characters: Resources come from Rank and Stats unless overridden; resistances from Armor", () => {
+  const t = blankNpc();
+  t.rank = 8;
+  t.primary.fortitude = 3;
+  const armor = { ...blankArmor(), name: "Coat", resistances: { slash: 0.5, pierce: 2, blunt: 1 } };
+  t.armor = armor;
+  const s = npcStats(t);
+  assert.equal(s.maxHp, maxResources(t).maxHp);
+  assert.deepEqual(s.resistances, armor.resistances);
+  t.overrides.maxHp = 99;
+  assert.equal(npcStats(t).maxHp, 99);
+  assert.equal(npcStats(t).calculated.maxHp, maxResources(t).maxHp);
+  // The Armor's Pages come along when the character is placed.
+  assert.equal(npcSpawnData(t).pages.length, t.pages.length + armor.pages.length);
+});
+
+test("copied gear gets fresh ids", () => {
+  const w = { ...blankWeapon(), name: "Durandal", passives: [{ id: "p1", name: "Keen", cost: 1, description: "" }] };
+  const c = cloneEquipment(w);
+  assert.notEqual(c.id, w.id);
+  assert.notEqual(c.pages[0].id, w.pages[0].id);
+  assert.notEqual(c.pages[0].dice[0].id, w.pages[0].dice[0].id);
+  assert.equal(c.passives[0].name, "Keen");
+  assert.notEqual(c.passives[0].id, "p1");
 });
