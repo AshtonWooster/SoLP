@@ -9,10 +9,10 @@ import { PEEK_WIDTH, peekPosition } from "./peek.ts";
 import { DiceIcon, DIE_NAMES, dieClass, dieRange } from "./player/DiceIcon.tsx";
 import { PvCard } from "./player/LorCard.tsx";
 
-type Peek = { page: Page; top: number; left: number } | null;
+export type Peek = { page: Page; top: number; left: number } | null;
 
 /** The full card for a hovered row: the Page with each die's range and effects. */
-function PageHoverCard({ page }: { page: Page }) {
+export function PageHoverCard({ page }: { page: Page }) {
   return (
     <div className="page-hover">
       <PvCard page={page} />
@@ -38,7 +38,7 @@ function PageHoverCard({ page }: { page: Page }) {
 }
 
 /** One row of the deck list: copies, name, dice, Light cost; hover for the full card. */
-function DeckRow({
+export function DeckRow({
   page,
   copies,
   note,

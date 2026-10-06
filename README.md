@@ -44,7 +44,7 @@ Keep the GM screen open during play. If it closes, phones and the board show "Wa
 
 Each player makes one character per game from the game page ("Create my character"), covering the steps in Act 5 of the ruleset. The **Character** tab is a stepped creator: a short intro on making a character, then pages you can move between with **Back**/**Next** or the step bar (each step shows ✓ once it's done):
 
-1. **Fixer License**: an ID card where you tap the photo to upload a portrait and fill in name, occupation, age, height, birthplace, residence, appearance and starting Ahn. It shows your Rank (Grade), which only the GM can change.
+1. **Fixer License**: an ID card where you tap the photo to upload a portrait and fill in name, occupation, age, height, birthplace, residence and appearance. It shows your Rank (Grade), which only the GM can change.
 2. **Stats**: spend Primary and Secondary points, with live Health, Stagger, Sanity, Light and Speed.
 3. **Personality**: personality and relationships.
 4. **Summary**: everything on one page, plus a "still to do" list where each item links to the step or tab that fixes it.
@@ -59,7 +59,7 @@ The ruleset's tables aren't written yet, so the numbers they'd provide (points p
 
 The character sheet has **Inventory** and **Decks** tabs (Acts 6 and 7):
 
-- **Inventory:** 9 Slots (the GM can change the count). Each holds one item, or a stack of one stacking item up to its max. The **Trinket Slot** holds one Trinket, which is always active while equipped. Players fill it from the GM's item library on the Inventory tab: their items as a slim list on the left (hover one for its full card) and the GM's items on the right (click to add).
+- **Inventory:** the character's **Ahn** (money) at the top, then 9 Slots (the GM can change the count). Each holds one item, or a stack of one stacking item up to its max. The **Trinket Slot** holds one Trinket, which is always active while equipped. Players fill it from the GM's item library on the Inventory tab: their items as a slim list on the left (hover one for its full card) and the GM's items on the right (click to add).
 - **Combat Deck:** 12 Pages built from your Equipment: any number of copies of Basic Pages, one of each Special Page.
 - **Auxiliary Deck:** built automatically from your Inventory's Tools (one copy per item in a stack). The equipped Trinket isn't a card; it's always on.
 
@@ -112,9 +112,17 @@ On the GM screen, **Maps** lists the game's maps (like Roll20 pages or Foundry s
 
 Player characters come along when the map changes, keeping their Health, Light, Effects and everything else. Each map remembers where they stood, so switching back puts them where they were (the first visit lines them up at the top-left). Enemies and other tokens stay on the map they were placed on, with their own Health and decks, until the GM switches back. Maps can't be switched during combat. Players only receive the current map; the others (and the enemies waiting on them) stay with the GM.
 
-### Enemy templates
+### Character editor
 
-On the game page, **Enemy templates** (GM only) lets the GM design enemies: Health, Stagger Resist, Light, Sanity, Justice, damage and Stagger resistances, notes, and a Combat Deck of Pages with any number of copies (no size limit). On the GM screen, **Place** puts a copy on the map. Each copy is its own token ("Thug", "Thug 2", ...) with its own Health, deck and so on; removing the token removes only that copy. Editing a placed enemy (token panel → Pages and deck) doesn't change its template.
+On the game page, **Character editor** (GM only) is where the GM builds enemies, allies and anyone else in the story. On the left, each character shows as a card with its portrait, name, side (Enemy, Ally or Neutral), Rank and Health; click one to open its editor, which has three tabs:
+
+- **Profile:** portrait, name, side, token color, Rank and GM notes; Primary and Secondary Stats set freely (no point budget); and Health, Stagger Resist, Sanity and Light, worked out from Rank and Stats like a player's. Type over any of them to override it (**Reset** goes back to the calculated number). Damage and Stagger resistances come from the Armor unless overridden.
+- **Augment, Weapons & Armor:** the same Augment and equipment editors players use, plus a **Reuse gear** library of every Augment, Weapon and Armor already built in the game, on the GM's characters or the players'. Picking one copies it onto the character (so editing the copy leaves the original alone).
+- **Deck & Inventory:** the Combat Deck as a list (every Page from the Weapons and Armor plus the character's own Pages, with − and + for copies; no size limit), the character's own Pages (tap to edit, **+** for a new one), a **Reuse Pages** library of every Page in the game, and an Inventory with Ahn, filled from the item library.
+
+**Export** saves one character to a JSON file and **Export all** saves every one; **Import** adds the characters in such a file (gear, decks and inventory included), and the GM can copy all characters from another game they run. **Duplicate** makes a copy to tweak.
+
+On the GM screen, **Characters → Place** puts a copy on the map: enemies start on the right, allies and neutral characters on the left. Each copy is its own token ("Thug", "Thug 2", ...) with its own Health, deck and so on; removing the token removes only that copy. Editing a placed copy (token panel → Pages and deck) doesn't change the character. The GM runs every non-player token's turn from the GM screen. Allies count as the party's side (an ally targeting a player doesn't pin them in place); neutral characters oppose everyone. Enemy templates made before the editor existed open with their old Health and resistances kept as overrides.
 
 ### Item library
 

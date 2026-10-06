@@ -32,6 +32,7 @@ import type {
   FxRound,
   FxState,
   PageSource,
+  Side,
   SlottedPage,
   TableState,
   Token,
@@ -87,6 +88,12 @@ export function speedText(t: Token, c: Combatant) {
   return `${t.name} ${c.speed} (${c.roll}${c.bonus >= 0 ? "+" : ""}${c.bonus})`;
 }
 
+/** Enemies oppose the party (players and allies); neutral characters oppose everyone. */
+export function opposed(a: Side, b: Side): boolean {
+  const team = (s: Side) => (s === "player" || s === "ally" ? "party" : s);
+  return a !== b && (team(a) !== team(b) || a === "neutral" || b === "neutral");
+}
+
 /** Highest Speed first. On a tie players go before enemies; other ties keep their order (the GM can swap them). */
 export function sortOrder(table: TableState, order: Combatant[]): Combatant[] {
   const sideRank = (c: Combatant) => (table.tokens[c.tokenId]?.side === "player" ? 0 : 1);
@@ -109,7 +116,7 @@ function enemyLoadout(token: Token): Loadout {
 }
 
 function setUpDeck(c: CombatState, token: Token, ctx: EngineContext | undefined) {
-  const loadout = token.side === "enemy" ? enemyLoadout(token) : ctx?.loadout(token.id);
+  const loadout = token.side !== "player" ? enemyLoadout(token) : ctx?.loadout(token.id);
   if (!loadout) return;
   Object.assign(c.pages, loadout.pages);
   const deck: DeckState = {
@@ -663,7 +670,7 @@ export function pinnedBy(table: TableState, token: Token): Token | undefined {
   if (!c) return;
   const slot = c.slots.find((s) => {
     const owner = table.tokens[s.ownerId];
-    return owner && owner.side !== token.side && !isMassAttack(c.pages[s.pageId]?.type) && s.targets.some((t) => t.tokenId === token.id);
+    return owner && opposed(owner.side, token.side) && !isMassAttack(c.pages[s.pageId]?.type) && s.targets.some((t) => t.tokenId === token.id);
   });
   return slot ? table.tokens[slot.ownerId] : undefined;
 }
@@ -671,7 +678,7 @@ export function pinnedBy(table: TableState, token: Token): Token | undefined {
 /** A Story Roll (Act 7): 1d20 (placeholder) + the chosen Stat. Allowed any time, in or out of combat. */
 export function storyRoll(table: TableState, actor: Actor, token: Token, stat: string, ctx?: EngineContext) {
   if (actor.role !== "gm" && token.ownerId !== actor.uid) throw new ActionError("You can only roll for your own character.");
-  const stats = token.side === "enemy" ? { justice: token.justice ?? 0 } : (ctx?.loadout(token.id)?.stats ?? {});
+  const stats = token.side !== "player" ? { justice: token.justice ?? 0 } : (ctx?.loadout(token.id)?.stats ?? {});
   const key = String(stat).toLowerCase();
   const value = Math.round(Number(stats[key] ?? 0));
   const roll = rollDie(STORY_DIE);

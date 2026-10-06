@@ -10,7 +10,10 @@ import type {
   DeckEntry,
   Dice,
   DiceKind,
-  EnemyTemplate,
+  NpcOverrides,
+  NpcSide,
+  NpcTemplate,
+  ResistanceSet,
   Equipment,
   Inventory,
   InventoryItem,
@@ -21,7 +24,7 @@ import type {
   PrimaryStat,
   Weapon,
 } from "./character.ts";
-import type { Resources } from "./types.ts";
+import type { Resources, SpawnData } from "./types.ts";
 
 /** Act 5, Step 1: "For most campaigns, it is encouraged to start at Rank 9." */
 export const STARTING_RANK = 9;
@@ -344,23 +347,153 @@ export function enemyDeck(pages: Page[], deck: DeckEntry[] | undefined): string[
   return entries.flatMap((e) => Array(Math.max(0, e.copies)).fill(e.pageId));
 }
 
-export function blankEnemy(): EnemyTemplate {
+// ---- Characters the GM makes (enemies, allies, anyone else) ----
+
+const ONES: ResistanceSet = { slash: 1, pierce: 1, blunt: 1 };
+export const NPC_SIDES: { value: NpcSide; label: string; color: string }[] = [
+  { value: "enemy", label: "Enemy", color: "#d9534f" },
+  { value: "ally", label: "Ally", color: "#4fb3bf" },
+  { value: "neutral", label: "Neutral", color: "#a3968a" },
+];
+
+export function blankNpc(): NpcTemplate {
   const attack = { ...blankPage("basic"), name: "Attack" };
   return {
-    name: "",
+    ...blankCharacter("", ""),
+    side: "enemy",
     color: "#d9534f",
-    maxHp: 30,
-    maxStagger: 20,
-    maxLight: 3,
-    maxSanity: 15,
-    justice: 0,
-    resistances: { slash: 1, pierce: 1, blunt: 1 },
-    staggerResistances: { slash: 1, pierce: 1, blunt: 1 },
+    notes: "",
     pages: [attack],
     deck: [{ pageId: attack.id, copies: 6 }],
-    notes: "",
-    updatedAt: Date.now(),
+    overrides: {},
   };
+}
+
+const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+const resistanceSet = (v: unknown): ResistanceSet | undefined => {
+  if (!v || typeof v !== "object") return undefined;
+  const r = v as Record<string, unknown>;
+  return { slash: Math.max(0, num(r.slash) ?? 1), pierce: Math.max(0, num(r.pierce) ?? 1), blunt: Math.max(0, num(r.blunt) ?? 1) };
+};
+const isOnes = (r?: ResistanceSet) => !r || (r.slash === 1 && r.pierce === 1 && r.blunt === 1);
+
+/**
+ * A stored or imported GM character with every field filled in. Templates saved before characters
+ * had Ranks and Stats (plain Health, Justice and resistances) keep those numbers as overrides.
+ */
+export function normalizeNpc(raw: unknown): NpcTemplate {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const blank = blankNpc();
+  const str = (v: unknown, d = "") => (typeof v === "string" ? v : d);
+  const arr = <T,>(v: unknown, d: T[]): T[] => (Array.isArray(v) ? (v as T[]) : d);
+  const t: NpcTemplate = {
+    ...blank,
+    ...(r as Partial<NpcTemplate>),
+    ownerId: "",
+    name: str(r.name).slice(0, 120),
+    side: NPC_SIDES.some((s) => s.value === r.side) ? (r.side as NpcSide) : "enemy",
+    color: /^#[0-9a-f]{6}$/i.test(str(r.color)) ? str(r.color) : blank.color,
+    notes: str(r.notes),
+    pages: arr(r.pages, blank.pages),
+    deck: arr(r.deck, blank.deck),
+    weapons: arr(r.weapons, []),
+    armor: r.armor && typeof r.armor === "object" ? (r.armor as NpcTemplate["armor"]) : null,
+    proficiencies: arr(r.proficiencies, []),
+    ego: arr(r.ego, []),
+    rank: RANKS.includes(num(r.rank) ?? -1) ? (r.rank as number) : STARTING_RANK,
+    primary: { ...blank.primary, ...(r.primary && typeof r.primary === "object" ? (r.primary as NpcTemplate["primary"]) : {}) },
+    secondary: { ...blank.secondary, ...(r.secondary && typeof r.secondary === "object" ? (r.secondary as NpcTemplate["secondary"]) : {}) },
+    augment: { ...blank.augment, ...(r.augment && typeof r.augment === "object" ? (r.augment as NpcTemplate["augment"]) : {}) },
+    details: { ...blank.details, ...(r.details && typeof r.details === "object" ? (r.details as NpcTemplate["details"]) : {}) },
+    inventory: { ...blank.inventory, ...(r.inventory && typeof r.inventory === "object" ? (r.inventory as NpcTemplate["inventory"]) : {}) },
+    ahn: Math.max(0, Math.round(num(r.ahn) ?? 0)),
+    overrides: {},
+    updatedAt: num(r.updatedAt) ?? Date.now(),
+  };
+  if (typeof r.portrait === "string" && r.portrait) t.portrait = r.portrait;
+  else delete t.portrait;
+  const o = (r.overrides && typeof r.overrides === "object" ? r.overrides : {}) as Record<string, unknown>;
+  for (const k of ["maxHp", "maxStagger", "maxSanity", "maxLight"] as const) {
+    const v = num(o[k]);
+    if (v !== undefined) t.overrides[k] = Math.max(1, Math.round(v));
+  }
+  for (const k of ["resistances", "staggerResistances"] as const) {
+    const v = resistanceSet(o[k]);
+    if (v) t.overrides[k] = v;
+  }
+  if (num(r.rank) === undefined) {
+    // An enemy template from before Ranks and Stats: keep its numbers as they were.
+    for (const k of ["maxHp", "maxStagger", "maxSanity", "maxLight"] as const) {
+      const v = num(r[k]);
+      if (v !== undefined) t.overrides[k] = Math.max(1, Math.round(v));
+    }
+    t.primary.justice = Math.round(num(r.justice) ?? 0);
+    for (const k of ["resistances", "staggerResistances"] as const) {
+      const v = resistanceSet(r[k]);
+      if (v && !isOnes(v)) t.overrides[k] = v;
+    }
+  }
+  for (const k of ["maxHp", "maxStagger", "maxSanity", "maxLight", "justice", "resistances", "staggerResistances"]) delete (t as unknown as Record<string, unknown>)[k];
+  return t;
+}
+
+/** Every Page a GM character can put in its deck: those on its Equipment, then its own. */
+export function npcPages(t: NpcTemplate): DeckSource[] {
+  return [...equipmentPages(t), ...t.pages.map((page) => ({ page, from: "" }))];
+}
+
+/** Resources and resistances: from Rank, Stats and Armor, unless the GM overrode them. */
+export type NpcNumbers = Required<NpcOverrides>;
+export function npcStats(t: NpcTemplate): NpcNumbers & { calculated: NpcNumbers } {
+  const base = maxResources(t);
+  const calculated = { ...base, resistances: t.armor?.resistances ?? ONES, staggerResistances: t.armor?.staggerResistances ?? ONES };
+  const o = t.overrides;
+  return {
+    calculated,
+    maxHp: o.maxHp ?? base.maxHp,
+    maxStagger: o.maxStagger ?? base.maxStagger,
+    maxSanity: o.maxSanity ?? base.maxSanity,
+    maxLight: o.maxLight ?? base.maxLight,
+    resistances: o.resistances ?? calculated.resistances,
+    staggerResistances: o.staggerResistances ?? calculated.staggerResistances,
+  };
+}
+
+/** What a placed copy starts with. */
+export function npcSpawnData(t: NpcTemplate): SpawnData {
+  const s = npcStats(t);
+  const data: SpawnData = {
+    name: t.name,
+    color: t.color,
+    side: t.side,
+    maxHp: s.maxHp,
+    maxStagger: s.maxStagger,
+    maxLight: s.maxLight,
+    maxSanity: s.maxSanity,
+    justice: t.primary.justice,
+    resistances: s.resistances,
+    staggerResistances: s.staggerResistances,
+    pages: npcPages(t).map((x) => x.page),
+    deck: t.deck,
+  };
+  if (t.portrait) data.portrait = t.portrait;
+  return data;
+}
+
+// ---- Copying Pages and Equipment between characters ----
+
+/** A copy of a Page with fresh ids, so it can sit next to the original. */
+export function clonePage(p: Page): Page {
+  return { ...structuredClone(p), id: newId(), dice: p.dice.map((d) => ({ ...d, id: newId() })) };
+}
+
+/** A copy of a Weapon, Armor or Augment's Passives and Pages with fresh ids. */
+export function cloneEquipment<T extends Equipment>(e: T): T {
+  return { ...structuredClone(e), id: newId(), passives: e.passives.map((p) => ({ ...p, id: newId() })), pages: e.pages.map(clonePage) };
+}
+
+export function cloneAugment(a: Character["augment"]): Character["augment"] {
+  return { ...structuredClone(a), passives: a.passives.map((p) => ({ ...p, id: newId() })) };
 }
 
 // ---- Blank pieces for the editor ----

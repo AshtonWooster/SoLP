@@ -14,9 +14,9 @@
 //   games/{gameId}/session/host     SessionDoc         members read; GM write
 //   games/{gameId}/signals/{id}     SignalDoc          connection handshakes (see src/net)
 //   games/{gameId}/characters/{uid} Character          members read; owner or GM write (shared/character.ts)
-//   games/{gameId}/enemies/{id}     EnemyTemplate      GM only (shared/character.ts)
+//   games/{gameId}/enemies/{id}     NpcTemplate        GM only (shared/character.ts)
 
-import type { DeckEntry, Dice, Page, ResistanceSet } from "./character.ts";
+import type { DeckEntry, Dice, NpcSide, Page, ResistanceSet } from "./character.ts";
 
 // ---- Accounts and games ----
 
@@ -71,7 +71,7 @@ export interface SignalDoc {
 
 // ---- Live table ----
 
-export type Side = "player" | "enemy";
+export type Side = "player" | NpcSide;
 
 export interface Resources {
   hp: number;
@@ -306,8 +306,22 @@ export interface TableState {
   combat?: CombatState;
 }
 
-/** What a placed enemy copies from its template. */
-export type EnemyTemplateData = Omit<import("./character.ts").EnemyTemplate, "updatedAt" | "notes">;
+/** What a placed copy of a GM-made character starts with (worked out by npcSpawnData in shared/ruleset.ts). */
+export interface SpawnData {
+  name: string;
+  color: string;
+  side: NpcSide;
+  maxHp: number;
+  maxStagger: number;
+  maxLight: number;
+  maxSanity: number;
+  justice: number;
+  resistances: ResistanceSet;
+  staggerResistances: ResistanceSet;
+  pages: Page[];
+  deck: DeckEntry[];
+  portrait?: string;
+}
 
 /** Partial resource edits the GM can apply to any token. */
 export type ResourcePatch = Partial<Resources>;
@@ -327,8 +341,8 @@ export type TableAction =
   | { type: "setResistances"; tokenId: string; resistances: ResistanceSet; staggerResistances?: ResistanceSet }
   /** Replace an enemy token's Pages and deck. */
   | { type: "setEnemyDeck"; tokenId: string; pages: Page[]; deck: DeckEntry[] }
-  /** Place a copy of an enemy template on the map. */
-  | { type: "spawnEnemy"; templateId: string; template: EnemyTemplateData; x: number; y: number }
+  /** Place a copy of a GM-made character on the map. */
+  | { type: "spawnEnemy"; templateId: string; template: SpawnData; x: number; y: number }
   // Combat (Act 8). The GM runs it; whoever's turn it is can move, use Pages and end their turn.
   | { type: "createMap"; name: string; width: number; height: number; background?: string }
   | { type: "updateMap"; mapId: string; name?: string; width?: number; height?: number; background?: string | null }

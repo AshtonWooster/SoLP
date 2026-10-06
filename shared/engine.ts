@@ -246,7 +246,7 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
     case "setEnemyDeck": {
       gmOnly();
       const token = tokenOf(action.tokenId);
-      if (token.side !== "enemy") throw new ActionError("Players use their character's decks.");
+      if (token.side === "player") throw new ActionError("Players use their character's decks.");
       token.pages = (Array.isArray(action.pages) ? action.pages : []).slice(0, 60) as Page[];
       token.deck = cleanDeckEntries(action.deck);
       return true;
@@ -257,7 +257,8 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       // Each copy is its own token with its own Health and so on; it shares only the starting values.
       const same = Object.values(table.tokens).filter((x) => x.templateId === action.templateId).length;
       const name = (String(t.name ?? "").trim().slice(0, 24) || "Enemy") + (same ? ` ${same + 1}` : "");
-      const token = makeToken(name, "enemy", clamp(action.x, 0, width - 1), clamp(action.y, 0, height - 1), String(t.color || "#d9534f"));
+      const side: Side = t.side === "ally" || t.side === "neutral" ? t.side : "enemy";
+      const token = makeToken(name, side, clamp(action.x, 0, width - 1), clamp(action.y, 0, height - 1), String(t.color || "#d9534f"));
       const n = (v: unknown, d: number) => Math.max(1, Math.round(Number(v) || d));
       const maxHp = n(t.maxHp, 30);
       const maxStagger = n(t.maxStagger, 20);

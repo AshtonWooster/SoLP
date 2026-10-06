@@ -100,6 +100,9 @@ export function InfoPanel({ panel, c, sheetUrl, onOpenPage, onUseItem, onRaiseSt
       ];
       return (
         <>
+          <p className="ahn-line">
+            <span className="muted">Ahn</span> <strong>{c.ahn ?? 0}</strong>
+          </p>
           <NameDescription rows={rows} empty="Nothing in your inventory." />
           {edit("inventory")}
         </>
