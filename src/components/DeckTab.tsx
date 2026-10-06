@@ -201,7 +201,7 @@ export function DeckTab({
       <div className="deck-side">
         <Section
           id="equipment"
-          title="5 · Weapons and Armor"
+          title="Weapons and Armor"
           intro="Up to two hands of Weapons and one Armor, each with Passives up to its max cost and one Basic and one Special Page made with your GM. Use − and + under a Page to put copies in your Combat Deck: Basic Pages any number of times, Special Pages once."
         >
           <p className={hands > 2 ? "error" : "muted"}>
