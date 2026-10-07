@@ -483,7 +483,7 @@ const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 /** One rule as a sentence: "At the end of my turn, I take 1 damage per stack." */
 export function describeRule(rule: Rule, library: Record<string, EffectDef> = PRESET_EFFECTS, stats?: Record<string, string>): string {
   const when = WHEN_OPTIONS.find((o) => o.value === rule.when)?.label ?? rule.when;
-  const checks = rule.checks.length ? ` if ${joinAnd(rule.checks.map(checkText))}` : "";
+  const checks = rule.checks.length ? `, if ${joinAnd(rule.checks.map(checkText))}` : "";
   const actions = rule.actions.length ? joinAnd(rule.actions.map((a) => actionText(a, library, stats))) : "nothing happens";
   return `${when}${checks}, ${actions}.`;
 }
@@ -501,7 +501,7 @@ const DECAY_TEXT: Record<Decay, string> = {
 export function describeEffect(def: EffectDef, library: Record<string, EffectDef> = PRESET_EFFECTS, stats?: Record<string, string>): string {
   const lines = def.rules.map((r) => describeRule(r, library, stats));
   if (def.kind === "status" && DECAY_TEXT[def.decay]) lines.push(DECAY_TEXT[def.decay]);
-  if (def.maxStacks) lines.push(`Up to ${def.maxStacks} ${plural(def.maxStacks, "stack")}.`);
+  if (def.maxStacks && def.maxStacks < MAX_STACKS) lines.push(`Up to ${def.maxStacks} ${plural(def.maxStacks, "stack")}.`);
   if (def.note?.trim()) lines.push(def.note.trim());
   return lines.map(capital).join(" ");
 }

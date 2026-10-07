@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { arrayRemove, deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
 import { blankCharacter, characterChecks, maxResources } from "../../shared/ruleset.ts";
-import { type GameDoc, type GmMeta, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, playersCanCreateItems } from "../../shared/types.ts";
+import { type GameDoc, type GmMeta, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { TopBar } from "../components/TopBar.tsx";
@@ -150,6 +150,22 @@ export function Settings() {
             onChange={async (on) => {
               try {
                 await updateDoc(ref, { "settings.playersCreateItems": on });
+              } catch (err) {
+                setMessage(friendlyError(err));
+              }
+            }}
+          />
+        </section>
+
+        <section className="panel settings-section" aria-label="Effect library">
+          <h2>Effect library</h2>
+          <Toggle
+            label="Players can create effects"
+            hint="Players build automated Status effects and Passives in the effect library and link their Passives and Proficiencies to them. A player's effect does nothing at the table until you approve it there, and again after each change they make."
+            on={playersCanCreateEffects(g)}
+            onChange={async (on) => {
+              try {
+                await updateDoc(ref, { "settings.playersCreateEffects": on });
               } catch (err) {
                 setMessage(friendlyError(err));
               }

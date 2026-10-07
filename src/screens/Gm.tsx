@@ -15,6 +15,8 @@ import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { MAP_MAX, MAP_MIN } from "../../shared/maps.ts";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
+import { effectText, useEffectLibrary } from "../components/effects/EffectBuilder.tsx";
+import { isLive } from "../../shared/effects.ts";
 import { useHost } from "../net/hooks.ts";
 
 const RESOURCE_FIELDS: [keyof Resources, keyof Resources, string][] = [
@@ -444,29 +446,67 @@ function TemplatePanel({ gameId, table, act }: { gameId: string; table: TableSta
   );
 }
 
-/** Effects on a character (Bleed, Burn, buffs…), set by hand until Effects are automated. */
+/** Effects on a character: automated ones from the effect library (with stacks), or notes tracked by hand. */
 function EffectsEditor({ token, act }: { token: Token; act: (action: TableAction) => boolean }) {
+  const { id = "" } = useParams();
+  const library = useEffectLibrary(id);
   const effects = token.effects ?? [];
   const save = (next: typeof effects) => act({ type: "setEffects", tokenId: token.id, effects: next });
+  const statuses = Object.entries(library).filter(([, d]) => d.kind === "status" && isLive(d));
   return (
     <details className="enemy-pages effects-editor">
       <summary>Effects ({effects.length})</summary>
-      {effects.map((e, i) => (
-        <div className="effect-edit" key={e.id}>
-          <div className="row">
-            <input aria-label="Effect name" placeholder="Effect" value={e.name} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)))} />
-            <NumberField value={e.count} onCommit={(n) => save(effects.map((x, j) => (j === i ? { ...x, count: n } : x)))} />
-            <button type="button" className="icon" aria-label="Remove effect" onClick={() => save(effects.filter((_, j) => j !== i))}>
-              ✕
-            </button>
+      {effects.map((e, i) =>
+        e.defId ? (
+          <div className="effect-edit automated" key={e.id}>
+            <div className="row">
+              <strong className="effect-edit-name">
+                {library[e.defId]?.name ?? e.name} <span className="chip static">Automated</span>
+              </strong>
+              <NumberField value={e.count} onCommit={(n) => save(effects.map((x, j) => (j === i ? { ...x, count: n } : x)).filter((x) => !x.defId || x.count > 0))} />
+              <button type="button" className="icon" aria-label="Remove effect" onClick={() => save(effects.filter((_, j) => j !== i))}>
+                ✕
+              </button>
+            </div>
+            <p className="muted small">{library[e.defId] ? effectText(library[e.defId], library) : `${e.description} (no longer in the effect library, so it does nothing)`}</p>
           </div>
-          <input aria-label="Effect description" placeholder="What it does" value={e.description} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, description: ev.target.value } : x)))} />
-          <input aria-label="Effect duration" placeholder="Duration (optional)" value={e.duration ?? ""} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, duration: ev.target.value } : x)))} />
-        </div>
-      ))}
-      <button type="button" onClick={() => save([...effects, { id: newId(), name: "", count: 1, description: "" }])}>
-        + Add effect
-      </button>
+        ) : (
+          <div className="effect-edit" key={e.id}>
+            <div className="row">
+              <input aria-label="Effect name" placeholder="Effect" value={e.name} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)))} />
+              <NumberField value={e.count} onCommit={(n) => save(effects.map((x, j) => (j === i ? { ...x, count: n } : x)))} />
+              <button type="button" className="icon" aria-label="Remove effect" onClick={() => save(effects.filter((_, j) => j !== i))}>
+                ✕
+              </button>
+            </div>
+            <input aria-label="Effect description" placeholder="What it does" value={e.description} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, description: ev.target.value } : x)))} />
+            <input aria-label="Effect duration" placeholder="Duration (optional)" value={e.duration ?? ""} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, duration: ev.target.value } : x)))} />
+          </div>
+        ),
+      )}
+      <div className="row wrap">
+        <select
+          aria-label="Give an automated effect"
+          value=""
+          onChange={(ev) => {
+            const defId = ev.target.value;
+            const def = library[defId];
+            if (!def) return;
+            const have = effects.find((x) => x.defId === defId);
+            save(have ? effects.map((x) => (x === have ? { ...x, count: x.count + 1 } : x)) : [...effects, { id: newId(), defId, name: def.name, count: 1, description: effectText(def, library) }]);
+          }}
+        >
+          <option value="">+ Give an automated effect…</option>
+          {statuses.map(([key, d]) => (
+            <option key={key} value={key}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={() => save([...effects, { id: newId(), name: "", count: 1, description: "" }])}>
+          + Add a note
+        </button>
+      </div>
     </details>
   );
 }

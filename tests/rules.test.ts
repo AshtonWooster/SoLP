@@ -225,6 +225,30 @@ test("players make items only when the GM allows it, and change only their own",
   await assertFails(deleteDoc(item("p1", "mine")));
 });
 
+test("effect library: members read it; players make effects only when allowed, and can't approve them", async () => {
+  const fx = (who: string, id: string) => doc(as(who), "games", GAME, "effects", id);
+  const burn = { name: "Burn", kind: "status", decay: "halfAtTurnEnd", rules: [] };
+  await assertSucceeds(setDoc(fx("gm", "burn"), burn));
+  await assertSucceeds(getDocs(collection(as("p1"), "games", GAME, "effects")));
+  await assertFails(getDocs(collection(as("stranger"), "games", GAME, "effects")));
+  await assertFails(setDoc(fx("p1", "mine"), { ...burn, createdBy: "p1" }));
+  await assertFails(updateDoc(fx("p1", "burn"), { name: "Weak Burn" }));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateEffects": true }));
+  await assertSucceeds(setDoc(fx("p1", "mine"), { ...burn, name: "Frostbite", createdBy: "p1", approved: false }));
+  await assertFails(setDoc(fx("p1", "sneaky"), { ...burn, createdBy: "p1", approved: true }));
+  await assertFails(setDoc(fx("p1", "fake"), { ...burn, createdBy: "gm" }));
+  await assertFails(updateDoc(fx("p1", "mine"), { approved: true }));
+  await assertFails(updateDoc(fx("p1", "burn"), { name: "Weak Burn" }));
+  await assertFails(deleteDoc(fx("p1", "burn")));
+  await assertSucceeds(updateDoc(fx("gm", "mine"), { approved: true }));
+  // Any change by the player sends it back for approval.
+  await assertFails(updateDoc(fx("p1", "mine"), { name: "Deep Frostbite" }));
+  await assertSucceeds(updateDoc(fx("p1", "mine"), { name: "Deep Frostbite", approved: false }));
+  await assertSucceeds(deleteDoc(fx("p1", "mine")));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateEffects": false }));
+  await assertFails(setDoc(fx("p1", "again"), { ...burn, createdBy: "p1" }));
+});
+
 test("only the GM sees the invite code and GM notes", async () => {
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "meta")));
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "notes")));

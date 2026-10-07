@@ -135,6 +135,16 @@ On the game page, **Item library** (GM only) is where the GM makes every item in
 
 Any of them can be **Stacking**, up to a max per Slot. Inventories link to the library, so the GM's edits reach every inventory holding the item. Libraries are per game: **Export items** saves them to a file, **Import items** loads one, and **Copy items from another game** copies the library of another game you GM. The GM can also edit any player's inventory from their sheet.
 
+### Effect library
+
+On the game page, **Effect library** holds the game's automated effects; everyone in the game can read it. Each effect is built from menus, never code: one or more rules that read as a sentence, **When** something happens (end of my turn, when I'm hit, when I hit someone, when I roll a die, when I win or lose a Clash...), **if** any checks pass (a die roll against my stacks, the kind of die, my Health), **do** these things (take or deal damage, add Power, deal extra damage, give someone an Effect, gain Light, draw...), with **how much** picked from a list (a number, per stack, half the stacks, a die roll, another roll of this die, a Stat). Status effects also pick how their stacks go away (lose half at the end of my turn, lose all after it triggers...). The card text is written from the picks, warnings point out rules that won't do anything, and **Try it** plays a few rounds against a Dummy and shows the log.
+
+- **Built in:** Burn, Rupture, Poise, Bleed, Strength, Feeble and Endurance. **Make a variant** copies one to change it.
+- **Status effects** go on characters from the GM screen (**Give an automated effect**, then set the stacks), or are given by other effects. Effects without a library effect are notes the GM tracks by hand, as before.
+- **Passives:** link a Passive (Augment, Weapon or Armor) or a Proficiency to a Passive effect with its **Automated** menu; it runs for that character, players' and the GM's characters alike.
+
+The rules live in `shared/effects.ts` and run on the host from `shared/combat.ts`.
+
 ### Game settings
 
 On the game page, **Game settings** (GM only) has:
@@ -142,6 +152,7 @@ On the game page, **Game settings** (GM only) has:
 - **Players:** each player's character at a glance (portrait, name, Rank, Health, how much is left to finish), **Open sheet**, and **Kick** (click twice to confirm). A kicked player is removed from the game, disconnected from the table straight away, and the game leaves their list. Their character is kept, so it comes back if they rejoin with the invite code.
 - **What players can edit:** a switch each for **Stats**, **Inventory & Ahn**, **Augment & Proficiencies**, and **Weapons, Armor & Decks**. Turning one off locks that part on every player's sheet and phone (the security rules enforce it too); the GM can still edit it on any sheet. Decks also lock on their own during combat.
 - **Item library:** **Players can create items** (off by default) gives players an **Item library** button on the game page and a **Make an item** link on their Inventory tab. They can add items for everyone and edit or delete the ones they made; the GM can edit all of them.
+- **Effect library:** **Players can create effects** (off by default) lets players make effects in the effect library and edit or delete the ones they made. A player's effect does nothing at the table until the GM approves it, and again after each change they make.
 
 ### Players who can't connect
 

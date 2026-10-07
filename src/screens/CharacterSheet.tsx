@@ -10,6 +10,7 @@ import { AugmentTab } from "../components/creator/AugmentTab.tsx";
 import { CharacterCreator, type CreatorStep } from "../components/creator/CharacterCreator.tsx";
 import { InventoryTab } from "../components/items/InventoryTab.tsx";
 import { Section } from "../components/Fields.tsx";
+import { EffectLibraryContext, useEffectLibrary } from "../components/effects/EffectBuilder.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
 
@@ -111,6 +112,7 @@ const CREATOR_STEPS: CreatorStep[] = ["intro", "license", "stats", "story", "sum
 export function CharacterSheet() {
   const { id = "", uid = "" } = useParams();
   const { user } = useAuth();
+  const effects = useEffectLibrary(id);
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
   const isMine = user?.id === uid;
@@ -195,7 +197,7 @@ export function CharacterSheet() {
   const goTab = (t: Tab) => setParams(t === "sheet" ? {} : { tab: t }, { replace: true });
 
   return (
-    <>
+    <EffectLibraryContext.Provider value={effects}>
       <TopBar />
       <main className={"sheet wide" + (tab === "sheet" ? " creator-mode" : "")}>
         <header className="sheet-header">
@@ -246,6 +248,6 @@ export function CharacterSheet() {
           </fieldset>
         )}
       </main>
-    </>
+    </EffectLibraryContext.Provider>
   );
 }

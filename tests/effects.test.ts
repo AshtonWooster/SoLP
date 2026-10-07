@@ -14,6 +14,7 @@ import {
   type EffectDef,
   type Rule,
 } from "../shared/effects.ts";
+import { tryEffect } from "../shared/effects-try.ts";
 import { linkedEffects } from "../shared/ruleset.ts";
 import type { Effect, TableAction, TableState, Token } from "../shared/types.ts";
 
@@ -207,7 +208,7 @@ test("setEffects keeps the library link; stacks stay within the max", () => {
 test("card text is written from the pieces", () => {
   assert.equal(describeEffect(PRESET_EFFECTS["preset:burn"]), "At the end of my turn, I take 1 damage per stack. At the end of my turn, lose half the stacks (rounded down).");
   assert.equal(describeEffect(PRESET_EFFECTS["preset:rupture"]), "When I'm hit, I take 1 damage per stack. Lose all the stacks after it triggers.");
-  assert.equal(describeEffect(PRESET_EFFECTS["preset:poise"]), "When I hit someone if a d10 roll is at most my stacks, deal extra damage equal to another roll of this die.");
+  assert.equal(describeEffect(PRESET_EFFECTS["preset:poise"]), "When I hit someone, if a d10 roll is at most my stacks, deal extra damage equal to another roll of this die.");
 });
 
 test("cleanEffect keeps only known pieces and sensible numbers", () => {
@@ -274,4 +275,15 @@ test("Clash wins and losses trigger for each side", () => {
   assert.equal(s.hp("rat"), 24);
   assert.equal(s.t("roland").resources.sanity, 1 + 2, "+1 for winning the Clash, +2 from the effect");
   assert.equal(s.t("rat").resources.stagger, 20 - 6 - 4);
+});
+
+test("Try it runs an effect on two dummies with the real rules", () => {
+  const r = tryEffect({ ...PRESET_EFFECTS["preset:burn"], name: "Draft Burn", createdBy: "p1" }, PRESET_EFFECTS, 4);
+  assert.ok(r.log.some((l) => l.includes("You's Draft Burn 4 triggers.")), "unapproved drafts still run in Try it");
+  assert.ok(r.log.some((l) => l.includes("You takes 4 damage")));
+  assert.ok(r.log.some((l) => l.includes("Draft Burn: 4 → 2")));
+  assert.ok(r.log.some((l) => /takes \d+ slash damage/.test(l)), "they trade Strikes");
+  const passive = tryEffect({ name: "Thorns", kind: "passive", decay: "none", rules: [rule({ when: "wasHit", checks: [], actions: [{ kind: "damage", target: { who: "them" }, amount: { kind: "number", n: 2 } }] })] }, PRESET_EFFECTS);
+  assert.ok(passive.log.some((l) => l.includes("You's Thorns triggers.")));
+  assert.ok(passive.log.some((l) => l.includes("Dummy takes 2 damage")));
 });
