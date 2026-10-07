@@ -20,28 +20,7 @@ export function PageView({
 }) {
   return (
     <Overlay title={page.name || "Page"} onClose={onClose}>
-      <div className={"page-view" + (page.kind === "special" ? " special" : "")}>
-        <PvCard page={page} />
-
-        <div className="pv-detail">
-          {page.effect && <p className="pv-page-effect">{page.effect}</p>}
-          <ul className="pv-dice-list">
-            {page.dice.map((d) => (
-              <li key={d.id} className={dieClass(d.kind)}>
-                <DiceIcon dice={d} size={30} />
-                <span className="pv-range" title={`1d${d.sides}${d.basePower >= 0 ? "+" : ""}${d.basePower}`}>
-                  {dieRange(d)}
-                </span>
-                <span className="pv-die-text">
-                  {d.counter && <span className="pv-counter">Counter {DIE_NAMES[d.kind]}. </span>}
-                  {d.effect}
-                </span>
-              </li>
-            ))}
-            {page.dice.length === 0 && <li className="muted">No dice</li>}
-          </ul>
-        </div>
-      </div>
+      <PageDetail page={page} />
       <div className="row pv-actions">
         {action && (
           <button type="button" className="big-button" disabled={action.disabled} onClick={action.run}>
@@ -53,5 +32,33 @@ export function PageView({
         </button>
       </div>
     </Overlay>
+  );
+}
+
+/** The enlarged Page itself (card and dice), without the popup around it. */
+export function PageDetail({ page }: { page: Page }) {
+  return (
+    <div className={"page-view" + (page.kind === "special" ? " special" : "")}>
+      <PvCard page={page} />
+
+      <div className="pv-detail">
+        {page.effect && <p className="pv-page-effect">{page.effect}</p>}
+        <ul className="pv-dice-list">
+          {page.dice.map((d) => (
+            <li key={d.id} className={dieClass(d.kind)}>
+              <DiceIcon dice={d} size={30} />
+              <span className="pv-range" title={`1d${d.sides}${d.basePower >= 0 ? "+" : ""}${d.basePower}`}>
+                {dieRange(d)}
+              </span>
+              <span className="pv-die-text">
+                {d.counter && <span className="pv-counter">Counter {DIE_NAMES[d.kind]}. </span>}
+                {d.effect}
+              </span>
+            </li>
+          ))}
+          {page.dice.length === 0 && <li className="muted">No dice</li>}
+        </ul>
+      </div>
+    </div>
   );
 }
