@@ -1,7 +1,9 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { validTargets } from "../../shared/engine.ts";
 import type { TableState, Token } from "../../shared/types.ts";
+import { arrowHitSegment, boardArrows } from "./arrows.ts";
 import { FxBubble, type FxStep } from "./ClashFx.tsx";
+import { SlotPages } from "./SlotPages.tsx";
 
 interface Props {
   state: TableState;
@@ -33,6 +35,8 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
   const gridRef = useRef<HTMLDivElement>(null);
   const tokenEls = useRef(new Map<string, HTMLButtonElement>());
   const last = useRef<{ mapId?: string; at: Map<string, { x: number; y: number }> }>({ at: new Map() });
+  // The arrow tapped to see its Page(s), by the slots it stands for.
+  const [openSlots, setOpenSlots] = useState<string[] | null>(null);
 
   // Moving tokens slide in a straight line from their old tile to the new one.
   useLayoutEffect(() => {
@@ -68,21 +72,9 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
       );
     }
   }
-  // An arrow from each slotted Page's owner to its target(s). Two Pages clashing with each other
-  // are one orange arrow with a head at each end.
-  const slots = state.combat?.slots ?? [];
-  const arrows = slots.flatMap((s) => {
-    const partner = s.clashWith ? slots.find((x) => x.id === s.clashWith) : undefined;
-    const mutual = partner?.clashWith === s.id;
-    if (mutual && partner) {
-      if (s.id > partner.id) return [];
-      const a = { id: `${s.id}-${partner.id}`, from: state.tokens[s.ownerId], to: state.tokens[partner.ownerId], clash: true, both: true };
-      return a.from && a.to ? [a] : [];
-    }
-    return s.targets
-      .map((t) => ({ id: `${s.id}-${t.tokenId}`, from: state.tokens[s.ownerId], to: state.tokens[t.tokenId], clash: !!s.clashWith, both: false }))
-      .filter((a) => a.from && a.to);
-  });
+  const arrows = boardArrows(state);
+  // While a Page is being aimed, taps go to the lit tokens, not to the arrows over them.
+  const arrowsTappable = targetable.size === 0;
   const fxSides = fx
     ? ([
         ["a", state.tokens[fx.fx.a]],
@@ -142,24 +134,49 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
         );
       })}
       {arrows.length > 0 && (
-        <svg className="arrows" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
+        <svg className="arrows" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
           <defs>
             <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" fill="context-stroke" />
             </marker>
           </defs>
-          {arrows.map((a) => (
-            <line
-              key={a.id}
-              className={a.clash ? "arrow clash" : "arrow"}
-              x1={a.from.x + 0.5}
-              y1={a.from.y + 0.5}
-              x2={a.to.x + 0.5}
-              y2={a.to.y + 0.5}
-              markerEnd="url(#head)"
-              markerStart={a.both ? "url(#head)" : undefined}
-            />
-          ))}
+          {arrows.map((a) => {
+            const open = () => setOpenSlots(a.slotIds);
+            return (
+              <g key={a.id} className="arrow-group">
+                <line
+                  className={a.clash ? "arrow clash" : "arrow"}
+                  x1={a.from.x + 0.5}
+                  y1={a.from.y + 0.5}
+                  x2={a.to.x + 0.5}
+                  y2={a.to.y + 0.5}
+                  markerEnd="url(#head)"
+                  markerStart={a.both ? "url(#head)" : undefined}
+                />
+                {arrowsTappable && (
+                  <line
+                    className="arrow-hit"
+                    {...arrowHitSegment(a)}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={a.clash ? `See the clash between ${a.from.name} and ${a.to.name}` : `See ${a.from.name}'s Page aimed at ${a.to.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      open();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        open();
+                      }
+                    }}
+                  >
+                    <title>{a.clash ? "Tap to see both Pages" : "Tap to see the Page"}</title>
+                  </line>
+                )}
+              </g>
+            );
+          })}
         </svg>
       )}
       {fx &&
@@ -170,6 +187,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
             </div>
           </div>
         ))}
+      {openSlots && <SlotPages state={state} slotIds={openSlots} onClose={() => setOpenSlots(null)} />}
     </div>
   );
 }
