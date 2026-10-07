@@ -18,6 +18,7 @@ import {
   storyRoll,
   speedText,
   startCombat,
+  withContext,
   type EngineContext,
 } from "./combat.ts";
 import { ActionError, clamp, log, occupied, type Actor } from "./core.ts";
@@ -123,6 +124,10 @@ export function seatPlayer(table: TableState, actor: Actor, profile?: SeatProfil
  * The host passes ctx so combat can read players' decks from their character sheets.
  */
 export function applyAction(table: TableState, action: TableAction, actor: Actor, ctx?: EngineContext): boolean {
+  return withContext(ctx, () => apply(table, action, actor, ctx));
+}
+
+function apply(table: TableState, action: TableAction, actor: Actor, ctx?: EngineContext): boolean {
   if (!action || typeof action !== "object") throw new ActionError("Bad request.");
   const isGm = actor.role === "gm";
   const gmOnly = () => {
@@ -270,6 +275,7 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
       token.staggerResistances = cleanResistances(t.staggerResistances);
       token.pages = (Array.isArray(t.pages) ? t.pages : []).slice(0, 60) as Page[];
       token.deck = cleanDeckEntries(t.deck);
+      if (Array.isArray(t.passiveEffects) && t.passiveEffects.length) token.passiveEffects = t.passiveEffects.slice(0, 30).map((x) => String(x).slice(0, 80));
       token.templateId = String(action.templateId);
       if (typeof t.portrait === "string" && t.portrait) token.portrait = t.portrait;
       // Find a free tile near where it was asked for.
@@ -383,6 +389,7 @@ export function applyAction(table: TableState, action: TableAction, actor: Actor
         count: Math.max(0, Math.min(999, Math.round(Number(e?.count) || 0))),
         description: String(e?.description ?? "").slice(0, 1000),
         ...(e?.duration ? { duration: String(e.duration).slice(0, 80) } : {}),
+        ...(e?.defId ? { defId: String(e.defId).slice(0, 80) } : {}),
       }));
       return true;
     }

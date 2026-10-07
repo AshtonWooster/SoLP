@@ -1,7 +1,8 @@
 import type { Character } from "../../../shared/character.ts";
 import { newId } from "../../../shared/engine.ts";
 import { proficiencyCount, rankTable } from "../../../shared/ruleset.ts";
-import { PassiveList } from "../EquipmentEditor.tsx";
+import { PassiveList, withEffect } from "../EquipmentEditor.tsx";
+import { AutomationPicker } from "../effects/EffectBuilder.tsx";
 
 /**
  * The Augment & Proficiencies tab, laid out like the Inventory: Proficiencies as a slim list on
@@ -35,6 +36,7 @@ export function AugmentTab({ c, update }: { c: Character; update: (fn: (d: Chara
                 value={p.description}
                 onChange={(e) => update((d) => void (d.proficiencies[i].description = e.target.value))}
               />
+              <AutomationPicker effectId={p.effectId} onChange={(effectId) => update((d) => void (d.proficiencies[i] = withEffect(d.proficiencies[i], effectId)))} />
             </div>
             <button type="button" className="icon" aria-label="Remove proficiency" onClick={() => update((d) => void d.proficiencies.splice(i, 1))}>
               ✕

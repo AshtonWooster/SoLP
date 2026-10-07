@@ -16,6 +16,7 @@ import { CharacterSheet } from "./screens/CharacterSheet.tsx";
 import { Npcs } from "./screens/Npcs.tsx";
 import { Settings } from "./screens/Settings.tsx";
 import { Items } from "./screens/Items.tsx";
+import { Effects } from "./screens/Effects.tsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import "./styles.css";
 
@@ -62,6 +63,7 @@ function App() {
           <Route path="/games/:id/settings" element={authed(<Settings />)} />
           <Route path="/games/:id/enemies" element={<OldEnemiesLink />} />
           <Route path="/games/:id/items" element={authed(<Items />)} />
+          <Route path="/games/:id/effects" element={authed(<Effects />)} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

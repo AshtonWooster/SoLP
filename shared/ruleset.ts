@@ -478,7 +478,15 @@ export function npcSpawnData(t: NpcTemplate): SpawnData {
     deck: t.deck,
   };
   if (t.portrait) data.portrait = t.portrait;
+  const passiveEffects = linkedEffects(t);
+  if (passiveEffects.length) data.passiveEffects = passiveEffects;
   return data;
+}
+
+/** Library ids of the automated effects a character's Passives (Augment, Weapons, Armor) and Proficiencies link to. */
+export function linkedEffects(c: Pick<Character, "augment" | "weapons" | "armor" | "proficiencies">): string[] {
+  const passives = [...(c.augment?.passives ?? []), ...(c.weapons ?? []).flatMap((w) => w.passives ?? []), ...(c.armor?.passives ?? [])];
+  return [...passives, ...(c.proficiencies ?? [])].map((p) => p.effectId).filter((id): id is string => !!id);
 }
 
 // ---- Copying Pages and Equipment between characters ----

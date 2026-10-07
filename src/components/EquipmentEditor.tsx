@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Armor, Dice, DiceKind, Equipment, Page, PageType, Passive, Weapon } from "../../shared/character.ts";
 import { blankArmor, blankPage, blankPassive, blankWeapon, clonePage, equipmentMaxCost, RANKS } from "../../shared/ruleset.ts";
+import { AutomationPicker } from "./effects/EffectBuilder.tsx";
 import { NumberInput, Stepper, TextField } from "./Fields.tsx";
 import { ResistanceGrid } from "./LorIcons.tsx";
 import { PageCardEditor, PvCard } from "./player/LorCard.tsx";
@@ -27,6 +28,12 @@ export function diceLabel(d: Dice): string {
 }
 
 /** Edit an item in a list by index, returning a new list. */
+/** A Passive or Proficiency linked to an automated effect, or unlinked. */
+export function withEffect<T extends { effectId?: string }>(p: T, effectId: string | undefined): T {
+  const { effectId: _old, ...rest } = p;
+  return (effectId ? { ...rest, effectId } : rest) as T;
+}
+
 function replaceAt<T>(list: T[], i: number, item: T): T[] {
   return list.map((x, j) => (j === i ? item : x));
 }
@@ -69,6 +76,7 @@ export function PassiveList({
             value={p.description}
             onChange={(e) => onChange(replaceAt(passives, i, { ...p, description: e.target.value }))}
           />
+          <AutomationPicker effectId={p.effectId} onChange={(effectId) => onChange(replaceAt(passives, i, withEffect(p, effectId)))} />
         </div>
       ))}
       <button type="button" onClick={() => onChange([...passives, blankPassive()])}>
