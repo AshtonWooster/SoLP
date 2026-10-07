@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import type { Character, ItemTemplate } from "../../shared/character.ts";
 import { blankCharacter, characterChecks, linkInventory } from "../../shared/ruleset.ts";
-import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, type TableState } from "../../shared/types.ts";
+import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, playersCanCreateItems, type TableState } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { DeckTab } from "../components/DeckTab.tsx";
 import { AugmentTab } from "../components/creator/AugmentTab.tsx";
@@ -234,7 +234,7 @@ export function CharacterSheet() {
           <fieldset disabled={!may("inventory")} className="sheet-body">
             {lockNote("inventory")}
             <Section id="inventory" title="Inventory" intro="Each Slot holds one item, or a stack of one stacking item. Usable items add their Page to your Auxiliary Deck. Your one Trinket is active only while in the Trinket Slot. Hover an item to see its card.">
-              <InventoryTab c={c} library={library} gameId={id} isGm={isGm} canEdit={may("inventory")} update={update} />
+              <InventoryTab c={c} library={library} gameId={id} isGm={isGm} canEdit={may("inventory")} update={update} canMakeItems={isMine && playersCanCreateItems(game.data)} />
             </Section>
           </fieldset>
         )}

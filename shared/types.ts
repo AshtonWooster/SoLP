@@ -50,6 +50,12 @@ export type PlayerEditKey = "stats" | "inventory" | "augment" | "equipment";
 
 export interface GameSettings {
   playerEdit?: Partial<Record<PlayerEditKey, boolean>>;
+  /** Players may add items to the item library (and edit or delete the ones they made). Off unless the GM turns it on. */
+  playersCreateItems?: boolean;
+}
+
+export function playersCanCreateItems(game: GameDoc | undefined): boolean {
+  return game?.settings?.playersCreateItems === true;
 }
 
 export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: string; fields: string[] }[] = [

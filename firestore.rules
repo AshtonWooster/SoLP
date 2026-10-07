@@ -22,6 +22,9 @@ service cloud.firestore {
     function playerMayEdit(gameId, key) {
       return game(gameId).get("settings", {}).get("playerEdit", {}).get(key, true) != false;
     }
+    function playersMakeItems(gameId) {
+      return game(gameId).get("settings", {}).get("playersCreateItems", false) == true;
+    }
     function unchanged(fields) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
@@ -102,10 +105,18 @@ service cloud.firestore {
         allow delete: if isGm(gameId) || (signedIn() && request.auth.uid == uid);
       }
 
-      // The GM's item library: players browse it to fill their inventories; only the GM edits it.
+      // The item library: players browse it to fill their inventories; the GM edits it. When the GM
+      // lets players make items (game settings), they add their own and edit or delete only those.
       match /items/{itemId} {
         allow read: if isMember(gameId);
         allow write: if isGm(gameId);
+        allow create: if isMember(gameId) && playersMakeItems(gameId)
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isMember(gameId) && playersMakeItems(gameId)
+          && resource.data.get("createdBy", null) == request.auth.uid
+          && request.resource.data.createdBy == request.auth.uid;
+        allow delete: if isMember(gameId) && playersMakeItems(gameId)
+          && resource.data.get("createdBy", null) == request.auth.uid;
       }
 
       // Enemy templates: only the GM sees or edits them.

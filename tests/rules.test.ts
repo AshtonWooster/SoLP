@@ -204,6 +204,27 @@ test("item library: members browse it, only the GM creates and edits items", asy
   await assertSucceeds(deleteDoc(ref("gm")));
 });
 
+test("players make items only when the GM allows it, and change only their own", async () => {
+  const items = (who: string) => collection(as(who), "games", GAME, "items");
+  const item = (who: string, id: string) => doc(as(who), "games", GAME, "items", id);
+  await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), "games", GAME, "items", "gmItem"), { name: "Ore", kind: "item" }));
+  await assertFails(setDoc(item("p1", "mine"), { name: "Salve", kind: "tool", createdBy: "p1" }));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateItems": true }));
+  await assertSucceeds(setDoc(item("p1", "mine"), { name: "Salve", kind: "tool", createdBy: "p1" }));
+  await assertFails(setDoc(item("p1", "fake"), { name: "Fake", kind: "item", createdBy: "gm" }));
+  await assertFails(setDoc(item("p1", "none"), { name: "None", kind: "item" }));
+  await assertSucceeds(updateDoc(item("p1", "mine"), { name: "Better Salve" }));
+  await assertFails(updateDoc(item("p1", "mine"), { createdBy: "gm" }));
+  await assertFails(updateDoc(item("p1", "gmItem"), { name: "Gold" }));
+  await assertFails(deleteDoc(item("p1", "gmItem")));
+  await assertSucceeds(updateDoc(item("gm", "mine"), { name: "GM's tweak" }));
+  await assertFails(setDoc(item("stranger", "s"), { name: "S", kind: "item", createdBy: "stranger" }));
+  await assertSucceeds(getDocs(items("p1")));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateItems": false }));
+  await assertFails(updateDoc(item("p1", "mine"), { name: "Locked" }));
+  await assertFails(deleteDoc(item("p1", "mine")));
+});
+
 test("only the GM sees the invite code and GM notes", async () => {
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "meta")));
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "notes")));

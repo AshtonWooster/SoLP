@@ -141,6 +141,7 @@ On the game page, **Game settings** (GM only) has:
 
 - **Players:** each player's character at a glance (portrait, name, Rank, Health, how much is left to finish), **Open sheet**, and **Kick** (click twice to confirm). A kicked player is removed from the game, disconnected from the table straight away, and the game leaves their list. Their character is kept, so it comes back if they rejoin with the invite code.
 - **What players can edit:** a switch each for **Stats**, **Inventory & Ahn**, **Augment & Proficiencies**, and **Weapons, Armor & Decks**. Turning one off locks that part on every player's sheet and phone (the security rules enforce it too); the GM can still edit it on any sheet. Decks also lock on their own during combat.
+- **Item library:** **Players can create items** (off by default) gives players an **Item library** button on the game page and a **Make an item** link on their Inventory tab. They can add items for everyone and edit or delete the ones they made; the GM can edit all of them.
 
 ### Players who can't connect
 

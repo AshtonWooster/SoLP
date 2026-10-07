@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { arrayRemove, deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
 import { blankCharacter, characterChecks, maxResources } from "../../shared/ruleset.ts";
-import { type GameDoc, type GmMeta, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit } from "../../shared/types.ts";
+import { type GameDoc, type GmMeta, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, playersCanCreateItems } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { TopBar } from "../components/TopBar.tsx";
@@ -139,6 +139,22 @@ export function Settings() {
           {PLAYER_EDIT_OPTIONS.map((o) => (
             <Toggle key={o.key} label={o.label} hint={o.hint} on={playerCanEdit(g, o.key)} onChange={(on) => setEdit(o.key, on)} />
           ))}
+        </section>
+
+        <section className="panel settings-section" aria-label="Item library">
+          <h2>Item library</h2>
+          <Toggle
+            label="Players can create items"
+            hint="Players open the item library from the game page to make new items for everyone's inventories. They can edit and delete only the items they made; you can edit all of them."
+            on={playersCanCreateItems(g)}
+            onChange={async (on) => {
+              try {
+                await updateDoc(ref, { "settings.playersCreateItems": on });
+              } catch (err) {
+                setMessage(friendlyError(err));
+              }
+            }}
+          />
         </section>
       </main>
     </>

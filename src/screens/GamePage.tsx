@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import type { Character } from "../../shared/character.ts";
 import { characterChecks } from "../../shared/ruleset.ts";
-import type { GameDoc, GmMeta } from "../../shared/types.ts";
+import { type GameDoc, type GmMeta, playersCanCreateItems } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { TopBar } from "../components/TopBar.tsx";
 
@@ -94,6 +94,12 @@ export function GamePage() {
                   : "Follow the rulebook's six steps"}
               </small>
             </Link>
+            {playersCanCreateItems(game.data) && (
+              <Link className="big-button secondary" to={`/games/${id}/items`}>
+                Item library
+                <small>Your GM lets players make items</small>
+              </Link>
+            )}
           </div>
         )}
 
