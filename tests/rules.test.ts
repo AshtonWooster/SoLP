@@ -249,6 +249,32 @@ test("effect library: members read it; players make effects only when allowed, a
   await assertFails(setDoc(fx("p1", "again"), { ...burn, createdBy: "p1" }));
 });
 
+test("effect library: players may always add Passives and Proficiencies in words, but not automate them", async () => {
+  const fx = (who: string, id: string) => doc(as(who), "games", GAME, "effects", id);
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateEffects": false }));
+  const words = { name: "Steady Hands", kind: "passive", cost: 1, note: "Gain 1 Poise each turn", decay: "none", rules: [], createdBy: "p1", approved: false };
+  const rule = { id: "r", when: "turnStart", checks: [], actions: [{ do: "heal", amount: { kind: "number", value: 1 }, who: "me" }] };
+  await assertSucceeds(setDoc(fx("p1", "steady"), words));
+  await assertSucceeds(setDoc(fx("p1", "prof"), { ...words, name: "Swords", kind: "proficiency" }));
+  await assertSucceeds(updateDoc(fx("p1", "steady"), { note: "Gain 2 Poise each turn", approved: false }));
+  await assertFails(updateDoc(fx("p1", "steady"), { rules: [rule], approved: false }));
+  await assertFails(setDoc(fx("p1", "auto"), { ...words, rules: [rule] }));
+  await assertFails(setDoc(fx("p1", "die"), { ...words, kind: "die" }));
+  await assertFails(setDoc(fx("p1", "status"), { ...words, kind: "status" }));
+  await assertFails(setDoc(fx("p1", "fake"), { ...words, createdBy: "gm" }));
+  await assertSucceeds(setDoc(fx("gm", "gms"), { ...words, createdBy: null, approved: true }));
+  await assertFails(updateDoc(fx("p1", "gms"), { note: "Mine now", createdBy: "p1", approved: false }));
+  await assertFails(deleteDoc(fx("p1", "gms")));
+  await assertSucceeds(deleteDoc(fx("p1", "prof")));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateEffects": true }));
+  await assertSucceeds(updateDoc(fx("p1", "steady"), { rules: [rule], approved: false }));
+  await assertSucceeds(setDoc(fx("p1", "die"), { ...words, kind: "die", rules: [rule] }));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateEffects": false }));
+  // Once automated, it's locked again until the GM turns the setting back on.
+  await assertFails(updateDoc(fx("p1", "steady"), { name: "Steadier", approved: false }));
+  await assertSucceeds(updateDoc(fx("p1", "steady"), { rules: [], approved: false }));
+});
+
 test("only the GM sees the invite code and GM notes", async () => {
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "meta")));
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "notes")));

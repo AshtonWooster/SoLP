@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DieEffectNames } from "./effects/library.tsx";
 import { createPortal } from "react-dom";
 import type { Character, Page } from "../../shared/character.ts";
 import { auxiliaryDeck, blankPage, cleanDeck, DECK_SIZE, deckSize, equipmentPages, maxCopies } from "../../shared/ruleset.ts";
@@ -27,6 +28,7 @@ export function PageHoverCard({ page }: { page: Page }) {
                 <span className="pv-die-text">
                   {d.counter && <span className="pv-counter">Counter {DIE_NAMES[d.kind]}. </span>}
                   {d.effect}
+                  <DieEffectNames dice={d} />
                 </span>
               </li>
             ))}

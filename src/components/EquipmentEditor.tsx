@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Armor, Dice, DiceKind, Equipment, Page, PageType, Passive, Weapon } from "../../shared/character.ts";
 import { blankArmor, blankPage, blankPassive, blankWeapon, clonePage, equipmentMaxCost, RANKS } from "../../shared/ruleset.ts";
-import { AutomationPicker } from "./effects/EffectBuilder.tsx";
+import { PassiveSlots } from "./effects/library.tsx";
 import { NumberInput, Stepper, TextField } from "./Fields.tsx";
 import { ResistanceGrid } from "./LorIcons.tsx";
 import { PageCardEditor, PvCard } from "./player/LorCard.tsx";
@@ -28,64 +28,12 @@ export function diceLabel(d: Dice): string {
 }
 
 /** Edit an item in a list by index, returning a new list. */
-/** A Passive or Proficiency linked to an automated effect, or unlinked. */
-export function withEffect<T extends { effectId?: string }>(p: T, effectId: string | undefined): T {
-  const { effectId: _old, ...rest } = p;
-  return (effectId ? { ...rest, effectId } : rest) as T;
-}
-
 function replaceAt<T>(list: T[], i: number, item: T): T[] {
   return list.map((x, j) => (j === i ? item : x));
 }
 
-export function PassiveList({
-  passives,
-  max,
-  onChange,
-}: {
-  passives: Passive[];
-  max: number;
-  onChange: (p: Passive[]) => void;
-}) {
-  const net = passives.reduce((a, p) => a + p.cost, 0);
-  const negative = -passives.filter((p) => p.cost < 0).reduce((a, p) => a + p.cost, 0);
-  return (
-    <div className="passives">
-      <div className="row-between">
-        <h4>Passives</h4>
-        <span className={net > max || negative > max ? "error" : "muted"}>
-          Cost {net} / {max}
-          {negative > 0 && ` · negative ${negative} / ${max}`}
-        </span>
-      </div>
-      {passives.map((p, i) => (
-        <div className="passive" key={p.id}>
-          <div className="row">
-            <input aria-label="Passive name" placeholder="Passive name" value={p.name} onChange={(e) => onChange(replaceAt(passives, i, { ...p, name: e.target.value }))} />
-            <label className="inline">
-              Cost
-              <NumberInput label="Passive cost" value={p.cost} onChange={(cost) => onChange(replaceAt(passives, i, { ...p, cost: Math.round(cost) }))} />
-            </label>
-            <button type="button" className="icon" aria-label="Remove passive" onClick={() => onChange(passives.filter((_, j) => j !== i))}>
-              ✕
-            </button>
-          </div>
-          <textarea
-            aria-label="Passive effect"
-            placeholder="What it does"
-            value={p.description}
-            onChange={(e) => onChange(replaceAt(passives, i, { ...p, description: e.target.value }))}
-          />
-          <AutomationPicker effectId={p.effectId} onChange={(effectId) => onChange(replaceAt(passives, i, withEffect(p, effectId)))} />
-        </div>
-      ))}
-      <button type="button" onClick={() => onChange([...passives, blankPassive()])}>
-        + Add passive
-      </button>
-      <p className="muted small">Use a negative cost for a Negative Passive.</p>
-    </div>
-  );
-}
+/** Passives on an Augment, Weapon or Armor, picked from the game's shared effect library. */
+export const PassiveList = PassiveSlots;
 
 /** Edit one Page on its card (see PageCardEditor). */
 export function PageEditor(props: { page: Page; onChange: (p: Page) => void; onRemove?: () => void; artFolder?: string }) {

@@ -122,21 +122,29 @@ service cloud.firestore {
           && resource.data.get("createdBy", null) == request.auth.uid;
       }
 
-      // The effect library: automated Effects and Passives (shared/effects.ts). Everyone in the game reads
+      function playerMayWrite(gameId, data) {
+        return playersMakeEffects(gameId)
+          || (data.get("kind", "status") in ["passive", "proficiency"] && data.get("rules", []).size() == 0);
+      }
+
+      // The effect library: Status effects, Passives, Proficiencies and Dice effects (shared/effects.ts). Everyone in the game reads
       // it; the GM edits it. When the GM lets players make effects (game settings), they add their own and
       // edit or delete only those, and can't approve them: the host ignores a player's effect until then.
       match /effects/{effectId} {
         allow read: if isMember(gameId);
         allow write: if isGm(gameId);
-        allow create: if isMember(gameId) && playersMakeEffects(gameId)
+        // Players add their own entries when the GM lets them make effects, and may always add a
+        // Passive or Proficiency in words (no rules), as they could type one on a sheet before.
+        allow create: if isMember(gameId) && playerMayWrite(gameId, request.resource.data)
           && request.resource.data.createdBy == request.auth.uid
           && request.resource.data.get("approved", false) == false;
-        allow update: if isMember(gameId) && playersMakeEffects(gameId)
+        allow update: if isMember(gameId) && playerMayWrite(gameId, request.resource.data)
           && resource.data.get("createdBy", null) == request.auth.uid
           && request.resource.data.createdBy == request.auth.uid
           && request.resource.data.get("approved", false) == false;
-        allow delete: if isMember(gameId) && playersMakeEffects(gameId)
-          && resource.data.get("createdBy", null) == request.auth.uid;
+        allow delete: if isMember(gameId)
+          && resource.data.get("createdBy", null) == request.auth.uid
+          && playerMayWrite(gameId, resource.data);
       }
 
       // Enemy templates: only the GM sees or edits them.

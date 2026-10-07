@@ -7,7 +7,7 @@
 //
 // Firestore: games/{gameId}/effects/{effectId}  EffectDef  members read; GM write (players too when the
 // GM's Game settings allow, but their effects only work once the GM approves them).
-import type { Dice, DiceKind } from "./character.ts";
+import type { Character, Dice, DiceKind, Passive, Proficiency } from "./character.ts";
 import { newId, rollDie } from "./id.ts";
 
 // ---- The pieces ----
@@ -25,6 +25,17 @@ export const WHEN_OPTIONS: { value: When; label: string; hint: string }[] = [
   { value: "clashWin", label: "When I win a Clash", hint: "One of my dice beats theirs" },
   { value: "clashLose", label: "When I lose a Clash", hint: "One of their dice beats mine" },
 ];
+
+/** A Dice effect's When, worded for the die it's on. Only these make sense for a die. */
+export const DIE_WHEN_OPTIONS: { value: When; label: string; hint: string }[] = [
+  { value: "roll", label: "When this die is rolled", hint: "Change its Power here" },
+  { value: "hit", label: "When this die hits", hint: "It lands on someone; add damage here" },
+  { value: "clashWin", label: "When this die wins a Clash", hint: "It beats the other die" },
+  { value: "clashLose", label: "When this die loses a Clash", hint: "The other die beats it" },
+];
+
+/** The When menu for a kind of effect. */
+export const whenOptions = (kind: EffectKind) => (kind === "die" ? DIE_WHEN_OPTIONS : WHEN_OPTIONS);
 
 /** Who "them" is depends on When: the one I hit, who hit me, or who I clashed with. */
 const HAS_OTHER: Record<When, boolean> = {
@@ -167,13 +178,32 @@ export interface Rule {
 }
 
 /**
- * An automated Effect. Status Effects (Burn, Poise…) sit on a character with a number of stacks;
- * Passive ones are always on while a Passive or Proficiency links to them.
+ * What an entry in the effect library is:
+ * - status: sits on a character with a number of stacks (Burn, Poise…).
+ * - passive: slotted on an Augment, Weapon or Armor (with a Passive Cost); always on for its owner.
+ * - proficiency: picked on a character's Proficiencies; always on for its owner.
+ * - die: slotted on a die of a Page; runs only when that die is rolled, hits or clashes.
+ * Passives and Proficiencies can be plain text with no rules: the GM handles them by hand.
  */
+export type EffectKind = "status" | "passive" | "proficiency" | "die";
+
+export const EFFECT_KINDS: { value: EffectKind; label: string; plural: string; hint: string }[] = [
+  { value: "status", label: "Status effect", plural: "Status effects", hint: "Sits on a character with stacks, like Burn or Poise" },
+  { value: "passive", label: "Passive", plural: "Passives", hint: "Slotted on an Augment, Weapon or Armor, with a Passive Cost" },
+  { value: "proficiency", label: "Proficiency", plural: "Proficiencies", hint: "Picked on a character's Proficiencies" },
+  { value: "die", label: "Dice effect", plural: "Dice effects", hint: "Slotted on a die of a Page; works only for that die" },
+];
+
+/** Library entries that are always on for whoever has them (no stacks). */
+export const isAlwaysOn = (kind: EffectKind) => kind !== "status";
+
+/** An entry in the game's effect library. */
 export interface EffectDef {
   name: string;
-  kind: "status" | "passive";
-  /** Anything to add to the generated card text. */
+  kind: EffectKind;
+  /** Passives: the Passive Cost (negative for a Negative Passive). */
+  cost?: number;
+  /** What it does in words: the description of a Passive or Proficiency the GM handles by hand, or extra card text. */
   note?: string;
   decay: Decay;
   /** Stacks can't go above this (missing: 99). */
@@ -265,7 +295,9 @@ export function isLive(def: EffectDef | undefined): def is EffectDef {
 
 /** The built-in effects plus a game's own, by id. */
 export function effectLibrary(game: Record<string, EffectDef> | undefined): Record<string, EffectDef> {
-  return { ...PRESET_EFFECTS, ...(game ?? {}) };
+  // Cleaned on the way in too, so a hand-edited or older entry can't break the editor or the table.
+  const own = Object.fromEntries(Object.entries(game ?? {}).map(([id, d]) => [id, cleanEffect(d)]));
+  return { ...PRESET_EFFECTS, ...own };
 }
 
 // ---- Blank pieces, for the editor ----
@@ -293,14 +325,16 @@ export function blankCheck(kind: CheckKind = "roll"): Check {
   }
 }
 
-export const blankRule = (when: When = "turnEnd"): Rule => ({ id: newId(), when, checks: [], actions: [blankAction()] });
+export const blankRule = (when: When = "turnEnd"): Rule => ({ id: newId(), when, checks: [], actions: [blankAction(when === "hit" ? "extraDamage" : when === "roll" ? "addPower" : "damage")] });
 
-export const blankEffect = (kind: EffectDef["kind"] = "status"): EffectDef => ({
-  name: "",
-  kind,
-  decay: kind === "status" ? "halfAtTurnEnd" : "none",
-  rules: [blankRule()],
-});
+/** A new library entry. Passives and Proficiencies start as plain text; add rules to automate them. */
+export function blankEffect(kind: EffectKind = "status"): EffectDef {
+  const def: EffectDef = { name: "", kind, decay: kind === "status" ? "halfAtTurnEnd" : "none", rules: [] };
+  if (kind === "status") def.rules = [blankRule()];
+  if (kind === "die") def.rules = [blankRule("hit")];
+  if (kind === "passive") def.cost = 1;
+  return def;
+}
 
 /** A copy of an effect to change, e.g. a variant of a built-in one. */
 export function copyEffect(def: EffectDef, name = def.name): EffectDef {
@@ -361,19 +395,20 @@ function cleanAction(raw: unknown): Action {
 /** An effect as it may be saved: only known pieces, sensible numbers, and limits on size. */
 export function cleanEffect(raw: unknown): EffectDef {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<EffectDef>;
-  const kind = r.kind === "passive" ? "passive" : "status";
+  const kind = oneOf(r.kind, EFFECT_KINDS, "status");
   const def: EffectDef = {
     name: String(r.name ?? "").slice(0, 60),
     kind,
-    decay: kind === "passive" ? "none" : oneOf(r.decay, DECAY_OPTIONS, "none"),
+    decay: kind === "status" ? oneOf(r.decay, DECAY_OPTIONS, "none") : "none",
     rules: (Array.isArray(r.rules) ? r.rules : []).slice(0, 8).map((rule) => ({
       id: String(rule?.id || newId()).slice(0, 40),
-      when: oneOf(rule?.when, WHEN_OPTIONS, "turnEnd"),
+      when: oneOf(rule?.when, whenOptions(kind), kind === "die" ? "hit" : "turnEnd"),
       checks: (Array.isArray(rule?.checks) ? rule.checks : []).slice(0, 4).map(cleanCheck),
       actions: (Array.isArray(rule?.actions) ? rule.actions : []).slice(0, 6).map(cleanAction),
     })),
   };
-  if (r.note) def.note = String(r.note).slice(0, 500);
+  if (kind === "passive") def.cost = int(r.cost, -20, 20, 1);
+  if (r.note) def.note = String(r.note).slice(0, 1000);
   if (kind === "status" && r.maxStacks != null && r.maxStacks !== ("" as unknown)) def.maxStacks = int(r.maxStacks, 1, MAX_STACKS, MAX_STACKS);
   if (r.createdBy) def.createdBy = String(r.createdBy);
   if (r.createdBy && r.approved === true) def.approved = true;
@@ -481,8 +516,8 @@ const joinAnd = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${pa
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** One rule as a sentence: "At the end of my turn, I take 1 damage per stack." */
-export function describeRule(rule: Rule, library: Record<string, EffectDef> = PRESET_EFFECTS, stats?: Record<string, string>): string {
-  const when = WHEN_OPTIONS.find((o) => o.value === rule.when)?.label ?? rule.when;
+export function describeRule(rule: Rule, library: Record<string, EffectDef> = PRESET_EFFECTS, stats?: Record<string, string>, kind: EffectKind = "status"): string {
+  const when = whenOptions(kind).find((o) => o.value === rule.when)?.label ?? WHEN_OPTIONS.find((o) => o.value === rule.when)?.label ?? rule.when;
   const checks = rule.checks.length ? `, if ${joinAnd(rule.checks.map(checkText))}` : "";
   const actions = rule.actions.length ? joinAnd(rule.actions.map((a) => actionText(a, library, stats))) : "nothing happens";
   return `${when}${checks}, ${actions}.`;
@@ -499,7 +534,7 @@ const DECAY_TEXT: Record<Decay, string> = {
 
 /** The effect's card text, written from its pieces. */
 export function describeEffect(def: EffectDef, library: Record<string, EffectDef> = PRESET_EFFECTS, stats?: Record<string, string>): string {
-  const lines = def.rules.map((r) => describeRule(r, library, stats));
+  const lines = def.rules.map((r) => describeRule(r, library, stats, def.kind));
   if (def.kind === "status" && DECAY_TEXT[def.decay]) lines.push(DECAY_TEXT[def.decay]);
   if (def.maxStacks && def.maxStacks < MAX_STACKS) lines.push(`Up to ${def.maxStacks} ${plural(def.maxStacks, "stack")}.`);
   if (def.note?.trim()) lines.push(def.note.trim());
@@ -510,7 +545,10 @@ export function describeEffect(def: EffectDef, library: Record<string, EffectDef
 export function effectWarnings(def: EffectDef): string[] {
   const out: string[] = [];
   if (!def.name.trim()) out.push("Give it a name.");
-  if (def.rules.length === 0) out.push("It has no rules yet, so it won't do anything.");
+  if (def.rules.length === 0) {
+    if (def.kind === "status" || def.kind === "die") out.push("It has no rules yet, so it won't do anything.");
+    else if (!def.note?.trim()) out.push("Say what it does, or add a rule to automate it.");
+  }
   for (const [i, r] of def.rules.entries()) {
     const n = def.rules.length > 1 ? `Rule ${i + 1}: ` : "";
     if (r.actions.length === 0) out.push(`${n}it doesn't do anything yet.`);
@@ -521,9 +559,12 @@ export function effectWarnings(def: EffectDef): string[] {
       }
       if (a.target?.who === "them" && !HAS_OTHER[r.when]) out.push(`${n}there's no "they" ${WHEN_OPTIONS.find((w) => w.value === r.when)!.label.toLowerCase()}; pick someone else.`);
       if (a.amount.kind === "dieRoll" && !HAS_DIE[r.when]) out.push(`${n}there's no die to roll again here.`);
-      if (def.kind === "passive" && (a.amount.kind === "perStack" || a.amount.kind === "halfStacks")) out.push(`${n}Passives don't have stacks; they count as 1.`);
+      if (isAlwaysOn(def.kind) && (a.amount.kind === "perStack" || a.amount.kind === "halfStacks")) {
+        out.push(`${n}${EFFECT_KINDS.find((k) => k.value === def.kind)!.plural} don't have stacks; they count as 1.`);
+      }
     }
     for (const c of r.checks) if (c.kind === "die" && !HAS_DIE[r.when]) out.push(`${n}there's no die to check here.`);
+    if (def.kind === "die" && !DIE_WHEN_OPTIONS.some((o) => o.value === r.when)) out.push(`${n}a Dice effect only runs when its die is rolled, hits or clashes.`);
   }
   if (def.kind === "status" && def.decay === "none" && !def.rules.some((r) => r.actions.some((a) => a.kind === "loseStacks"))) {
     out.push("It never loses stacks on its own. Is that on purpose?");
@@ -585,18 +626,20 @@ export function giveEffect<T extends EffectHolder>(ops: EffectOps<T>, t: T, defI
  * Runs every rule listening for this moment on a character: their status Effects (with their
  * stacks), then their Passives. Returns any Power or damage the rules add to the die.
  */
-export function runTrigger<T extends EffectHolder>(ops: EffectOps<T>, when: When, holder: T, other?: T, die?: Dice): TriggerResult {
+export function runTrigger<T extends EffectHolder>(ops: EffectOps<T>, when: When, holder: T, other?: T, die?: Dice, dieIsMine = true): TriggerResult {
   const result: TriggerResult = { power: 0, damage: 0 };
   if (depth >= MAX_DEPTH || ops.out(holder)) return result;
   depth++;
   try {
     const sources = [
-      ...(holder.effects ?? []).filter((e) => e.defId).map((e) => ({ defId: e.defId!, entry: e })),
-      ...ops.passives(holder).map((defId) => ({ defId, entry: undefined })),
+      ...(holder.effects ?? []).filter((e) => e.defId).map((e) => ({ defId: e.defId!, entry: e, kinds: ["status"] })),
+      ...ops.passives(holder).map((defId) => ({ defId, entry: undefined, kinds: ["passive", "proficiency"] })),
+      // Dice effects run for the die they're slotted on, when it's the holder's own die.
+      ...(dieIsMine ? (die?.effectIds ?? []) : []).map((defId) => ({ defId, entry: undefined, kinds: ["die"] })),
     ];
-    for (const { defId, entry } of sources) {
+    for (const { defId, entry, kinds } of sources) {
       const def = ops.def(defId);
-      if (!def || (entry && entry.count <= 0)) continue;
+      if (!def || !kinds.includes(def.kind) || (entry && entry.count <= 0)) continue;
       const rules = def.rules.filter((r) => r.when === when);
       if (!rules.length) continue;
       let fired = false;
@@ -751,4 +794,48 @@ function act<T extends EffectHolder>(a: Action, s: Scope<T>, result: TriggerResu
     case "draw":
       return ops.draw(s.holder, n);
   }
+}
+
+// ---- Slotting library entries on characters and dice ----
+
+/** What a Passive or Proficiency slotted from the library says: its words, or its rules as card text. */
+export function slotText(def: EffectDef, library: Record<string, EffectDef>): string {
+  return describeEffect(def, library);
+}
+
+/** A copy of a library Passive for an Augment, Weapon or Armor (linked by effectId, so edits to it follow). */
+export function slotPassive(effectId: string, library: Record<string, EffectDef>): Passive {
+  const def = library[effectId];
+  return { id: newId(), effectId, name: def?.name ?? "", cost: def?.cost ?? 0, description: def ? slotText(def, library) : "" };
+}
+
+/** A copy of a library Proficiency for a character's Proficiencies. */
+export function slotProficiency(effectId: string, library: Record<string, EffectDef>): Proficiency {
+  const def = library[effectId];
+  return { id: newId(), effectId, name: def?.name ?? "", description: def ? slotText(def, library) : "" };
+}
+
+/** A Passive or Proficiency with its name, cost and words brought up to date from the library. */
+function refresh<T extends Passive | Proficiency>(p: T, library: Record<string, EffectDef>): T {
+  const def = p.effectId ? library[p.effectId] : undefined;
+  if (!def) return p;
+  const next = { ...p, name: def.name, description: slotText(def, library) };
+  if ("cost" in next) (next as Passive).cost = def.cost ?? 0;
+  return next;
+}
+
+/**
+ * A character (player or GM-made) with every slotted Passive and Proficiency showing what the
+ * library says now, so a change in the library reaches every sheet that uses it.
+ */
+export function linkLibrary<T extends Pick<Character, "augment" | "weapons" | "armor" | "proficiencies">>(c: T, library: Record<string, EffectDef> | undefined): T {
+  if (!library) return c;
+  const passives = (list: Passive[] | undefined) => (list ?? []).map((p) => refresh(p, library));
+  return {
+    ...c,
+    augment: c.augment ? { ...c.augment, passives: passives(c.augment.passives) } : c.augment,
+    weapons: (c.weapons ?? []).map((w) => ({ ...w, passives: passives(w.passives) })),
+    armor: c.armor ? { ...c.armor, passives: passives(c.armor.passives) } : c.armor,
+    proficiencies: (c.proficiencies ?? []).map((p) => refresh(p, library)),
+  };
 }

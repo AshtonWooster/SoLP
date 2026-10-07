@@ -1028,3 +1028,20 @@ select.piece.add { color: #6fb4ff; }
 }
 .effect-builder .field { flex: none; }
 .try-it { margin-bottom: 10px; }
+
+/* Library picks: Passives, Proficiencies and Dice effects chosen from the shared effect library. */
+.slot-row { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.slot-row .row { gap: 6px; align-items: center; }
+.slot-text { margin: 0; white-space: pre-wrap; }
+.slot-legacy { margin: 0; }
+.library-pick { gap: 10px; align-items: center; }
+.library-pick select { flex: 1 1 200px; min-width: 0; }
+.proficiency-slots { display: flex; flex-direction: column; gap: 8px; }
+.die-effects { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.die-effect-chip { display: inline-flex; align-items: center; gap: 4px; }
+.die-effect-chip button.link { padding: 0 2px; text-decoration: none; }
+.die-effect-names { color: var(--accent); }
+.effect-tabs { margin-bottom: 12px; }
+.tab-badge { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 0.75rem; background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
+.pv-edit-die .die-effects { grid-column: 1 / -1; min-width: 0; }
+.pv-edit-die .library-pick select { flex: 1 1 140px; font-size: 0.85rem; }

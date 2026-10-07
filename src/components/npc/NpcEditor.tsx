@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { doc, setDoc } from "firebase/firestore";
-import type { ItemTemplate, NpcTemplate, ResistanceSet } from "../../../shared/character.ts";
+import type { Character, ItemTemplate, NpcTemplate, ResistanceSet } from "../../../shared/character.ts";
+import { linkLibrary } from "../../../shared/effects.ts";
 import {
   blankPage,
   cloneAugment,
@@ -12,12 +13,13 @@ import {
   npcStats,
   PRIMARY_STATS,
   RANKS,
-  rankTable,
   SECONDARY_STATS,
 } from "../../../shared/ruleset.ts";
 import { db, friendlyError } from "../../firebase.ts";
 import { DeckRow, type Peek, PageHoverCard } from "../DeckTab.tsx";
-import { EquipmentStudio, PageEditor, PassiveList } from "../EquipmentEditor.tsx";
+import { AugmentTab } from "../creator/AugmentTab.tsx";
+import { useLibrary } from "../effects/library.tsx";
+import { EquipmentStudio, PageEditor } from "../EquipmentEditor.tsx";
 import { NumberInput, Stepper } from "../Fields.tsx";
 import { ImageUpload } from "../ImageUpload.tsx";
 import { ResistanceGrid, StatIcon } from "../LorIcons.tsx";
@@ -29,7 +31,8 @@ import { type GearEntry, GearLibrary } from "./GearLibrary.tsx";
 const SAVE_DELAY_MS = 600;
 const TABS = [
   ["profile", "Profile"],
-  ["loadout", "Augment, Weapons & Armor"],
+  ["augment", "Augment & Proficiencies"],
+  ["loadout", "Weapons & Armor"],
   ["deck", "Combat Deck"],
   ["inventory", "Inventory"],
 ] as const;
@@ -256,15 +259,6 @@ function LoadoutTab({ t, update, gameId, gear }: { t: NpcTemplate; update: Updat
   return (
     <div className="npc-loadout">
       <div className="npc-loadout-main">
-        <section className="augment-card" id="augment" aria-label="Augment">
-          <div className="augment-head">
-            <span className="kicker">Augment</span>
-            <span className="muted small">Max Passive Cost {rankTable(t.rank).augmentMaxCost} at Rank {t.rank}</span>
-          </div>
-          <input className="augment-name" aria-label="Augment name" placeholder="No Augment" value={t.augment.name} onChange={(e) => update((d) => void (d.augment.name = e.target.value))} />
-          <textarea aria-label="Description" placeholder="What it is" value={t.augment.description} onChange={(e) => update((d) => void (d.augment.description = e.target.value))} />
-          <PassiveList passives={t.augment.passives} max={rankTable(t.rank).augmentMaxCost} onChange={(p) => update((d) => void (d.augment.passives = p))} />
-        </section>
         <section className="sheet-section" id="equipment">
           <h2>Weapons and Armor</h2>
           <p className="muted small">Use − and + under a Page to put copies in this character's Combat Deck.</p>
@@ -290,8 +284,39 @@ function LoadoutTab({ t, update, gameId, gear }: { t: NpcTemplate; update: Updat
           title="Reuse gear"
           hint="Augments, Weapons and Armor from your characters and your players'. Picking one copies it here, so editing it won't change the original."
           entries={gear}
-          kinds={["augment", "weapon", "armor"]}
+          kinds={["weapon", "armor"]}
           onPick={pick}
+        />
+      </aside>
+    </div>
+  );
+}
+
+/** The Augment (with its Passives) and Proficiencies, both picked from the game's shared effect library. */
+function AugmentProficienciesTab({ t, update, gear }: { t: NpcTemplate; update: Update; gear: GearEntry[] }) {
+  const lib = useLibrary();
+  const [message, setMessage] = useState("");
+  return (
+    <div className="npc-loadout">
+      <div className="npc-loadout-main">
+        <AugmentTab c={linkLibrary(t, lib?.library)} update={update as (fn: (d: Character) => void) => void} npc />
+      </div>
+      <aside className="npc-loadout-side">
+        {message && (
+          <p className="muted small" role="status">
+            {message}
+          </p>
+        )}
+        <GearLibrary
+          title="Reuse an Augment"
+          hint="Augments from your characters and your players'. Picking one copies it here, so editing it won't change the original."
+          entries={gear}
+          kinds={["augment"]}
+          onPick={(e) => {
+            if (e.kind !== "augment") return;
+            update((d) => void (d.augment = cloneAugment(e.augment)));
+            setMessage(`Augment is now ${e.name}.`);
+          }}
         />
       </aside>
     </div>
@@ -432,7 +457,7 @@ function DeckTab({ t, update, gameId, gear }: { t: NpcTemplate; update: Update; 
   );
 }
 
-/** Everything about one GM character, in three tabs. */
+/** Everything about one GM character, in tabs. */
 export function NpcEditor({
   gameId,
   id,
@@ -453,6 +478,7 @@ export function NpcEditor({
   onDelete: () => void;
 }) {
   const { t, update, status } = useNpcSave(gameId, id, template);
+  const lib = useLibrary();
   const [tab, setTab] = useState<Tab>("profile");
   return (
     <div className="npc-editor">
@@ -481,7 +507,8 @@ export function NpcEditor({
         ))}
       </nav>
       {tab === "profile" && <ProfileTab t={t} update={update} gameId={gameId} />}
-      {tab === "loadout" && <LoadoutTab t={t} update={update} gameId={gameId} gear={gear} />}
+      {tab === "augment" && <AugmentProficienciesTab t={t} update={update} gear={gear} />}
+      {tab === "loadout" && <LoadoutTab t={linkLibrary(t, lib?.library)} update={update} gameId={gameId} gear={gear} />}
       {tab === "deck" && <DeckTab t={t} update={update} gameId={gameId} gear={gear} />}
       {tab === "inventory" && (
         <section className="npc-inventory" id="inventory">

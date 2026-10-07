@@ -1,4 +1,5 @@
 import type { Page } from "../../../shared/character.ts";
+import { DieEffectNames } from "../effects/library.tsx";
 import { DiceIcon, DIE_NAMES, dieClass, dieRange } from "./DiceIcon.tsx";
 import { PvCard } from "./LorCard.tsx";
 import { Overlay } from "./Overlay.tsx";
@@ -53,6 +54,7 @@ export function PageDetail({ page }: { page: Page }) {
               <span className="pv-die-text">
                 {d.counter && <span className="pv-counter">Counter {DIE_NAMES[d.kind]}. </span>}
                 {d.effect}
+                <DieEffectNames dice={d} />
               </span>
             </li>
           ))}

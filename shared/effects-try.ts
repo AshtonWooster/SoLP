@@ -31,7 +31,7 @@ function dummyToken(id: string, name: string, side: Token["side"], x: number, ju
 }
 
 /**
- * "You" have the effect (with this many stacks, if it's a status) and trade Strikes (Slash 1d6+2)
+ * "You" have the effect (with this many stacks if it's a status; on your Strike's die if it's a Dice effect) and trade Strikes (Slash 1d6+2)
  * with a Dummy standing next to you for a few rounds: you hit it, then it hits you.
  */
 export function tryEffect(def: EffectDef, library: Record<string, EffectDef>, stacks = 3, rounds = 3): TryResult {
@@ -40,14 +40,17 @@ export function tryEffect(def: EffectDef, library: Record<string, EffectDef>, st
     Object.entries({ ...library, [DRAFT]: def }).map(([id, d]) => [id, { ...d, createdBy: undefined }]),
   );
   const status = def.kind === "status";
+  const onDie = def.kind === "die";
   const table: TableState = {
     map: { name: "Try it", width: 6, height: 3 },
     tokens: {
-      you: dummyToken("you", "You", "ally", 1, 99, status ? { effects: [{ id: "e", defId: DRAFT, name: def.name || "Effect", count: stacks, description: "" }] } : { passiveEffects: [DRAFT] }),
+      you: dummyToken("you", "You", "ally", 1, 99, status ? { effects: [{ id: "e", defId: DRAFT, name: def.name || "Effect", count: stacks, description: "" }] } : onDie ? {} : { passiveEffects: [DRAFT] }),
       dummy: dummyToken("dummy", "Dummy", "enemy", 2, -99, {}),
     },
     log: [],
   };
+  // A Dice effect goes on your Strike's die.
+  if (onDie) for (const p of table.tokens.you.pages!) p.dice = p.dice.map((d) => ({ ...d, effectIds: [DRAFT] }));
   const ctx = { loadout: () => undefined, effectDef: (id: string) => defs[id] };
   const act = (a: Parameters<typeof applyAction>[1]) => applyAction(table, a, gm, ctx);
   act({ type: "startCombat", tokenIds: ["you", "dummy"] });

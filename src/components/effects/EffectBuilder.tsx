@@ -1,6 +1,6 @@
 // The sentence builder for automated effects: every blank is a menu, and the card text is written
 // from the picks as you go. See shared/effects.ts for what each piece does at the table.
-import { createContext, useContext, useMemo, useState } from "react";
+import { useState } from "react";
 import {
   ACTION_OPTIONS,
   AMOUNT_OPTIONS,
@@ -11,10 +11,10 @@ import {
   DECAY_OPTIONS,
   describeEffect,
   describeRule,
-  effectLibrary,
+  EFFECT_KINDS,
   effectWarnings,
-  isLive,
-  WHEN_OPTIONS,
+  isAlwaysOn,
+  whenOptions,
   WHO_OPTIONS,
   type Action,
   type ActionKind,
@@ -22,26 +22,16 @@ import {
   type Check,
   type CheckKind,
   type EffectDef,
+  type EffectKind,
   type Rule,
 } from "../../../shared/effects.ts";
 import { tryEffect, type TryResult } from "../../../shared/effects-try.ts";
 import { PRIMARY_STATS, SECONDARY_STATS } from "../../../shared/ruleset.ts";
-import { useCollection } from "../../api.ts";
 import { NumberInput } from "../Fields.tsx";
 
 const STATS = [...PRIMARY_STATS, ...SECONDARY_STATS].map((s) => ({ value: s.key, label: s.label }));
 const STAT_NAMES = Object.fromEntries(STATS.map((s) => [s.value, s.label]));
 const DIE_SIZES = [4, 6, 8, 10, 12, 20];
-
-/** A game's effect library: the built-in effects plus the game's own, by id. */
-export function useEffectLibrary(gameId: string | null): Record<string, EffectDef> {
-  const game = useCollection<EffectDef>(gameId ? `games/${gameId}/effects` : null);
-  return useMemo(() => effectLibrary(game), [game]);
-}
-
-/** The effect library, for editors deep in a character sheet (Passives, Proficiencies). */
-export const EffectLibraryContext = createContext<Record<string, EffectDef> | null>(null);
-export const useEffectLibraryContext = () => useContext(EffectLibraryContext);
 
 /** The effect's card text, written from its pieces. */
 export function effectText(def: EffectDef, library: Record<string, EffectDef>) {
@@ -219,23 +209,25 @@ function RuleCard({
   rule,
   index,
   library,
-  isPassive,
+  kind,
   onChange,
   onRemove,
 }: {
   rule: Rule;
   index: number;
   library: Record<string, EffectDef>;
-  isPassive: boolean;
+  kind: EffectKind;
   onChange: (r: Rule) => void;
   onRemove: () => void;
 }) {
+  const whens = whenOptions(kind);
+  const isPassive = isAlwaysOn(kind);
   return (
     <section className="rule-card" aria-label={`Rule ${index + 1}`}>
       <div className="piece-row when">
         <span className="piece-tag">when</span>
-        <Select label="When" value={rule.when} options={WHEN_OPTIONS} onChange={(when) => onChange({ ...rule, when })} />
-        <span className="muted small">{WHEN_OPTIONS.find((o) => o.value === rule.when)?.hint}</span>
+        <Select label="When" value={rule.when} options={whens.some((o) => o.value === rule.when) ? whens : [...whens, { value: rule.when, label: rule.when, hint: "" }]} onChange={(when) => onChange({ ...rule, when })} />
+        <span className="muted small">{whens.find((o) => o.value === rule.when)?.hint}</span>
         <button type="button" className="icon" aria-label="Remove rule" onClick={onRemove}>
           ✕
         </button>
@@ -267,7 +259,7 @@ function RuleCard({
           + Do something else
         </button>
       </div>
-      <p className="rule-read">{describeRule(rule, library, STAT_NAMES)}</p>
+      <p className="rule-read">{describeRule(rule, library, STAT_NAMES, kind)}</p>
     </section>
   );
 }
@@ -311,32 +303,57 @@ function TryIt({ def, library }: { def: EffectDef; library: Record<string, Effec
   );
 }
 
-/** The whole editor for one effect. */
-export function EffectBuilder({ def, library, onChange }: { def: EffectDef; library: Record<string, EffectDef>; onChange: (d: EffectDef) => void }) {
+/**
+ * The whole editor for one library entry. Passives and Proficiencies can be plain words (the GM
+ * handles them) with rules to automate them; Status and Dice effects are their rules.
+ */
+export function EffectBuilder({
+  def,
+  library,
+  onChange,
+  mayAutomate = true,
+}: {
+  def: EffectDef;
+  library: Record<string, EffectDef>;
+  onChange: (d: EffectDef) => void;
+  /** False for a player whose GM hasn't turned on "Players can create effects": words only. */
+  mayAutomate?: boolean;
+}) {
   const warnings = effectWarnings(def);
-  const isPassive = def.kind === "passive";
+  const info = EFFECT_KINDS.find((k) => k.value === def.kind)!;
+  const optionalRules = def.kind === "passive" || def.kind === "proficiency";
+  const showRules = mayAutomate || def.rules.length > 0;
+  const setKind = (kind: EffectKind) => {
+    const next: EffectDef = { ...def, kind, decay: kind === "status" ? def.decay : "none" };
+    if (kind === "passive") next.cost = def.cost ?? 1;
+    else delete next.cost;
+    if (kind === "die") next.rules = def.rules.map((r) => (whenOptions("die").some((o) => o.value === r.when) ? r : { ...r, when: "hit" }));
+    onChange(next);
+  };
   return (
     <div className="effect-builder">
       <div className="row wrap">
-        <input className="effect-name" aria-label="Effect name" placeholder="Name, e.g. Burn" value={def.name} onChange={(e) => onChange({ ...def, name: e.target.value })} />
-        <span className="row" role="radiogroup" aria-label="Kind of effect">
-          {(
-            [
-              ["status", "Status effect", "Sits on a character with stacks (Burn, Poise…)"],
-              ["passive", "Passive", "Always on for whoever's Passive or Proficiency links to it"],
-            ] as const
-          ).map(([k, label, hint]) => (
-            <button key={k} type="button" role="radio" aria-checked={def.kind === k} title={hint} className={"chip" + (def.kind === k ? " active" : "")} onClick={() => onChange({ ...def, kind: k, decay: k === "passive" ? "none" : def.decay })}>
-              {label}
-            </button>
-          ))}
-        </span>
+        <input className="effect-name" aria-label="Effect name" placeholder={`Name your ${info.label}`} value={def.name} onChange={(e) => onChange({ ...def, name: e.target.value })} />
+        <Select label="Kind" value={def.kind} options={EFFECT_KINDS.filter((k) => mayAutomate || k.value === def.kind || k.value === "passive" || k.value === "proficiency").map((k) => ({ value: k.value, label: k.label }))} onChange={setKind} />
+        {def.kind === "passive" && (
+          <label className="inline">
+            Cost{" "}
+            <span className="piece-num">
+              <NumberInput label="Passive cost" value={def.cost ?? 1} min={-20} max={20} onChange={(n) => onChange({ ...def, cost: Math.max(-20, Math.min(20, Math.round(n))) })} />
+            </span>
+          </label>
+        )}
       </div>
+      <p className="muted small">{info.hint}.</p>
 
-      <div className="effect-card" aria-label="Card text">
+      <div className={`effect-card kind-${def.kind}`} aria-label="Card text">
         <strong>{def.name || "Unnamed"}</strong>
-        <span className="muted small">{isPassive ? "Passive" : "Status effect"}</span>
-        <p>{effectText(def, library)}</p>
+        <span className="muted small">
+          {info.label}
+          {def.kind === "passive" ? ` · Cost ${def.cost ?? 0}` : ""}
+          {optionalRules ? (def.rules.length ? " · Automated" : " · The GM handles it") : ""}
+        </span>
+        <p>{effectText(def, library) || <span className="muted">Say what it does below.</span>}</p>
       </div>
       {warnings.length > 0 && (
         <ul className="effect-warnings">
@@ -346,22 +363,34 @@ export function EffectBuilder({ def, library, onChange }: { def: EffectDef; libr
         </ul>
       )}
 
-      {def.rules.map((r, i) => (
-        <RuleCard
-          key={r.id}
-          rule={r}
-          index={i}
-          library={library}
-          isPassive={isPassive}
-          onChange={(r2) => onChange({ ...def, rules: def.rules.map((x, j) => (j === i ? r2 : x)) })}
-          onRemove={() => onChange({ ...def, rules: def.rules.filter((_, j) => j !== i) })}
-        />
-      ))}
-      <button type="button" disabled={def.rules.length >= 8} onClick={() => onChange({ ...def, rules: [...def.rules, blankRule()] })}>
-        + Add a rule
-      </button>
+      {optionalRules && (
+        <label className="field">
+          <span>What it does</span>
+          <textarea placeholder="In words. Add a rule below to automate it." value={def.note ?? ""} onChange={(e) => onChange({ ...def, note: e.target.value })} />
+        </label>
+      )}
 
-      {!isPassive && (
+      {showRules && optionalRules && <h4 className="rules-head">Automate it {def.rules.length ? "" : <span className="muted small">(optional)</span>}</h4>}
+      {showRules &&
+        def.rules.map((r, i) => (
+          <RuleCard
+            key={r.id}
+            rule={r}
+            index={i}
+            library={library}
+            kind={def.kind}
+            onChange={(r2) => onChange({ ...def, rules: def.rules.map((x, j) => (j === i ? r2 : x)) })}
+            onRemove={() => onChange({ ...def, rules: def.rules.filter((_, j) => j !== i) })}
+          />
+        ))}
+      {mayAutomate && (
+        <button type="button" disabled={def.rules.length >= 8} onClick={() => onChange({ ...def, rules: [...def.rules, blankRule(def.kind === "die" ? "hit" : "turnEnd")] })}>
+          + Add a rule
+        </button>
+      )}
+      {!mayAutomate && optionalRules && <p className="muted small">Your GM hasn't turned on player-made automation, so the GM handles what this does.</p>}
+
+      {def.kind === "status" && (
         <section className="rule-card stacks">
           <div className="piece-row">
             <span className="piece-tag">stacks</span>
@@ -376,42 +405,13 @@ export function EffectBuilder({ def, library, onChange }: { def: EffectDef; libr
           </div>
         </section>
       )}
-      <label className="field">
-        <span>Note (optional, added to the card text)</span>
-        <textarea value={def.note ?? ""} onChange={(e) => onChange({ ...def, note: e.target.value })} />
-      </label>
-      <TryIt def={def} library={library} />
-    </div>
-  );
-}
-
-/**
- * Links a Passive or Proficiency to an automated Passive effect from the library, so it runs at the
- * table. Shows nothing outside a screen that provides the library.
- */
-export function AutomationPicker({ effectId, onChange, disabled }: { effectId?: string; onChange: (id: string | undefined) => void; disabled?: boolean }) {
-  const library = useEffectLibraryContext();
-  if (!library) return null;
-  const passives = Object.entries(library).filter(([key, d]) => d.kind === "passive" || key === effectId);
-  const linked = effectId ? library[effectId] : undefined;
-  return (
-    <div className="automation">
-      <label className="inline small">
-        <span className="muted">Automated:</span>
-        <select aria-label="Automated effect" value={effectId ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value || undefined)}>
-          <option value="">No, the GM handles it</option>
-          {passives.map(([key, d]) => (
-            <option key={key} value={key}>
-              {d.name || "Unnamed"}
-              {isLive(d) ? "" : " (waiting for approval)"}
-            </option>
-          ))}
-          {effectId && !linked && <option value={effectId}>(deleted effect)</option>}
-        </select>
-      </label>
-      {linked && <p className="muted small automation-text">{effectText(linked, library)}</p>}
-      {effectId && !linked && <p className="error small">That effect was deleted from the library, so this does nothing.</p>}
-      {passives.length === 0 && !effectId && <p className="muted small">Make a Passive in the effect library to automate this.</p>}
+      {!optionalRules && (
+        <label className="field">
+          <span>Note (optional, added to the card text)</span>
+          <textarea value={def.note ?? ""} onChange={(e) => onChange({ ...def, note: e.target.value })} />
+        </label>
+      )}
+      {def.rules.length > 0 && <TryIt def={def} library={library} />}
     </div>
   );
 }
