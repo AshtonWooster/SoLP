@@ -1,6 +1,7 @@
 rules_version = '2';
 
-// Games and invite codes are only changed by the Cloud Functions in functions/src.
+// Games are created and joined, and invite codes made, only by the Cloud Functions in functions/src;
+// the GM can change a game's settings and remove players.
 // During play the GM's browser hosts the table (src/net/host.ts): it alone may save the
 // table, and other devices reach it through the signals collection.
 service cloud.firestore {
@@ -16,6 +17,16 @@ service cloud.firestore {
     }
     function isGm(gameId) {
       return signedIn() && game(gameId).gmId == request.auth.uid;
+    }
+    // Game settings: may players edit this part of their sheet? On unless the GM turned it off.
+    function playerMayEdit(gameId, key) {
+      return game(gameId).get("settings", {}).get("playerEdit", {}).get(key, true) != false;
+    }
+    function playersMakeItems(gameId) {
+      return game(gameId).get("settings", {}).get("playersCreateItems", false) == true;
+    }
+    function unchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
     // The GM's hosting tab saves the table (with any running combat) every few seconds.
     function inCombat(gameId) {
@@ -35,6 +46,14 @@ service cloud.firestore {
     match /games/{gameId} {
       // Also lets the front page list "games where memberIds contains me".
       allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
+      // The GM changes settings and removes players; nobody can be added this way, and the GM stays.
+      allow update: if signedIn() && resource.data.gmId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["settings", "members", "memberIds"])
+        && request.resource.data.memberIds.hasOnly(resource.data.memberIds)
+        && request.auth.uid in request.resource.data.memberIds
+        && request.resource.data.members.keys().hasOnly(resource.data.members.keys())
+        && request.resource.data.members[request.auth.uid] == resource.data.members[request.auth.uid]
+        && (request.resource.data.get("settings", null) == null || request.resource.data.settings is map);
 
       match /table/{doc} {
         allow read: if isMember(gameId);
@@ -77,15 +96,27 @@ service cloud.firestore {
           || (request.auth.uid == uid
               && request.resource.data.ownerId == uid
               && request.resource.data.rank == resource.data.rank
+              && (playerMayEdit(gameId, "stats") || unchanged(["primary", "secondary"]))
+              && (playerMayEdit(gameId, "inventory") || unchanged(["inventory", "ahn"]))
+              && (playerMayEdit(gameId, "augment") || unchanged(["augment", "proficiencies"]))
+              && (playerMayEdit(gameId, "equipment") || unchanged(["weapons", "armor", "deck", "ego"]))
               && (!inCombat(gameId)
                   || request.resource.data.get("deck", null) == resource.data.get("deck", null)));
         allow delete: if isGm(gameId) || (signedIn() && request.auth.uid == uid);
       }
 
-      // The GM's item library: players browse it to fill their inventories; only the GM edits it.
+      // The item library: players browse it to fill their inventories; the GM edits it. When the GM
+      // lets players make items (game settings), they add their own and edit or delete only those.
       match /items/{itemId} {
         allow read: if isMember(gameId);
         allow write: if isGm(gameId);
+        allow create: if isMember(gameId) && playersMakeItems(gameId)
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isMember(gameId) && playersMakeItems(gameId)
+          && resource.data.get("createdBy", null) == request.auth.uid
+          && request.resource.data.createdBy == request.auth.uid;
+        allow delete: if isMember(gameId) && playersMakeItems(gameId)
+          && resource.data.get("createdBy", null) == request.auth.uid;
       }
 
       // Enemy templates: only the GM sees or edits them.

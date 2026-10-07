@@ -239,6 +239,7 @@ export function cleanTemplate(raw: unknown): ItemTemplate | null {
     if (t.image) t.page.image = t.image;
     else delete t.page.image;
   }
+  if (typeof r.createdBy === "string" && r.createdBy) t.createdBy = r.createdBy;
   if (r.usable === true) t.usable = true;
   if (r.consumable === true) {
     t.consumable = true;

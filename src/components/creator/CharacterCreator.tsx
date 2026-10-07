@@ -33,6 +33,8 @@ interface Props {
   update: (fn: (d: Character) => void) => void;
   isGm: boolean;
   canEdit: boolean;
+  /** The GM turned off players editing their Stats (game settings). */
+  statsLocked?: boolean;
   gameId: string;
   uid: string;
   checks: Check[];
@@ -169,12 +171,13 @@ function ResourceBoard({ c }: { c: Character }) {
   );
 }
 
-function StatsStep({ c, update }: Pick<Props, "c" | "update">) {
+function StatsStep({ c, update, locked }: Pick<Props, "c" | "update"> & { locked?: boolean }) {
   const t = rankTable(c.rank);
   const primaryLeft = t.primaryPoints - Object.values(c.primary).reduce((a, b) => a + b, 0);
   const secondaryLeft = t.secondaryPoints - Object.values(c.secondary).reduce((a, b) => a + b, 0);
   return (
-    <div className="stats-step" id="stats">
+    <fieldset className="stats-step plain-fieldset" id="stats" disabled={locked}>
+      {locked && <p className="notice small">Your GM has locked Stats. Ask them to make changes.</p>}
       <ResourceBoard c={c} />
       <div className="stats-columns">
         <section className="stat-panel">
@@ -222,7 +225,7 @@ function StatsStep({ c, update }: Pick<Props, "c" | "update">) {
           ))}
         </section>
       </div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -408,7 +411,7 @@ export function CharacterCreator(props: Props) {
       <div key={step} className={`creator-page ${dir}`}>
         {step === "intro" && <Intro {...props} />}
         {step === "license" && <FixerLicense c={c} update={update} isGm={isGm} gameId={gameId} uid={uid} />}
-        {step === "stats" && <StatsStep c={c} update={update} />}
+        {step === "stats" && <StatsStep c={c} update={update} locked={props.statsLocked} />}
         {step === "story" && <StoryStep c={c} update={update} />}
         {step === "summary" && <SummaryStep {...props} />}
       </div>

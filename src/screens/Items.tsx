@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { collection, deleteDoc, doc, getDocs, query, setDoc, where, writeBatch } from "firebase/firestore";
 import type { InventoryItem, ItemTemplate } from "../../shared/character.ts";
 import { blankTemplate, cleanTemplate, ITEM_KINDS } from "../../shared/ruleset.ts";
-import type { GameDoc } from "../../shared/types.ts";
+import { type GameDoc, playersCanCreateItems } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ItemCard, ItemCardEditor } from "../components/items/ItemCard.tsx";
 import { TopBar } from "../components/TopBar.tsx";
@@ -76,7 +76,9 @@ export function Items() {
   const { user } = useAuth();
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
-  const items = useCollection<ItemTemplate>(isGm ? `games/${id}/items` : null);
+  // Players can open the library too when the GM lets them make items (game settings).
+  const canOpen = isGm || (!!user && !!game.data?.members[user.id] && playersCanCreateItems(game.data));
+  const items = useCollection<ItemTemplate>(canOpen ? `games/${id}/items` : null);
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<InventoryItem["kind"] | "all">("all");
@@ -100,7 +102,7 @@ export function Items() {
   );
 
   if (game.loading) return <main className="center muted">Loading…</main>;
-  if (!isGm) {
+  if (!canOpen) {
     return (
       <>
         <TopBar />
@@ -112,10 +114,13 @@ export function Items() {
     );
   }
   const current = selected && items?.[selected] ? selected : null;
+  // The GM edits every item; a player only the ones they made.
+  const mayEdit = (t: ItemTemplate) => isGm || t.createdBy === user!.id;
+  const maker = (t: ItemTemplate) => (t.createdBy ? (game.data!.members[t.createdBy]?.displayName ?? "a former player") : "the GM");
 
   const create = async () => {
     const ref = doc(collection(db, "games", id, "items"));
-    await setDoc(ref, { ...blankTemplate("item"), name: "New item" }).catch((e) => setMessage(friendlyError(e)));
+    await setDoc(ref, { ...blankTemplate("item"), name: "New item", ...(isGm ? {} : { createdBy: user!.id }) }).catch((e) => setMessage(friendlyError(e)));
     setSelected(ref.id);
   };
 
@@ -131,7 +136,7 @@ export function Items() {
     try {
       const data = JSON.parse(await file.text());
       const raw: unknown[] = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-      const clean = raw.map(cleanTemplate).filter((t): t is ItemTemplate => !!t && !!t.name.trim());
+      const clean = raw.map(cleanTemplate).filter((t): t is ItemTemplate => !!t && !!t.name.trim()).map(({ createdBy: _by, ...t }) => t);
       if (!clean.length) return setMessage("No items found in that file.");
       await addAll(id, clean);
       setMessage(`Imported ${clean.length} item${clean.length === 1 ? "" : "s"}.`);
@@ -144,7 +149,7 @@ export function Items() {
     if (!gameId) return;
     try {
       const snap = await getDocs(collection(db, "games", gameId, "items"));
-      const clean = snap.docs.map((d) => cleanTemplate(d.data())).filter((t): t is ItemTemplate => !!t);
+      const clean = snap.docs.map((d) => cleanTemplate(d.data())).filter((t): t is ItemTemplate => !!t).map(({ createdBy: _by, ...t }) => t);
       if (!clean.length) return setMessage("That game has no items.");
       await addAll(id, clean);
       setMessage(`Copied ${clean.length} item${clean.length === 1 ? "" : "s"} from ${otherGames.find((g) => g.id === gameId)?.name ?? "the other game"}.`);
@@ -162,7 +167,12 @@ export function Items() {
             ← {game.data!.name}
           </Link>
           <h1>Item library</h1>
-          <p className="muted">Make the items players can add to their inventories. Edits reach every inventory holding the item.</p>
+          <p className="muted">
+            {isGm
+              ? "Make the items players can add to their inventories. Edits reach every inventory holding the item."
+              : "Your GM lets players make items. Make new ones here, then add them from your Inventory. You can edit or delete the items you made."}
+          </p>
+          {isGm && (
           <div className="row wrap items-actions">
             <button type="button" onClick={exportItems} disabled={!items || Object.keys(items).length === 0}>
               Export items
@@ -187,12 +197,23 @@ export function Items() {
               </span>
             )}
           </div>
+          )}
+          {!isGm && message && (
+            <p className="muted" role="status">
+              {message}
+            </p>
+          )}
         </header>
 
         <div className="equip-studio items-studio">
           <div className="equip-editor">
-            {current ? (
+            {current && mayEdit(items![current]) ? (
               <TemplateEditor key={current} gameId={id} id={current} template={{ ...blankTemplate(), ...items![current] }} onDeleted={() => setSelected(null)} />
+            ) : current ? (
+              <div className="item-editor">
+                <ItemCard item={items![current]} />
+                <p className="muted small">Made by {maker(items![current])}. Only they and the GM can change it.</p>
+              </div>
             ) : (
               <p className="muted equip-empty">Pick an item to edit it, or make a new one.</p>
             )}

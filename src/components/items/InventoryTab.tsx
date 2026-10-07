@@ -84,7 +84,10 @@ export function InventoryTab({
   isGm,
   canEdit,
   update,
+  canMakeItems,
 }: {
+  /** The GM lets players make items (game settings): link to the item library. */
+  canMakeItems?: boolean;
   c: Character;
   library: Record<string, ItemTemplate> | undefined;
   gameId: string;
@@ -191,7 +194,7 @@ export function InventoryTab({
       <section className="inv-library" aria-label="Item library">
         <div className="inv-library-head">
           <h3>{isGm ? "Your items" : "The GM's items"}</h3>
-          {isGm && <Link to={`/games/${gameId}/items`}>Edit the item library ↗</Link>}
+          {isGm ? <Link to={`/games/${gameId}/items`}>Edit the item library ↗</Link> : canMakeItems && <Link to={`/games/${gameId}/items`}>Make an item ↗</Link>}
         </div>
         <div className="row wrap library-filters">
           <input aria-label="Search items" placeholder="Search items" value={search} onChange={(e) => setSearch(e.target.value)} />

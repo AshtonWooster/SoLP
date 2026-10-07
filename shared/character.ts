@@ -123,7 +123,11 @@ export interface InventoryItem {
  * a Usable item ("tool") is a Page with dice that goes in the Auxiliary Deck; other Items and
  * Trinkets just have a description.
  */
-export type ItemTemplate = Omit<InventoryItem, "id" | "templateId" | "count" | "uses"> & { updatedAt?: number };
+export type ItemTemplate = Omit<InventoryItem, "id" | "templateId" | "count" | "uses"> & {
+  updatedAt?: number;
+  /** The player who made it, when the GM lets players make items. Missing: the GM's. */
+  createdBy?: string;
+};
 
 export interface Inventory {
   /** Starts at 9 (Act 7); the GM can change it. */

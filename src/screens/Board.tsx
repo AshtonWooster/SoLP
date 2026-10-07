@@ -59,7 +59,7 @@ export function Board() {
   if (game.error) return <TableError error={game.error} gameId={id} />;
   if (game.loading) return <main className="center muted">Loading…</main>;
   if (!isMember) return <TableError error="You're not in this game." gameId={id} />;
-  if (!table) return <Waiting snapshot={snapshot} gameId={id} />;
+  if (!table || snapshot.status === "closed") return <Waiting snapshot={snapshot} gameId={id} />;
 
   const send = (action: TableAction) => client?.act(action).then(() => setError(""), (e: Error) => setError(e.message));
   const aim = combat?.aim;

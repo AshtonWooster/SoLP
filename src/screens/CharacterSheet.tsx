@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import type { Character, ItemTemplate } from "../../shared/character.ts";
 import { blankCharacter, characterChecks, linkInventory } from "../../shared/ruleset.ts";
-import type { GameDoc, TableState } from "../../shared/types.ts";
+import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, playersCanCreateItems, type TableState } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { DeckTab } from "../components/DeckTab.tsx";
 import { AugmentTab } from "../components/creator/AugmentTab.tsx";
@@ -124,6 +124,12 @@ export function CharacterSheet() {
   // The GM's item library: inventory items take their details from it.
   const library = useCollection<ItemTemplate>(`games/${id}/items`);
   const decksLocked = !!table.data?.combat && !isGm;
+  // Parts of the sheet the GM lets players edit (game settings). The GM can always edit.
+  const may = (key: PlayerEditKey) => canEdit && (isGm || playerCanEdit(game.data, key));
+  const lockNote = (key: PlayerEditKey) =>
+    isMine && !isGm && !playerCanEdit(game.data, key) ? (
+      <p className="notice small lock-note">Your GM has locked {PLAYER_EDIT_OPTIONS.find((o) => o.key === key)!.label}. Ask them to make changes.</p>
+    ) : null;
 
   if (game.error || error) {
     return (
@@ -213,26 +219,29 @@ export function CharacterSheet() {
 
         {tab === "sheet" && (
           <fieldset disabled={!canEdit} className="sheet-body">
-            <CharacterCreator c={c} update={update} isGm={isGm} canEdit={canEdit} gameId={id} uid={uid} checks={checks} step={step} setStep={setStep} goTab={goTab} />
+            <CharacterCreator c={c} update={update} isGm={isGm} canEdit={canEdit} statsLocked={isMine && !isGm && !playerCanEdit(game.data, "stats")} gameId={id} uid={uid} checks={checks} step={step} setStep={setStep} goTab={goTab} />
           </fieldset>
         )}
 
         {tab === "augment" && (
-          <fieldset disabled={!canEdit} className="sheet-body">
+          <fieldset disabled={!may("augment")} className="sheet-body">
+            {lockNote("augment")}
             <AugmentTab c={c} update={update} />
           </fieldset>
         )}
 
         {tab === "inventory" && (
-          <fieldset disabled={!canEdit} className="sheet-body">
+          <fieldset disabled={!may("inventory")} className="sheet-body">
+            {lockNote("inventory")}
             <Section id="inventory" title="Inventory" intro="Each Slot holds one item, or a stack of one stacking item. Usable items add their Page to your Auxiliary Deck. Your one Trinket is active only while in the Trinket Slot. Hover an item to see its card.">
-              <InventoryTab c={c} library={library} gameId={id} isGm={isGm} canEdit={canEdit} update={update} />
+              <InventoryTab c={c} library={library} gameId={id} isGm={isGm} canEdit={may("inventory")} update={update} canMakeItems={isMine && playersCanCreateItems(game.data)} />
             </Section>
           </fieldset>
         )}
 
         {tab === "decks" && (
-          <fieldset disabled={!canEdit} className="sheet-body">
+          <fieldset disabled={!may("equipment")} className="sheet-body">
+            {lockNote("equipment")}
             <DeckTab c={linkInventory(c, library)} update={update} gameId={id} uid={uid} decksLocked={decksLocked} />
           </fieldset>
         )}

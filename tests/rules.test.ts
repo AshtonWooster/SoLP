@@ -61,7 +61,7 @@ test("front page query only works for your own games", async () => {
   await assertFails(getDocs(collection(as("p1"), "games")));
 });
 
-test("nobody can change games or invite codes directly, not even the GM", async () => {
+test("nobody can rename games, add members or read invite codes directly, not even the GM", async () => {
   for (const uid of ["gm", "p1"]) {
     const db = as(uid);
     await assertFails(updateDoc(doc(db, "games", GAME), { name: "hacked" }));
@@ -70,6 +70,43 @@ test("nobody can change games or invite codes directly, not even the GM", async 
     await assertFails(setDoc(doc(db, "games", "newgame"), { gmId: uid, memberIds: [uid] }));
     await assertFails(getDoc(doc(db, "inviteCodes", "ABC123")));
   }
+});
+
+test("game settings: only the GM changes them and kicks players; the GM can't be removed or add anyone", async () => {
+  const game = (who: string) => doc(as(who), "games", GAME);
+  await assertFails(updateDoc(game("p1"), { "settings.playerEdit.stats": false }));
+  await assertSucceeds(updateDoc(game("gm"), { "settings.playerEdit.stats": false }));
+  await assertFails(updateDoc(game("p1"), { memberIds: ["p1"], members: { p1: { displayName: "P1", role: "player" } } }));
+  await assertFails(updateDoc(game("gm"), { memberIds: ["p1"] }));
+  await assertFails(updateDoc(game("gm"), { "members.friend": { displayName: "F", role: "player" } }));
+  await assertFails(updateDoc(game("gm"), { "members.gm.role": "player" }));
+  await assertFails(updateDoc(game("gm"), { gmId: "p1" }));
+  await assertSucceeds(updateDoc(game("gm"), { memberIds: ["gm"], members: { gm: { displayName: "GM", role: "gm" } } }));
+  // Kicked: the player can't read the game or its table any more.
+  await assertFails(getDoc(doc(as("p1"), "games", GAME)));
+  await assertFails(getDoc(doc(as("p1"), "games", GAME, "table", "state")));
+});
+
+test("players can't change the parts of their sheet the GM locked; the GM still can", async () => {
+  const sheet = { ownerId: "p1", name: "Roland", rank: 9, primary: { justice: 0 }, secondary: {}, inventory: { items: [] }, ahn: 0, augment: { name: "" }, proficiencies: [], weapons: [], armor: null, deck: [], ego: [] };
+  const ref = (who: string) => doc(as(who), "games", GAME, "characters", "p1");
+  await assertSucceeds(setDoc(ref("p1"), sheet));
+  await env.withSecurityRulesDisabled((ctx) =>
+    updateDoc(doc(ctx.firestore(), "games", GAME), { settings: { playerEdit: { stats: false, inventory: false, augment: false, equipment: false } } }),
+  );
+  await assertFails(updateDoc(ref("p1"), { "primary.justice": 3 }));
+  await assertFails(updateDoc(ref("p1"), { ahn: 500 }));
+  await assertFails(updateDoc(ref("p1"), { "inventory.items": [{ id: "x" }] }));
+  await assertFails(updateDoc(ref("p1"), { "augment.name": "Gloves" }));
+  await assertFails(updateDoc(ref("p1"), { weapons: [{ id: "w" }] }));
+  await assertFails(updateDoc(ref("p1"), { deck: [{ pageId: "a", copies: 1 }] }));
+  // Unlocked parts, and a full save that leaves locked parts as they are, still work.
+  await assertSucceeds(updateDoc(ref("p1"), { name: "Roland the Black Silence" }));
+  await assertSucceeds(setDoc(ref("p1"), { ...sheet, name: "Roland again" }));
+  await assertSucceeds(updateDoc(ref("gm"), { "primary.justice": 3, ahn: 500 }));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playerEdit.stats": true }));
+  await assertSucceeds(updateDoc(ref("p1"), { "primary.justice": 4 }));
+  await assertFails(updateDoc(ref("p1"), { ahn: 1 }));
 });
 
 test("only the GM's hosting tab can save the table", async () => {
@@ -165,6 +202,27 @@ test("item library: members browse it, only the GM creates and edits items", asy
   await assertFails(deleteDoc(ref("p1")));
   await assertFails(getDocs(collection(as("stranger"), "games", GAME, "items")));
   await assertSucceeds(deleteDoc(ref("gm")));
+});
+
+test("players make items only when the GM allows it, and change only their own", async () => {
+  const items = (who: string) => collection(as(who), "games", GAME, "items");
+  const item = (who: string, id: string) => doc(as(who), "games", GAME, "items", id);
+  await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), "games", GAME, "items", "gmItem"), { name: "Ore", kind: "item" }));
+  await assertFails(setDoc(item("p1", "mine"), { name: "Salve", kind: "tool", createdBy: "p1" }));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateItems": true }));
+  await assertSucceeds(setDoc(item("p1", "mine"), { name: "Salve", kind: "tool", createdBy: "p1" }));
+  await assertFails(setDoc(item("p1", "fake"), { name: "Fake", kind: "item", createdBy: "gm" }));
+  await assertFails(setDoc(item("p1", "none"), { name: "None", kind: "item" }));
+  await assertSucceeds(updateDoc(item("p1", "mine"), { name: "Better Salve" }));
+  await assertFails(updateDoc(item("p1", "mine"), { createdBy: "gm" }));
+  await assertFails(updateDoc(item("p1", "gmItem"), { name: "Gold" }));
+  await assertFails(deleteDoc(item("p1", "gmItem")));
+  await assertSucceeds(updateDoc(item("gm", "mine"), { name: "GM's tweak" }));
+  await assertFails(setDoc(item("stranger", "s"), { name: "S", kind: "item", createdBy: "stranger" }));
+  await assertSucceeds(getDocs(items("p1")));
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateItems": false }));
+  await assertFails(updateDoc(item("p1", "mine"), { name: "Locked" }));
+  await assertFails(deleteDoc(item("p1", "mine")));
 });
 
 test("only the GM sees the invite code and GM notes", async () => {

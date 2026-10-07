@@ -14,6 +14,7 @@ import { Gm } from "./screens/Gm.tsx";
 import { Play } from "./screens/Play.tsx";
 import { CharacterSheet } from "./screens/CharacterSheet.tsx";
 import { Npcs } from "./screens/Npcs.tsx";
+import { Settings } from "./screens/Settings.tsx";
 import { Items } from "./screens/Items.tsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import "./styles.css";
@@ -58,6 +59,7 @@ function App() {
           <Route path="/games/:id/play" element={authed(<Play />)} />
           <Route path="/games/:id/characters/:uid" element={authed(<CharacterSheet />)} />
           <Route path="/games/:id/npcs" element={authed(<Npcs />)} />
+          <Route path="/games/:id/settings" element={authed(<Settings />)} />
           <Route path="/games/:id/enemies" element={<OldEnemiesLink />} />
           <Route path="/games/:id/items" element={authed(<Items />)} />
           <Route path="*" element={<Navigate to="/" replace />} />
