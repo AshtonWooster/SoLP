@@ -1,4 +1,5 @@
 import type { InventoryItem, ItemTemplate, PageType } from "../../../shared/character.ts";
+import { DieEffectNames } from "../effects/library.tsx";
 import { blankDice, blankTemplate, ITEM_KINDS } from "../../../shared/ruleset.ts";
 import { ConfirmButton } from "../ConfirmButton.tsx";
 import { NumberInput } from "../Fields.tsx";
@@ -76,6 +77,7 @@ export function ItemCard({ item, size = "full", onClick, selected, note }: { ite
                     <span className="pv-die-text">
                       {d.counter && <span className="pv-counter">Counter {DIE_NAMES[d.kind]}. </span>}
                       {d.effect}
+                      <DieEffectNames dice={d} />
                     </span>
                   </li>
                 ))}

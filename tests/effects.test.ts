@@ -2,15 +2,19 @@
 // Dice here have 1 side, so they always roll 1 and Final Power = 1 + Base Power.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Dice, DiceKind, Page } from "../shared/character.ts";
+import type { Character, Dice, DiceKind, Page } from "../shared/character.ts";
 import { applyAction, type Actor, type EngineContext, type Loadout } from "../shared/engine.ts";
 import {
   blankEffect,
   cleanEffect,
   copyEffect,
   describeEffect,
+  effectLibrary,
   effectWarnings,
+  linkLibrary,
   PRESET_EFFECTS,
+  slotPassive,
+  slotProficiency,
   type EffectDef,
   type Rule,
 } from "../shared/effects.ts";
@@ -286,4 +290,101 @@ test("Try it runs an effect on two dummies with the real rules", () => {
   const passive = tryEffect({ name: "Thorns", kind: "passive", decay: "none", rules: [rule({ when: "wasHit", checks: [], actions: [{ kind: "damage", target: { who: "them" }, amount: { kind: "number", n: 2 } }] })] }, PRESET_EFFECTS);
   assert.ok(passive.log.some((l) => l.includes("You's Thorns triggers.")));
   assert.ok(passive.log.some((l) => l.includes("Dummy takes 2 damage")));
+});
+
+test("a Dice effect runs only for the die it's slotted on", () => {
+  const searing: EffectDef = {
+    name: "Searing", kind: "die", decay: "none",
+    rules: [rule({ when: "hit", checks: [], actions: [{ kind: "give", target: { who: "them" }, amount: { kind: "number", n: 2 }, effectId: "preset:burn" }] })],
+  };
+  const page: Page = { ...slash(5), dice: [{ ...die("slash", 5), effectIds: ["searing"] }] };
+  const s = setup({ page, library: { searing } });
+  s.attack();
+  s.endTurn(p1);
+  s.endTurn();
+  assert.equal(s.stacks("rat", "preset:burn"), 2);
+
+  // The same entry as a Passive does nothing: Dice effects live on dice.
+  const other = setup({ library: { searing }, passives: ["searing"] });
+  other.attack();
+  other.endTurn(p1);
+  other.endTurn();
+  assert.equal(other.stacks("rat", "preset:burn"), 0);
+});
+
+test("a Dice effect on my die never runs for the one it hits", () => {
+  const backlash: EffectDef = {
+    name: "Backlash", kind: "die", decay: "none",
+    rules: [rule({ when: "wasHit", checks: [], actions: [{ kind: "damage", target: { who: "me" }, amount: { kind: "number", n: 7 } }] })],
+  };
+  const page: Page = { ...slash(5), dice: [{ ...die("slash", 5), effectIds: ["backlash"] }] };
+  const s = setup({ page, library: { backlash } });
+  s.attack();
+  s.endTurn(p1);
+  s.endTurn();
+  assert.equal(s.hp("rat"), 30 - 5);
+  assert.equal(s.hp("roland"), 30);
+});
+
+test("Proficiencies run like Passives; Status effects don't run as Passives", () => {
+  const drilled: EffectDef = {
+    name: "Drilled", kind: "proficiency", decay: "none",
+    rules: [rule({ when: "hit", checks: [], actions: [{ kind: "extraDamage", amount: { kind: "number", n: 3 } }] })],
+  };
+  const s = setup({ library: { drilled, burnish: { ...drilled, name: "Burnish", kind: "status" } }, passives: ["drilled", "burnish"] });
+  s.attack();
+  s.endTurn(p1);
+  s.endTurn();
+  assert.equal(s.hp("rat"), 30 - 5 - 3);
+});
+
+test("cleanEffect knows the four kinds: cost for Passives, stacks for Status effects, die triggers for Dice effects", () => {
+  const passive = cleanEffect({ name: "Big", kind: "passive", cost: 99, decay: "halfAtTurnEnd", note: "x".repeat(2000), rules: [] });
+  assert.equal(passive.cost, 20);
+  assert.equal(passive.decay, "none");
+  assert.equal(passive.note!.length, 1000);
+  assert.equal(cleanEffect({ name: "Odd", kind: "weird", decay: "none", rules: [] }).kind, "status");
+  const die = cleanEffect({ name: "D", kind: "die", decay: "none", rules: [{ id: "r", when: "turnEnd", checks: [], actions: [] }] });
+  assert.notEqual(die.rules[0].when, "turnEnd", "Dice effects only trigger on die events");
+  assert.equal(blankEffect("passive").rules.length, 0);
+  assert.equal(blankEffect("proficiency").rules.length, 0);
+  assert.equal(blankEffect("die").rules[0].when, "hit");
+  assert.deepEqual(effectWarnings({ ...blankEffect("passive"), name: "Calm", note: "Stay calm" }), []);
+  assert.ok(effectWarnings({ ...blankEffect("passive"), name: "Calm" }).length > 0, "a Passive needs words or rules");
+  assert.match(describeEffect(die, {}), /die/i);
+});
+
+test("slotted Passives and Proficiencies copy the library entry and follow its changes", () => {
+  const library: Record<string, EffectDef> = {
+    steady: { name: "Steady", kind: "passive", cost: 2, note: "Gain 1 Poise each turn", decay: "none", rules: [] },
+    swords: { name: "Swords", kind: "proficiency", note: "Trained with blades", decay: "none", rules: [] },
+  };
+  const p = slotPassive("steady", library);
+  assert.equal(p.name, "Steady");
+  assert.equal(p.cost, 2);
+  assert.equal(p.effectId, "steady");
+  assert.match(p.description, /Gain 1 Poise/);
+  const prof = slotProficiency("swords", library);
+  assert.equal(prof.name, "Swords");
+  const c = { augment: { name: "", description: "", passives: [p, { id: "old", name: "Typed", cost: 1, description: "By hand" }] }, weapons: [], armor: null, proficiencies: [prof] } as unknown as Character;
+  const renamed = { ...library, steady: { ...library.steady, name: "Steadfast", cost: 3 } };
+  const linked = linkLibrary(c, renamed);
+  assert.equal(linked.augment.passives[0].name, "Steadfast");
+  assert.equal(linked.augment.passives[0].cost, 3);
+  assert.equal(linked.augment.passives[1].name, "Typed", "Passives typed before the library stay as they were");
+  assert.equal(linked.proficiencies[0].name, "Swords");
+  // An entry deleted from the library keeps its last words.
+  assert.equal(linkLibrary(c, {}).augment.passives[0].name, "Steady");
+});
+
+test("Try it runs a Dice effect on your Strike's die", () => {
+  const r = tryEffect({ name: "Searing", kind: "die", decay: "none", rules: [rule({ when: "hit", checks: [], actions: [{ kind: "damage", target: { who: "them" }, amount: { kind: "number", n: 2 } }] })] }, PRESET_EFFECTS);
+  assert.ok(r.log.some((l) => l.includes("You's Searing triggers.")));
+});
+
+test("the library cleans what it reads, so a broken entry can't crash a screen", () => {
+  const lib = effectLibrary({ odd: { name: "Odd", kind: "proficiency", decay: "none", rules: [{ id: "r", when: "roll", checks: [], actions: [{ kind: "power" }] }] } as unknown as EffectDef });
+  assert.doesNotThrow(() => effectWarnings(lib.odd));
+  assert.doesNotThrow(() => describeEffect(lib.odd, lib));
+  assert.ok(lib["preset:burn"]);
 });

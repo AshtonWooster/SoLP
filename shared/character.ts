@@ -25,6 +25,8 @@ export interface Dice {
   basePower: number;
   /** What this die does besides its Power, e.g. "On Hit: Inflict 1 Fragile next Scene". */
   effect?: string;
+  /** Dice effects from the game's effect library slotted on this die. */
+  effectIds?: string[];
 }
 
 export type PageType = "melee" | "ranged" | "massSummation" | "massIndividual" | "instant";

@@ -3,14 +3,15 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import type { Character, ItemTemplate } from "../../shared/character.ts";
 import { blankCharacter, characterChecks, linkInventory } from "../../shared/ruleset.ts";
-import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, playersCanCreateItems, type TableState } from "../../shared/types.ts";
+import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, playersCanCreateEffects, playersCanCreateItems, type TableState } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { DeckTab } from "../components/DeckTab.tsx";
 import { AugmentTab } from "../components/creator/AugmentTab.tsx";
 import { CharacterCreator, type CreatorStep } from "../components/creator/CharacterCreator.tsx";
 import { InventoryTab } from "../components/items/InventoryTab.tsx";
 import { Section } from "../components/Fields.tsx";
-import { EffectLibraryContext, useEffectLibrary } from "../components/effects/EffectBuilder.tsx";
+import { EffectLibraryContext, useLibraryValue } from "../components/effects/library.tsx";
+import { linkLibrary } from "../../shared/effects.ts";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
 
@@ -112,9 +113,9 @@ const CREATOR_STEPS: CreatorStep[] = ["intro", "license", "stats", "story", "sum
 export function CharacterSheet() {
   const { id = "", uid = "" } = useParams();
   const { user } = useAuth();
-  const effects = useEffectLibrary(id);
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
+  const effects = useLibraryValue(id, user?.id, isGm, playersCanCreateEffects(game.data));
   const isMine = user?.id === uid;
   const canEdit = isMine || isGm;
   const ownerName = game.data?.members[uid]?.displayName ?? "";
@@ -186,7 +187,9 @@ export function CharacterSheet() {
     );
   }
 
-  const checks = characterChecks(linkInventory(c, library));
+  // Slotted Passives and Proficiencies show what the shared effect library says now.
+  const sheet = linkLibrary(c, effects.library);
+  const checks = characterChecks(linkInventory(sheet, library));
   // A new character starts on the intro (Start opens it); coming back later opens the summary.
   const stepParam = params.get("step") as CreatorStep | null;
   const step: CreatorStep = stepParam && CREATOR_STEPS.includes(stepParam) ? stepParam : c.name.trim() ? "summary" : "intro";
@@ -221,14 +224,14 @@ export function CharacterSheet() {
 
         {tab === "sheet" && (
           <fieldset disabled={!canEdit} className="sheet-body">
-            <CharacterCreator c={c} update={update} isGm={isGm} canEdit={canEdit} statsLocked={isMine && !isGm && !playerCanEdit(game.data, "stats")} gameId={id} uid={uid} checks={checks} step={step} setStep={setStep} goTab={goTab} />
+            <CharacterCreator c={sheet} update={update} isGm={isGm} canEdit={canEdit} statsLocked={isMine && !isGm && !playerCanEdit(game.data, "stats")} gameId={id} uid={uid} checks={checks} step={step} setStep={setStep} goTab={goTab} />
           </fieldset>
         )}
 
         {tab === "augment" && (
           <fieldset disabled={!may("augment")} className="sheet-body">
             {lockNote("augment")}
-            <AugmentTab c={c} update={update} />
+            <AugmentTab c={sheet} update={update} />
           </fieldset>
         )}
 
@@ -244,7 +247,7 @@ export function CharacterSheet() {
         {tab === "decks" && (
           <fieldset disabled={!may("equipment")} className="sheet-body">
             {lockNote("equipment")}
-            <DeckTab c={linkInventory(c, library)} update={update} gameId={id} uid={uid} decksLocked={decksLocked} />
+            <DeckTab c={linkInventory(sheet, library)} update={update} gameId={id} uid={uid} decksLocked={decksLocked} />
           </fieldset>
         )}
       </main>

@@ -15,7 +15,8 @@ import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { MAP_MAX, MAP_MIN } from "../../shared/maps.ts";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
-import { effectText, useEffectLibrary } from "../components/effects/EffectBuilder.tsx";
+import { effectText } from "../components/effects/EffectBuilder.tsx";
+import { useEffectLibrary } from "../components/effects/library.tsx";
 import { isLive } from "../../shared/effects.ts";
 import { useHost } from "../net/hooks.ts";
 

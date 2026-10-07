@@ -5,6 +5,7 @@ import { friendlyError } from "../../firebase.ts";
 import { NumberInput } from "../Fields.tsx";
 import { uploadImage } from "../ImageUpload.tsx";
 import { DiceIcon, DIE_NAMES, dieClass } from "./DiceIcon.tsx";
+import { DieEffectSlots } from "../effects/library.tsx";
 
 export const TYPE_ICONS: Record<PageType, string> = {
   melee: "⚔",
@@ -117,11 +118,12 @@ export function DieEditor({ dice, onChange, onRemove }: { dice: Dice; onChange: 
       </button>
       <input
         className="die-effect-in"
-        aria-label="Dice effect"
+        aria-label="Dice effect text"
         placeholder="Effect, e.g. On Hit: Inflict 1 Fragile"
         value={dice.effect ?? ""}
         onChange={(e) => onChange({ ...dice, effect: e.target.value || undefined })}
       />
+      <DieEffectSlots dice={dice} onChange={onChange} />
     </li>
   );
 }

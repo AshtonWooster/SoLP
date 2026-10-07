@@ -7,7 +7,7 @@ import type { GameDoc } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { gearLibrary } from "../components/npc/GearLibrary.tsx";
 import { NpcEditor } from "../components/npc/NpcEditor.tsx";
-import { EffectLibraryContext, useEffectLibrary } from "../components/effects/EffectBuilder.tsx";
+import { EffectLibraryContext, useLibraryValue } from "../components/effects/library.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
 
@@ -63,7 +63,7 @@ export function Npcs() {
   const { user } = useAuth();
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
-  const effects = useEffectLibrary(isGm ? id : null);
+  const effects = useLibraryValue(isGm ? id : "", user?.id, isGm);
   const raw = useCollection<NpcTemplate>(isGm ? `games/${id}/enemies` : null);
   const players = useCollection<Character>(isGm ? `games/${id}/characters` : null);
   const items = useCollection<ItemTemplate>(isGm ? `games/${id}/items` : null);

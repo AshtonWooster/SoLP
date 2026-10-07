@@ -338,7 +338,8 @@ function effectOps(table: TableState): EffectOps<Token> {
 }
 
 function trigger(table: TableState, when: When, holder: Token, other?: Token, die?: Dice) {
-  return runTrigger(effectOps(table), when, holder, other, die);
+  // "When I'm hit" passes the attacker's die: its Dice effects belong to the attacker, not the one hit.
+  return runTrigger(effectOps(table), when, holder, other, die, when !== "wasHit");
 }
 
 // ---- Dice Clashes (Act 3, "Dice") ----

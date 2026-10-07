@@ -114,10 +114,11 @@ Player characters come along when the map changes, keeping their Health, Light, 
 
 ### Character editor
 
-On the game page, **Character editor** (GM only) is where the GM builds enemies, allies and anyone else in the story. On the left, each character shows as a card with its portrait, name, side (Enemy, Ally or Neutral), Rank and Health; click one to open its editor, which has three tabs:
+On the game page, **Character editor** (GM only) is where the GM builds enemies, allies and anyone else in the story. On the left, each character shows as a card with its portrait, name, side (Enemy, Ally or Neutral), Rank and Health; click one to open its editor, which has these tabs:
 
 - **Profile:** portrait, name, side, token color, Rank and GM notes; Primary and Secondary Stats set freely (no point budget); and Health, Stagger Resist, Sanity and Light, worked out from Rank and Stats like a player's. Type over any of them to override it (**Reset** goes back to the calculated number). Damage and Stagger resistances come from the Armor unless overridden.
-- **Augment, Weapons & Armor:** the same Augment and equipment editors players use, plus a **Reuse gear** library of every Augment, Weapon and Armor already built in the game, on the GM's characters or the players'. Picking one copies it onto the character (so editing the copy leaves the original alone).
+- **Augment & Proficiencies:** the same Augment editor players use, the character's Proficiencies (picked from the effect library, with no count limit), and a **Reuse gear** library of every Augment already built in the game.
+- **Weapons & Armor:** the same equipment editor players use, plus a **Reuse gear** library of every Weapon and Armor already built in the game, on the GM's characters or the players'. Picking one copies it onto the character (so editing the copy leaves the original alone).
 - **Combat Deck:** a list of the Pages in it (no size limit), and every Page the character has (from its Weapons and Armor, and its own) with − and + under it to set copies, the character's own Pages (tap to edit, **+** for a new one), and a **Reuse Pages** library of every Page in the game.
 - **Inventory:** the character's Ahn and Inventory, filled from the item library.
 
@@ -137,11 +138,12 @@ Any of them can be **Stacking**, up to a max per Slot. Inventories link to the l
 
 ### Effect library
 
-On the game page, **Effect library** holds the game's automated effects; everyone in the game can read it. Each effect is built from menus, never code: one or more rules that read as a sentence, **When** something happens (end of my turn, when I'm hit, when I hit someone, when I roll a die, when I win or lose a Clash...), **if** any checks pass (a die roll against my stacks, the kind of die, my Health), **do** these things (take or deal damage, add Power, deal extra damage, give someone an Effect, gain Light, draw...), with **how much** picked from a list (a number, per stack, half the stacks, a die roll, another roll of this die, a Stat). Status effects also pick how their stacks go away (lose half at the end of my turn, lose all after it triggers...). The card text is written from the picks, warnings point out rules that won't do anything, and **Try it** plays a few rounds against a Dummy and shows the log.
+On the game page, **Effect library** holds everything the game shares, on four tabs: **Status effects**, **Passives**, **Proficiencies** and **Dice effects**. Everyone in the game can read it. Passives (with their Passive Cost) and Proficiencies can be words only, for the GM to handle, or automated. Each automated entry is built from menus, never code: one or more rules that read as a sentence, **When** something happens (end of my turn, when I'm hit, when I hit someone, when I roll a die, when I win or lose a Clash...), **if** any checks pass (a die roll against my stacks, the kind of die, my Health), **do** these things (take or deal damage, add Power, deal extra damage, give someone an Effect, gain Light, draw...), with **how much** picked from a list (a number, per stack, half the stacks, a die roll, another roll of this die, a Stat). Status effects also pick how their stacks go away (lose half at the end of my turn, lose all after it triggers...). The card text is written from the picks, warnings point out rules that won't do anything, and **Try it** plays a few rounds against a Dummy and shows the log.
 
 - **Built in:** Burn, Rupture, Poise, Bleed, Strength, Feeble and Endurance. **Make a variant** copies one to change it.
 - **Status effects** go on characters from the GM screen (**Give an automated effect**, then set the stacks), or are given by other effects. Effects without a library effect are notes the GM tracks by hand, as before.
-- **Passives:** link a Passive (Augment, Weapon or Armor) or a Proficiency to a Passive effect with its **Automated** menu; it runs for that character, players' and the GM's characters alike.
+- **Passives** on an Augment, Weapon or Armor are picked from a menu of the library's Passives (**+ Slot a Passive**), and a character's **Proficiencies** from its Proficiencies. A sheet keeps a copy of the name, cost and words, and follows the library when the GM changes them. Automated ones run for that character, players' and the GM's characters alike. Passives typed on a sheet before the library existed stay as they were, with an **Add it to the library** button.
+- **Dice effects** are slotted on a single die in the Page editor (**+ Slot a Dice effect**, up to 3 per die) and show on the Page's card. They run only for that die: when it's rolled, when it hits, or when it wins or loses a Clash.
 
 The rules live in `shared/effects.ts` and run on the host from `shared/combat.ts`.
 
@@ -152,7 +154,7 @@ On the game page, **Game settings** (GM only) has:
 - **Players:** each player's character at a glance (portrait, name, Rank, Health, how much is left to finish), **Open sheet**, and **Kick** (click twice to confirm). A kicked player is removed from the game, disconnected from the table straight away, and the game leaves their list. Their character is kept, so it comes back if they rejoin with the invite code.
 - **What players can edit:** a switch each for **Stats**, **Inventory & Ahn**, **Augment & Proficiencies**, and **Weapons, Armor & Decks**. Turning one off locks that part on every player's sheet and phone (the security rules enforce it too); the GM can still edit it on any sheet. Decks also lock on their own during combat.
 - **Item library:** **Players can create items** (off by default) gives players an **Item library** button on the game page and a **Make an item** link on their Inventory tab. They can add items for everyone and edit or delete the ones they made; the GM can edit all of them.
-- **Effect library:** **Players can create effects** (off by default) lets players make effects in the effect library and edit or delete the ones they made. A player's effect does nothing at the table until the GM approves it, and again after each change they make.
+- **Effect library:** players can always add Passives and Proficiencies in words, and edit or delete the ones they made. **Players can create effects** (off by default) also lets them automate entries and make Status effects and Dice effects. A player's automated entry does nothing at the table until the GM approves it, and again after each change they make.
 
 ### Players who can't connect
 

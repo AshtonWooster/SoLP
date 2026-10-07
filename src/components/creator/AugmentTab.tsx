@@ -1,14 +1,13 @@
 import type { Character } from "../../../shared/character.ts";
-import { newId } from "../../../shared/engine.ts";
 import { proficiencyCount, rankTable } from "../../../shared/ruleset.ts";
-import { PassiveList, withEffect } from "../EquipmentEditor.tsx";
-import { AutomationPicker } from "../effects/EffectBuilder.tsx";
+import { PassiveList } from "../EquipmentEditor.tsx";
+import { ProficiencySlots } from "../effects/library.tsx";
 
 /**
  * The Augment & Proficiencies tab, laid out like the Inventory: Proficiencies as a slim list on
  * the left, and the Augment (name, description and Passives) on the right.
  */
-export function AugmentTab({ c, update }: { c: Character; update: (fn: (d: Character) => void) => void }) {
+export function AugmentTab({ c, update, npc }: { c: Character; update: (fn: (d: Character) => void) => void; npc?: boolean }) {
   const t = rankTable(c.rank);
   const profMax = proficiencyCount(c.rank);
 
@@ -17,40 +16,20 @@ export function AugmentTab({ c, update }: { c: Character; update: (fn: (d: Chara
       <aside className="inv-list" aria-label="Proficiencies" id="proficiencies">
         <div className="inv-head">
           <h3>Proficiencies</h3>
-          <span className={c.proficiencies.length > profMax ? "error" : c.proficiencies.length === profMax ? "ok-text" : "warn-text"}>
-            {c.proficiencies.length} / {profMax}
-          </span>
+          {npc ? (
+            <span className="muted">{c.proficiencies.length}</span>
+          ) : (
+            <span className={c.proficiencies.length > profMax ? "error" : c.proficiencies.length === profMax ? "ok-text" : "warn-text"}>
+              {c.proficiencies.length} / {profMax}
+            </span>
+          )}
         </div>
         <p className="muted small">
-          They reflect your background, like a workshop Fixer with Proficiencies in modifying weapons. Each one may need minimum Stats. You get {profMax} at Rank {c.rank}.
+          {npc
+            ? "Their background and training, picked from the game's shared Proficiencies."
+            : `They reflect your background, like a workshop Fixer with Proficiencies in modifying weapons. Each one may need minimum Stats. You get ${profMax} at Rank ${c.rank}. Pick them from the game's shared Proficiencies.`}
         </p>
-        {c.proficiencies.map((p, i) => (
-          <div className="prof-row" key={p.id}>
-            <span className="inv-count">{i + 1}</span>
-            <div className="prof-fields">
-              <input aria-label="Proficiency" placeholder="Proficiency" value={p.name} onChange={(e) => update((d) => void (d.proficiencies[i].name = e.target.value))} />
-              <input
-                aria-label="Notes"
-                className="small"
-                placeholder="Notes or requirement"
-                value={p.description}
-                onChange={(e) => update((d) => void (d.proficiencies[i].description = e.target.value))}
-              />
-              <AutomationPicker effectId={p.effectId} onChange={(effectId) => update((d) => void (d.proficiencies[i] = withEffect(d.proficiencies[i], effectId)))} />
-            </div>
-            <button type="button" className="icon" aria-label="Remove proficiency" onClick={() => update((d) => void d.proficiencies.splice(i, 1))}>
-              ✕
-            </button>
-          </div>
-        ))}
-        {Array.from({ length: Math.max(0, profMax - c.proficiencies.length) }, (_, i) => (
-          <div className="inv-row empty" key={`empty-${i}`}>
-            Open Proficiency
-          </div>
-        ))}
-        <button type="button" disabled={c.proficiencies.length >= profMax} onClick={() => update((d) => void d.proficiencies.push({ id: newId(), name: "", description: "" }))}>
-          + Add proficiency
-        </button>
+        <ProficiencySlots proficiencies={c.proficiencies} max={npc ? undefined : profMax} onChange={(p) => update((d) => void (d.proficiencies = p))} />
       </aside>
 
       <section className="augment-card" id="augment" aria-label="Augment">
@@ -58,7 +37,9 @@ export function AugmentTab({ c, update }: { c: Character; update: (fn: (d: Chara
           <span className="kicker">Augment</span>
           <span className="muted small">Max Passive Cost {t.augmentMaxCost} at Rank {c.rank}</span>
         </div>
-        <p className="muted small">Your unique modification. Slot Passives up to your max Passive Cost. Work with your GM on something that fits your build and story.</p>
+        <p className="muted small">
+          {npc ? "Their unique modification. Slot Passives up to the max Passive Cost." : "Your unique modification. Slot Passives up to your max Passive Cost. Work with your GM on something that fits your build and story."}
+        </p>
         <input
           className="augment-name"
           aria-label="Augment name"
