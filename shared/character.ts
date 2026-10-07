@@ -9,6 +9,8 @@ export interface Passive {
   name: string;
   cost: number;
   description: string;
+  /** An automated Passive effect from the game's effect library that does what this Passive says. */
+  effectId?: string;
 }
 
 export type DiceKind = "slash" | "pierce" | "blunt" | "block" | "evade";
@@ -74,6 +76,8 @@ export interface Proficiency {
   id: string;
   name: string;
   description: string;
+  /** An automated Passive effect from the game's effect library, like a Passive's. */
+  effectId?: string;
 }
 
 export interface CharacterDetails {

@@ -25,8 +25,9 @@ import {
   type Loadout,
   type SeatProfile,
 } from "../../shared/engine.ts";
+import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId } from "../../shared/maps.ts";
-import { auxiliaryDeck, cleanDeck, equipmentPages, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
+import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
   GmNotes,
@@ -66,6 +67,8 @@ export class Host {
   /** Characters by owner, kept live so tokens follow edits to a character sheet. */
   private characters = new Map<string, Character>();
   private library: Record<string, ItemTemplate> | undefined;
+  /** The game's automated effects (the built-in ones aren't stored). */
+  private effects: Record<string, EffectDef> = {};
   private peers = new Set<Peer>();
   private handled = new Set<string>();
   private unsubs: (() => void)[] = [];
@@ -111,6 +114,14 @@ export class Host {
         onSnapshot(
           collection(db, "games", this.gameId, "items"),
           (snap) => (this.library = Object.fromEntries(snap.docs.map((d) => [d.id, d.data() as ItemTemplate]))),
+          () => {},
+        ),
+      );
+      // The effect library: automated Effects and Passives, checked again here since players can write them.
+      this.unsubs.push(
+        onSnapshot(
+          collection(db, "games", this.gameId, "effects"),
+          (snap) => (this.effects = Object.fromEntries(snap.docs.map((d) => [d.id, cleanEffect(d.data())]))),
           () => {},
         ),
       );
@@ -315,8 +326,10 @@ export class Host {
         aux: aux.flatMap((x) => Array.from({ length: x.copies }, () => ({ pageId: x.page.id, itemId: x.item.id }))),
         resistances: c.armor?.resistances,
         staggerResistances: c.armor?.staggerResistances,
+        passiveEffects: linkedEffects(c),
       };
     },
+    effectDef: (id: string) => this.effects[id],
     // A consumable Tool used in combat counts down on the player's character sheet.
     onToolUsed: (tokenId: string, itemId: string) => {
       const ownerId = this.table?.tokens[tokenId]?.ownerId;

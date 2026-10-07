@@ -52,10 +52,19 @@ export interface GameSettings {
   playerEdit?: Partial<Record<PlayerEditKey, boolean>>;
   /** Players may add items to the item library (and edit or delete the ones they made). Off unless the GM turns it on. */
   playersCreateItems?: boolean;
+  /**
+   * Players may add automated effects to the effect library (and edit or delete the ones they made).
+   * Theirs do nothing at the table until the GM approves them. Off unless the GM turns it on.
+   */
+  playersCreateEffects?: boolean;
 }
 
 export function playersCanCreateItems(game: GameDoc | undefined): boolean {
   return game?.settings?.playersCreateItems === true;
+}
+
+export function playersCanCreateEffects(game: GameDoc | undefined): boolean {
+  return game?.settings?.playersCreateEffects === true;
 }
 
 export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: string; fields: string[] }[] = [
@@ -134,8 +143,10 @@ export interface Token {
   templateId?: string;
   /** Portrait image URL (players' from their character, enemies' from their template). */
   portrait?: string;
-  /** Effects on the character (set by the GM for now). */
+  /** Effects on the character: set by the GM, or given by automated effects. */
   effects?: Effect[];
+  /** An enemy's automated Passives (library effect ids); players' come from their character sheet. */
+  passiveEffects?: string[];
   status?: TokenStatus;
 }
 
@@ -148,6 +159,8 @@ export interface Effect {
   description: string;
   /** e.g. "until end of next turn". */
   duration?: string;
+  /** The automated effect from the library this is (count is its stacks). Missing: a note the GM tracks by hand. */
+  defId?: string;
 }
 
 export interface TokenStatus {
@@ -348,6 +361,8 @@ export interface SpawnData {
   pages: Page[];
   deck: DeckEntry[];
   portrait?: string;
+  /** Library ids of the automated effects its Passives and Proficiencies link to. */
+  passiveEffects?: string[];
 }
 
 /** Partial resource edits the GM can apply to any token. */
