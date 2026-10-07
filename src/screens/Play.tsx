@@ -4,7 +4,7 @@ import { doc, updateDoc } from "firebase/firestore";
 import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
 import { blankCharacter, linkInventory, DASH_LIGHT_COST, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
-import type { Card, PageSource, TableAction } from "../../shared/types.ts";
+import { type Card, type GameDoc, type PageSource, playerCanEdit, type TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
@@ -46,6 +46,8 @@ export function Play() {
   const { user } = useAuth();
   const { snapshot, client } = useClient(id, user?.id, "play");
   const characterDoc = useDoc<Character>(user ? `games/${id}/characters/${user.id}` : null);
+  // What the GM lets players change from their phone (game settings).
+  const gameDoc = useDoc<GameDoc>(`games/${id}`);
 
   // UI state lives here, so opening panels and popups never resets it.
   const [carousel, setCarousel] = useState(0);
@@ -123,7 +125,7 @@ export function Play() {
     }
   }, [log, awaitingRoll]);
 
-  if (!table) return <Waiting snapshot={snapshot} gameId={id} />;
+  if (!table || snapshot.status === "closed") return <Waiting snapshot={snapshot} gameId={id} />;
   const sheetUrl = `/games/${id}/characters/${user?.id}`;
   const r = mine?.resources;
 
@@ -292,7 +294,7 @@ export function Play() {
               </button>
             </header>
             <div className="info-body">
-              <InfoPanel panel={panel} c={c} sheetUrl={sheetUrl} onOpenPage={(p) => setViewing({ page: p })} onUseItem={useItem} onRaiseStat={raiseStat} />
+              <InfoPanel panel={panel} c={c} sheetUrl={sheetUrl} onOpenPage={(p) => setViewing({ page: p })} onUseItem={playerCanEdit(gameDoc.data, "inventory") ? useItem : undefined} onRaiseStat={playerCanEdit(gameDoc.data, "stats") ? raiseStat : undefined} />
             </div>
           </div>
         ) : (

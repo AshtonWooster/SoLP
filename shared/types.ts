@@ -41,6 +41,27 @@ export interface GameDoc {
   memberIds: string[];
   members: Record<string, { displayName: string; role: GameRole }>;
   createdAt: number;
+  /** Set by the GM on the game settings page. */
+  settings?: GameSettings;
+}
+
+/** Parts of their character sheet players may edit. Each is on unless the GM turns it off. */
+export type PlayerEditKey = "stats" | "inventory" | "augment" | "equipment";
+
+export interface GameSettings {
+  playerEdit?: Partial<Record<PlayerEditKey, boolean>>;
+}
+
+export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: string; fields: string[] }[] = [
+  { key: "stats", label: "Stats", hint: "Primary and Secondary Stats", fields: ["primary", "secondary"] },
+  { key: "inventory", label: "Inventory & Ahn", hint: "Items, the Trinket Slot and Ahn", fields: ["inventory", "ahn"] },
+  { key: "augment", label: "Augment & Proficiencies", hint: "The Augment, its Passives and Proficiencies", fields: ["augment", "proficiencies"] },
+  { key: "equipment", label: "Weapons, Armor & Decks", hint: "Weapons, Armor, their Pages, the Combat Deck and E.G.O. Pages", fields: ["weapons", "armor", "deck", "ego"] },
+];
+
+/** Whether players in this game may edit a part of their sheet (the GM always can). */
+export function playerCanEdit(game: GameDoc | undefined, key: PlayerEditKey): boolean {
+  return game?.settings?.playerEdit?.[key] !== false;
 }
 
 /** Only the GM can read this, so only the GM can hand out the invite code. */

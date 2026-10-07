@@ -49,7 +49,7 @@ Each player makes one character per game from the game page ("Create my characte
 3. **Personality**: personality and relationships.
 4. **Summary**: everything on one page, plus a "still to do" list where each item links to the step or tab that fixes it.
 
-A new character opens on the intro; coming back later opens the Summary. **Augment & Proficiencies**, **Equipment & Decks** and **Inventory** each have their own tab. Edits save automatically. Party members can view each other's sheets; only the owner and the GM can edit, and only the GM can change Rank. At the table, a player's token takes its name and max Health, Stagger Resist, Sanity and Light from their character, and follows edits live.
+A new character opens on the intro; coming back later opens the Summary. **Augment & Proficiencies**, **Equipment & Decks** and **Inventory** each have their own tab. Edits save automatically. Party members can view each other's sheets; only the owner and the GM can edit, only the GM can change Rank, and the GM can lock parts of every sheet in Game settings. At the table, a player's token takes its name and max Health, Stagger Resist, Sanity and Light from their character, and follows edits live.
 
 The ruleset's tables aren't written yet, so the numbers they'd provide (points per Rank, base Resources, max Passive Costs, base Movement) are **placeholders in `shared/ruleset.ts`**. Fill them in there and the whole app follows.
 
@@ -134,6 +134,13 @@ On the game page, **Item library** (GM only) is where the GM makes every item in
 - **Trinket:** a description; active only in the Trinket Slot.
 
 Any of them can be **Stacking**, up to a max per Slot. Inventories link to the library, so the GM's edits reach every inventory holding the item. Libraries are per game: **Export items** saves them to a file, **Import items** loads one, and **Copy items from another game** copies the library of another game you GM. The GM can also edit any player's inventory from their sheet.
+
+### Game settings
+
+On the game page, **Game settings** (GM only) has:
+
+- **Players:** each player's character at a glance (portrait, name, Rank, Health, how much is left to finish), **Open sheet**, and **Kick** (click twice to confirm). A kicked player is removed from the game, disconnected from the table straight away, and the game leaves their list. Their character is kept, so it comes back if they rejoin with the invite code.
+- **What players can edit:** a switch each for **Stats**, **Inventory & Ahn**, **Augment & Proficiencies**, and **Weapons, Armor & Decks**. Turning one off locks that part on every player's sheet and phone (the security rules enforce it too); the GM can still edit it on any sheet. Decks also lock on their own during combat.
 
 ### Players who can't connect
 

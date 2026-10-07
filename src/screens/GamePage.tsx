@@ -59,6 +59,10 @@ export function GamePage() {
                 Item library
                 <small>Make the items players add to their inventories</small>
               </Link>
+              <Link className="big-button secondary" to={`/games/${id}/settings`}>
+                Game settings
+                <small>Players, kicking, and what players can edit</small>
+              </Link>
             </div>
             <section className="panel">
               <h3>Invite players</h3>

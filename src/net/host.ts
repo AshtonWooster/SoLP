@@ -84,6 +84,10 @@ export class Host {
   /** Keeps the member list current, e.g. when someone joins mid-session. */
   setGame(game: GameDoc) {
     this.game = game;
+    // Hang up on anyone the GM removed from the game.
+    for (const peer of this.peers) {
+      if (!game.members[peer.actor.uid]) this.refuse(peer, "The GM removed you from this game.");
+    }
   }
 
   subscribe(fn: (s: HostSnapshot) => void): () => void {
