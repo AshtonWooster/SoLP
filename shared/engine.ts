@@ -22,7 +22,20 @@ import {
   type EngineContext,
 } from "./combat.ts";
 import { ActionError, clamp, log, occupied, type Actor } from "./core.ts";
-import { createMap, deleteMap, switchMap, updateMap } from "./maps.ts";
+import {
+  addMapItem,
+  arrangeMapItem,
+  createMap,
+  currentMapId,
+  deleteMap,
+  placeToken,
+  removeMapItem,
+  setMapItems,
+  setTokenHidden,
+  switchMap,
+  updateMap,
+  updateMapItem,
+} from "./maps.ts";
 import { newId, rollDie } from "./id.ts";
 import { moveCost, SPEED_DIE } from "./ruleset.ts";
 import type { Resources, Side, TableAction, TableState, Token } from "./types.ts";
@@ -133,6 +146,16 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
   const gmOnly = () => {
     if (!isGm) throw new ActionError("GM only.");
   };
+  // Adding and removing tokens on a map the players aren't on (the GM getting it ready): run the
+  // action on that map, with nothing in the shared log to give it away.
+  if ((action.type === "addToken" || action.type === "spawnEnemy" || action.type === "removeToken") && action.mapId) {
+    gmOnly();
+    if (action.mapId !== currentMapId(table)) {
+      const saved = table.maps?.[String(action.mapId)];
+      if (!saved) throw new ActionError("Map not found.");
+      return apply({ map: saved, tokens: saved.tokens, log: [] }, { ...action, mapId: undefined }, actor, ctx);
+    }
+  }
   const tokenOf = (id: unknown) => {
     const t = table.tokens[String(id)];
     if (!t) throw new ActionError("Token not found.");
@@ -200,7 +223,8 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       const name = String(action.name ?? "").trim().slice(0, 24) || "Enemy";
       const token = makeToken(name, side, clamp(action.x, 0, width - 1), clamp(action.y, 0, height - 1), side === "enemy" ? "#d9534f" : "#4fb3bf");
       table.tokens[token.id] = token;
-      say(`GM added ${token.name}.`);
+      if (action.hidden === true) token.hidden = true;
+      else say(`GM added ${token.name}.`);
       return true;
     }
     case "removeToken": {
@@ -284,7 +308,8 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
         if (spot) [token.x, token.y] = spot.split(",").map(Number);
       }
       table.tokens[token.id] = token;
-      say(`GM placed ${token.name}.`);
+      if (action.hidden === true) token.hidden = true;
+      else say(`GM placed ${token.name}.`);
       return true;
     }
     case "startCombat": {
@@ -292,6 +317,7 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       if (combat) throw new ActionError("Combat is already running.");
       const ids = [...new Set((action.tokenIds ?? []).map(String))].filter((id) => table.tokens[id]);
       if (!ids.length) throw new ActionError("Pick at least one character for the turn order.");
+      for (const id of ids) reveal(table.tokens[id]);
       startCombat(table, ids, ctx);
       return true;
     }
@@ -310,6 +336,30 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       gmOnly();
       deleteMap(table, action.mapId);
       return true;
+    case "addMapItem":
+      gmOnly();
+      addMapItem(table, action);
+      return true;
+    case "updateMapItem":
+      gmOnly();
+      return updateMapItem(table, action);
+    case "removeMapItem":
+      gmOnly();
+      removeMapItem(table, action);
+      return true;
+    case "arrangeMapItem":
+      gmOnly();
+      return arrangeMapItem(table, action);
+    case "setMapItems":
+      gmOnly();
+      setMapItems(table, action);
+      return true;
+    case "placeToken":
+      gmOnly();
+      return placeToken(table, action);
+    case "setTokenHidden":
+      gmOnly();
+      return setTokenHidden(table, action);
     case "endCombat": {
       gmOnly();
       if (!combat) return false;
@@ -322,6 +372,7 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       const c = inCombat();
       const token = tokenOf(action.tokenId);
       if (c.order.some((x) => x.tokenId === token.id)) throw new ActionError(`${token.name} is already in the turn order.`);
+      reveal(token);
       addCombatant(table, token, ctx);
       return true;
     }
@@ -409,6 +460,11 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
     default:
       throw new ActionError("Unknown action.");
   }
+}
+
+/** Joining combat shows a hidden token to everyone. */
+function reveal(token: Token | undefined) {
+  if (token?.hidden) delete token.hidden;
 }
 
 function cleanResistances(r: Partial<ResistanceSet> | undefined): ResistanceSet {

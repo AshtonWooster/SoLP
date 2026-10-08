@@ -26,7 +26,7 @@ import {
   type SeatProfile,
 } from "../../shared/engine.ts";
 import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
-import { currentMapId } from "../../shared/maps.ts";
+import { currentMapId, playerView } from "../../shared/maps.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
@@ -400,14 +400,17 @@ export class Host {
     if (!this.table || this.stopped) return;
     const online = [this.me.uid, ...[...this.peers].filter((p) => p.view).map((p) => p.actor.uid)];
     const unique = [...new Set(online)];
-    // Players see how many Pages are left in each draw pile, but not their order.
-    const forPlayers = hideDrawPiles(this.table);
+    // Players see how many Pages are left in each draw pile, but not their order, and nothing the GM hid.
+    const forPlayers = hideDrawPiles(playerView(this.table));
+    // The board is a shared screen, so it never shows what the GM hid, even on the GM's account.
+    let forGmBoard: TableState | undefined;
     for (const peer of this.peers) {
       if (!peer.view) continue;
       const gm = peer.actor.role === "gm";
+      const table = !gm ? forPlayers : peer.view === "board" ? (forGmBoard ??= playerView(this.table)) : this.table;
       this.send(peer, {
         t: "state",
-        table: gm ? this.table : forPlayers,
+        table,
         online: unique,
         notes: gm ? this.notes : undefined,
       });
