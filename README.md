@@ -108,9 +108,21 @@ Opening panels and popups never clears the selection, ends the turn or changes t
 
 ### Maps
 
-On the GM screen, **Maps** lists the game's maps (like Roll20 pages or Foundry scenes). The GM can rename the current map, change its size (4–60 tiles each way) and upload a background image, which is stretched over the grid. **+ Create map** adds a new one; **Switch** puts it on the table for everyone.
+The GM screen has two tabs: **Table** (running the game) and **Map editor**. The game page's **Map editor** button opens the second one directly. Maps are like Roll20 pages or Foundry scenes, and each is built in three layers:
 
-Player characters come along when the map changes, keeping their Health, Light, Effects and everything else. Each map remembers where they stood, so switching back puts them where they were (the first visit lines them up at the top-left). Enemies and other tokens stay on the map they were placed on, with their own Health and decks, until the GM switches back. Maps can't be switched during combat. Players only receive the current map; the others (and the enemies waiting on them) stay with the GM.
+1. **Background** (bottom): one image stretched over the whole map.
+2. **Assets** (middle): any number of images (furniture, rubble, props). Drag to move, drag a corner to resize (Shift keeps the shape), and rotate, lock, duplicate or reorder them (to front, forward, backward, to back) from the panel on the right.
+3. **Tokens** (top): every player character and every other character. Drag to move; they always land on a tile.
+
+**Pins and notes** sit above the tokens: drop one with the 📍 tool, give it a label, a note and a color. Players read a pin's note by tapping it on the board.
+
+The map's size is set in tiles (width × height, 4–60 each way). **Snap to grid** puts assets on whole tiles; turn it off (or hold Alt while dragging) to place and size them freely. Grid lines can be turned off per map. Other editor tools: undo and redo (Ctrl+Z, Ctrl+Shift+Z), zoom (Ctrl+scroll), arrow keys to nudge, Delete, Ctrl+D to duplicate, per-layer show and lock while editing, **View as players**, and **Images in this game** to reuse an image with one click.
+
+**Hidden from players:** the background, any asset, pin or non-player token can be hidden. The GM sees hidden things faded; players' phones and the board never receive them (the board hides them even when it's logged in as the GM, since it's a shared screen). A hidden token is revealed when it joins combat, and characters in the turn order can't be hidden. Players' own characters are always shown.
+
+**Getting a map ready while the game runs:** the players stay on the map that's on the table until the GM moves them. In the Map editor the GM can open any map, edit it with the same tools, place characters on it (shown or hidden), and drag the faded player tokens to where the party will arrive. Nothing about that map reaches players, and none of it goes in the shared log. Clicking a map in either tab opens a **preview** (with "the way players will see it") and **Move players here**, **Open in map editor**, **Duplicate** (copies the look, not the tokens) and **Delete**.
+
+Player characters come along when the map changes, keeping their Health, Light, Effects and everything else. Each map remembers where they stood, so switching back puts them where they were (the first visit lines them up at the top-left, unless the GM placed them). Enemies and other tokens stay on the map they were placed on, with their own Health and decks, until the GM switches back. Maps can't be switched during combat. Players only receive the current map; the others (and the enemies waiting on them) stay with the GM. Boards saved before the editor existed open as they were, as the game's first map.
 
 ### Character editor
 
