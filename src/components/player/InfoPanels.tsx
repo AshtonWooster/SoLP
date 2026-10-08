@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { Character, Page } from "../../../shared/character.ts";
 import { isUsable, PRIMARY_STATS, rankTable, SECONDARY_STATS } from "../../../shared/ruleset.ts";
+import { SecondaryStatIcon, StatIcon } from "../LorIcons.tsx";
 import { PageCard } from "./PageCard.tsx";
 
 export type PanelKey = "I" | "S" | "W" | "A" | "AU" | "P";
@@ -120,6 +121,7 @@ export function InfoPanel({ panel, c, sheetUrl, onOpenPage, onUseItem, onRaiseSt
           <div className="stat-boxes">
             {PRIMARY_STATS.map((s) => (
               <div className="stat-box" key={s.key} title={s.effect}>
+                <StatIcon stat={s.key} />
                 <span className="stat-name">{s.label}</span>
                 <span className="stat-num">{c.primary[s.key]}</span>
                 {onRaiseStat && (
@@ -145,7 +147,9 @@ export function InfoPanel({ panel, c, sheetUrl, onOpenPage, onUseItem, onRaiseSt
               {SECONDARY_STATS.map((s) => (
                 <tr key={s.key}>
                   <td>
-                    <strong>{s.label}</strong>
+                    <strong className="stat-label">
+                      <SecondaryStatIcon stat={s.key} size={18} /> {s.label}
+                    </strong>
                   </td>
                   <td className="stat-value">
                     {c.secondary[s.key] ?? 0}

@@ -858,9 +858,10 @@ function pageForAim(table: TableState, token: Token): Page {
 /**
  * Use a Combat Page (or Auxiliary/enemy Page): pay its Light and slot it on a free Speed Die
  * against the target(s). Slotting against a Speed Die that already holds a Page starts a Clash.
- * Instant Pages resolve right away and never clash.
+ * Instant Pages resolve right away and never clash. A single-target Page can aim at any of the
+ * target's Speed Dice (`targetDie`), or go in `unopposed`: a One-Sided attack that starts no Clash.
  */
-export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?: EngineContext) {
+export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?: EngineContext, opts: { targetDie?: number; unopposed?: boolean } = {}) {
   const c = table.combat!;
   const token = actingToken(table, actor);
   const a = c.aim;
@@ -873,6 +874,11 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   const allowed = new Set(validTargets(table, token, page).map((t) => t.id));
   for (const id of ids) if (!allowed.has(id)) throw new ActionError(`${table.tokens[id]?.name ?? "That target"} is out of range.`);
   if (token.resources.light < page.cost) throw new ActionError(`${page.name} costs ${page.cost} Light; ${token.name} has ${token.resources.light}.`);
+  const targetDie = !mass && opts.targetDie !== undefined ? opts.targetDie : 0;
+  if (targetDie > 0) {
+    const theirs = c.order.find((x) => x.tokenId === ids[0])?.dice ?? 0;
+    if (targetDie >= theirs) throw new ActionError(`${table.tokens[ids[0]]?.name ?? "The target"} has no Speed Die ${targetDie + 1}.`);
+  }
 
   const card = a.cardId ? pile(c.decks[token.id], a.source)?.find((x) => x.id === a.cardId) : undefined;
   const free = freeDie(c, token, a.die);
@@ -899,7 +905,7 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
     card,
     fromAux: a.source === "aux",
     fromEgo: a.source === "ego",
-    targets: ids.map((tokenId) => ({ tokenId, die: 0 })),
+    targets: ids.map((tokenId) => ({ tokenId, die: targetDie })),
   };
   const names = ids.map((id) => table.tokens[id].name).join(", ");
 
@@ -914,6 +920,10 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   for (const d of page.dice.filter((x) => x.counter)) storeCounter(c, token, d, page.id);
   c.slots.push(entry);
 
+  if (!mass && opts.unopposed) {
+    log(table, `${token.name} slots ${page.name} against ${names}, unopposed (${page.cost} Light).`);
+    return;
+  }
   if (!mass) {
     const ref = entry.targets[0];
     const other = c.slots.find((s) => s.ownerId === ref.tokenId && s.die === ref.die && !s.clashWith && c.pages[s.pageId]?.type !== "instant");

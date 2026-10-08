@@ -416,8 +416,12 @@ export type TableAction =
   /** Add or remove a target while aiming a Mass Attack. */
   | { type: "aimTarget"; tokenId: string }
   | { type: "clearAim" }
-  /** Pay the Light and slot the aimed Page against the given targets (or the ones picked while aiming). */
-  | { type: "slot"; targets?: string[] };
+  /**
+   * Pay the Light and slot the aimed Page against the given targets (or the ones picked while aiming).
+   * `targetDie` picks which of a single target's Speed Dice to clash with (the first by default);
+   * `unopposed` slots it as a One-Sided attack that doesn't clash with the Page on that die.
+   */
+  | { type: "slot"; targets?: string[]; targetDie?: number; unopposed?: boolean };
 
 /** Which screen a connecting device is: a player's phone or the shared board. */
 export type View = "play" | "board";

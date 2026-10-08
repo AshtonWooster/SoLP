@@ -22,7 +22,7 @@ import { useLibrary } from "../effects/library.tsx";
 import { EquipmentStudio, PageEditor } from "../EquipmentEditor.tsx";
 import { NumberInput, Stepper } from "../Fields.tsx";
 import { ImageUpload } from "../ImageUpload.tsx";
-import { ResistanceGrid, StatIcon } from "../LorIcons.tsx";
+import { ResistanceGrid, SecondaryStatIcon, StatIcon } from "../LorIcons.tsx";
 import { InventoryTab } from "../items/InventoryTab.tsx";
 import { PEEK_WIDTH } from "../peek.ts";
 import { PvCard } from "../player/LorCard.tsx";
@@ -206,7 +206,9 @@ function ProfileTab({ t, update, gameId }: { t: NpcTemplate; update: Update; gam
           {SECONDARY_STATS.map((st) => (
             <div className="stat-row" key={st.key}>
               <div>
-                <strong>{st.label}</strong>
+                <strong>
+                  <SecondaryStatIcon stat={st.key} /> {st.label}
+                </strong>
                 <div className="muted small">{st.effect}</div>
               </div>
               <Stepper label={st.label} value={t.secondary[st.key] ?? 0} max={99} onChange={(n) => update((d) => void (d.secondary[st.key] = n))} />

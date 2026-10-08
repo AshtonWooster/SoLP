@@ -404,7 +404,10 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       return true;
     }
     case "slot":
-      slot(table, actor, action.targets?.map(String), ctx);
+      slot(table, actor, action.targets?.map(String), ctx, {
+        targetDie: action.targetDie === undefined ? undefined : clamp(Math.round(Number(action.targetDie) || 0), 0, 20),
+        unopposed: !!action.unopposed,
+      });
       return true;
     default:
       throw new ActionError("Unknown action.");

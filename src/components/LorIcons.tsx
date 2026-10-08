@@ -54,6 +54,39 @@ export function StatIcon({ stat, size = 22 }: { stat: PrimaryStat; size?: number
   );
 }
 
+/**
+ * PLACEHOLDER emblems for the Secondary Stats until the ruleset names them, in muted gold.
+ * A Secondary Stat added to the ruleset without its own emblem gets the diamond.
+ */
+const SECONDARY_ICONS: Record<string, React.ReactNode> = {
+  // An eye.
+  insight: (
+    <path
+      fillRule="evenodd"
+      d="M12 6 C7 6 3.6 9.4 2 12 C3.6 14.6 7 18 12 18 C17 18 20.4 14.6 22 12 C20.4 9.4 17 6 12 6 Z M12 8.6 A3.4 3.4 0 1 0 12 15.4 A3.4 3.4 0 1 0 12 8.6 Z M12 10.6 A1.4 1.4 0 1 1 12 13.4 A1.4 1.4 0 1 1 12 10.6 Z"
+    />
+  ),
+  // A four-pointed star.
+  other: <path d="M12 2.5 L14.2 9.8 L21.5 12 L14.2 14.2 L12 21.5 L9.8 14.2 L2.5 12 L9.8 9.8 Z" />,
+  // A hexagon.
+  placeholder: <path fillRule="evenodd" d="M12 2.8 L20 7.4 V16.6 L12 21.2 L4 16.6 V7.4 Z M12 6 L7 8.9 V15.1 L12 18 L17 15.1 V8.9 Z" />,
+};
+const SECONDARY_FALLBACK = <path d="M12 3 L21 12 L12 21 L3 12 Z" />;
+export const SECONDARY_COLOR = "#c9a75e";
+
+export function SecondaryStatIcon({ stat, size = 22 }: { stat: string; size?: number }) {
+  return (
+    <svg className="stat-icon" viewBox="0 0 24 24" width={size} height={size} fill={SECONDARY_COLOR} aria-hidden="true" data-stat={stat}>
+      {SECONDARY_ICONS[stat] ?? SECONDARY_FALLBACK}
+    </svg>
+  );
+}
+
+/** Whichever emblem fits: a Primary Stat's virtue, or a Secondary Stat's placeholder. */
+export function AnyStatIcon({ stat, size = 22 }: { stat: string; size?: number }) {
+  return stat in STAT_ICONS ? <StatIcon stat={stat as PrimaryStat} size={size} /> : <SecondaryStatIcon stat={stat} size={size} />;
+}
+
 type DamageType = keyof ResistanceSet;
 const GLYPHS: Record<DamageType, string> = {
   // Three claw marks.
