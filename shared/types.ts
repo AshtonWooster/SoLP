@@ -154,6 +154,8 @@ export interface Token {
   /** An enemy's automated Passives (library effect ids); players' come from their character sheet. */
   passiveEffects?: string[];
   status?: TokenStatus;
+  /** Only the GM sees it (map editor). Joining combat reveals it. */
+  hidden?: boolean;
 }
 
 /** A temporary ailment, buff or environmental effect (Act 7, "Effects"). */
@@ -330,8 +332,43 @@ export interface MapInfo {
   name: string;
   width: number;
   height: number;
-  /** Image URL stretched over the whole grid. */
+  /** Image URL stretched over the whole grid: the map's bottom layer. */
   background?: string;
+  /** The background is only shown to the GM. */
+  backgroundHidden?: boolean;
+  /** Don't draw tile lines over the map. */
+  hideGrid?: boolean;
+  /**
+   * The middle layer (images and other assets) and the pins and notes drawn above the tokens, in
+   * drawing order: later ones are on top.
+   */
+  items?: MapItem[];
+}
+
+/** An image on a map's asset layer, or a pin with a note. Positions and sizes are in tiles. */
+export interface MapItem {
+  id: string;
+  kind: "image" | "pin";
+  /** Top-left corner for images, the point for pins. Fractions when not snapped to the grid. */
+  x: number;
+  y: number;
+  /** Images only. */
+  w?: number;
+  h?: number;
+  /** Degrees clockwise (images). */
+  rotation?: number;
+  /** The image (images). */
+  url?: string;
+  /** The image's name, or the pin's label. */
+  name?: string;
+  /** A pin's note. */
+  note?: string;
+  /** A pin's color. */
+  color?: string;
+  /** Only the GM sees it. */
+  hidden?: boolean;
+  /** Can't be dragged in the editor. */
+  locked?: boolean;
 }
 
 /** A map that isn't on the table right now: its enemies wait here, and where each player stood. */
@@ -381,8 +418,9 @@ export type TableAction =
   /** Move one tile relative to where the token is now, so quick taps on a phone all count. */
   | { type: "step"; tokenId: string; dx: number; dy: number }
   // GM override actions
-  | { type: "addToken"; name: string; side: Side; x: number; y: number }
-  | { type: "removeToken"; tokenId: string }
+  /** mapId: put it on another map the GM is getting ready instead of the one on the table. */
+  | { type: "addToken"; name: string; side: Side; x: number; y: number; mapId?: string; hidden?: boolean }
+  | { type: "removeToken"; tokenId: string; mapId?: string }
   | { type: "setResources"; tokenId: string; patch: ResourcePatch }
   | { type: "setNote"; tokenId: string; note: string }
   | { type: "setJustice"; tokenId: string; justice: number }
@@ -390,12 +428,34 @@ export type TableAction =
   /** Replace an enemy token's Pages and deck. */
   | { type: "setEnemyDeck"; tokenId: string; pages: Page[]; deck: DeckEntry[] }
   /** Place a copy of a GM-made character on the map. */
-  | { type: "spawnEnemy"; templateId: string; template: SpawnData; x: number; y: number }
-  // Combat (Act 8). The GM runs it; whoever's turn it is can move, use Pages and end their turn.
-  | { type: "createMap"; name: string; width: number; height: number; background?: string }
-  | { type: "updateMap"; mapId: string; name?: string; width?: number; height?: number; background?: string | null }
+  | { type: "spawnEnemy"; templateId: string; template: SpawnData; x: number; y: number; mapId?: string; hidden?: boolean }
+  // Maps (shared/maps.ts). GM only.
+  /** copyFrom: start from another map's size, background and assets (not its tokens). */
+  | { type: "createMap"; id?: string; name: string; width: number; height: number; background?: string; copyFrom?: string }
+  | {
+      type: "updateMap";
+      mapId: string;
+      name?: string;
+      width?: number;
+      height?: number;
+      background?: string | null;
+      backgroundHidden?: boolean;
+      hideGrid?: boolean;
+    }
+  // The map editor works on any map: the one on the table, or one the GM is getting ready.
+  | { type: "addMapItem"; mapId: string; item: Partial<MapItem> }
+  | { type: "updateMapItem"; mapId: string; itemId: string; patch: Partial<MapItem> }
+  | { type: "removeMapItem"; mapId: string; itemId: string }
+  | { type: "arrangeMapItem"; mapId: string; itemId: string; to: "front" | "back" | "forward" | "backward" }
+  /** Replace every item (undo and redo). */
+  | { type: "setMapItems"; mapId: string; items: MapItem[] }
+  /** Move a token on any map. On a map that isn't on the table, a player's token sets where they arrive. */
+  | { type: "placeToken"; mapId: string; tokenId: string; x: number; y: number }
+  | { type: "setTokenHidden"; mapId?: string; tokenId: string; hidden: boolean }
+  /** Move the players to another map. */
   | { type: "switchMap"; mapId: string }
   | { type: "deleteMap"; mapId: string }
+  // Combat (Act 8). The GM runs it; whoever's turn it is can move, use Pages and end their turn.
   | { type: "startCombat"; tokenIds: string[] }
   | { type: "endCombat" }
   | { type: "addCombatant"; tokenId: string }
