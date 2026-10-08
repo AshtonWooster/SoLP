@@ -52,6 +52,10 @@ export function GamePage() {
                 Open the board
                 <small>Shared map, for the iPad or TV. Log in there as yourself.</small>
               </Link>
+              <Link className="big-button secondary" to={`/games/${id}/gm?tab=maps`}>
+                Map editor
+                <small>Build maps in layers: background, images, tokens, pins and notes. Hide anything from players.</small>
+              </Link>
               <Link className="big-button secondary" to={`/games/${id}/npcs`}>
                 Character editor
                 <small>Build enemies, allies and other characters to place on the map</small>

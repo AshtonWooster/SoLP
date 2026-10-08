@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import type { GameDoc, GmMeta, MapInfo, Resources, TableAction, TableState, Token } from "../../shared/types.ts";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import type { GameDoc, GmMeta, Resources, TableAction, TableState, Token } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { activeToken, newId } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
@@ -10,15 +10,16 @@ import { EnemyDeckEditor } from "../components/EnemyDeckEditor.tsx";
 import { isMassAttack, normalizeNpc, NPC_SIDES, npcSpawnData } from "../../shared/ruleset.ts";
 import type { NpcTemplate } from "../../shared/character.ts";
 import { TurnOrder } from "../components/TurnOrder.tsx";
-import { ImageUpload } from "../components/ImageUpload.tsx";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
-import { MAP_MAX, MAP_MIN } from "../../shared/maps.ts";
+import { MapEditor } from "../components/maps/MapEditor.tsx";
+import { MapList, MapPreview, NewMapForm } from "../components/maps/MapsList.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
 import { effectText } from "../components/effects/EffectBuilder.tsx";
 import { useEffectLibrary } from "../components/effects/library.tsx";
 import { isLive } from "../../shared/effects.ts";
 import { useHost } from "../net/hooks.ts";
+import { NumberField } from "../components/NumberField.tsx";
 
 const RESOURCE_FIELDS: [keyof Resources, keyof Resources, string][] = [
   ["hp", "maxHp", "Health"],
@@ -40,6 +41,12 @@ export function Gm() {
   const online = new Set(snapshot.online);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  // The map editor is its own tab. The GM's view there is theirs alone: players stay on the
+  // table's map until the GM moves them.
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "maps" ? "maps" : "table";
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   if (game.error) return <TableError error={game.error} gameId={id} />;
   if (game.loading) return <main className="center muted">Loading…</main>;
@@ -65,16 +72,90 @@ export function Gm() {
   const table = snapshot.table;
   const selected = selectedId ? table?.tokens[selectedId] : undefined;
   const players = Object.entries(game.data!.members).filter(([, m]) => m.role === "player");
+  const setTab = (next: "table" | "maps") => {
+    setActionError("");
+    setParams(next === "maps" ? { tab: "maps" } : {}, { replace: true });
+  };
+  const editing = table && editingId && (editingId === table.map.id || table.maps?.[editingId]) ? editingId : table?.map.id ?? "";
+  const openInEditor = (mapId: string) => {
+    setEditingId(mapId);
+    setPreviewId(null);
+    setTab("maps");
+  };
+
+  const header = (
+    <header className="gm-header">
+      <Link to={`/games/${id}`} className="muted">← {game.data!.name}</Link>
+      <nav className="gm-tabs" aria-label="GM screen">
+        <button className={tab === "table" ? "on" : ""} aria-current={tab === "table" ? "page" : undefined} onClick={() => setTab("table")}>
+          Table
+        </button>
+        <button className={tab === "maps" ? "on" : ""} aria-current={tab === "maps" ? "page" : undefined} onClick={() => setTab("maps")}>
+          Map editor
+        </button>
+      </nav>
+      <ConnectionBadge status={snapshot.status} />
+      <a href={`/games/${id}/board`} target="_blank" rel="noreferrer">Open board</a>
+      {meta.data && <span className="muted">Invite code: {meta.data.inviteCode}</span>}
+      {actionError && <span className="error">{actionError}</span>}
+    </header>
+  );
+  const preview = table && previewId && (
+    <MapPreview table={table} mapId={previewId} act={act} onClose={() => setPreviewId(null)} onEdit={() => openInEditor(previewId)} />
+  );
+
+  if (tab === "maps") {
+    const onTable = editing === table?.map.id;
+    return (
+      <main className="gm gm-maps">
+        {header}
+        {!table ? (
+          <p className="muted">Opening the table…</p>
+        ) : (
+          <>
+            <aside className="gm-maps-list">
+              <h3>Maps</h3>
+              <MapList table={table} editingId={editing} onPick={setPreviewId} />
+              <NewMapForm act={act} onCreated={setEditingId} />
+            </aside>
+            <section className="gm-maps-editor">
+              <div className={"me-banner" + (onTable ? " live" : "")}>
+                {onTable ? (
+                  <span>
+                    <strong>Players are on this map.</strong> They see your changes as you make them, except anything hidden.
+                  </span>
+                ) : (
+                  <>
+                    <span>
+                      Players are on <strong>{table.map.name}</strong>. You're getting <strong>{table.maps?.[editing]?.name}</strong> ready; they can't see it until you move them.
+                    </span>
+                    <button className="big-button" onClick={() => setPreviewId(editing)}>
+                      Move players here…
+                    </button>
+                  </>
+                )}
+              </div>
+              <MapEditor
+                gameId={id}
+                table={table}
+                mapId={editing}
+                act={act}
+                onEditToken={(tokenId) => {
+                  setSelectedId(tokenId);
+                  setTab("table");
+                }}
+              />
+            </section>
+          </>
+        )}
+        {preview}
+      </main>
+    );
+  }
 
   return (
     <main className="gm">
-      <header className="gm-header">
-        <Link to={`/games/${id}`} className="muted">← {game.data!.name}</Link>
-        <ConnectionBadge status={snapshot.status} />
-        <a href={`/games/${id}/board`} target="_blank" rel="noreferrer">Open board</a>
-        {meta.data && <span className="muted">Invite code: {meta.data.inviteCode}</span>}
-        {actionError && <span className="error">{actionError}</span>}
-      </header>
+      {header}
 
       <section className="gm-map">
         {table && (
@@ -100,7 +181,16 @@ export function Gm() {
       </section>
 
       <section className="gm-side">
-        {table && <MapsPanel gameId={id} table={table} act={act} />}
+        {table && (
+          <details className="panel maps-panel">
+            <summary>
+              Maps <span className="muted small">· {table.map.name}</span>
+            </summary>
+            <p className="muted small">Pick a map to preview it before moving the players there.</p>
+            <MapList table={table} onPick={setPreviewId} />
+            <button onClick={() => setTab("maps")}>Open the map editor</button>
+          </details>
+        )}
         {table && <CombatPanel table={table} act={act} />}
         {table && <TemplatePanel gameId={id} table={table} act={act} />}
         <AddEnemy onAdd={(name) => act({ type: "addToken", name, side: "enemy", x: 10, y: 5 })} />
@@ -129,6 +219,7 @@ export function Gm() {
           {table?.log.slice(-15).reverse().map((line, i) => <li key={i}>{line}</li>)}
         </ol>
       </section>
+      {preview}
     </main>
   );
 }
@@ -146,31 +237,6 @@ function AddEnemy({ onAdd }: { onAdd: (name: string) => boolean }) {
       <input placeholder="Enemy name" value={name} onChange={(e) => setName(e.target.value)} />
       <button>Add enemy</button>
     </form>
-  );
-}
-
-/** A number box that saves on Enter or when you click away, and follows changes made elsewhere. */
-function NumberField({ value, onCommit }: { value: number; onCommit: (n: number) => void }) {
-  const [draft, setDraft] = useState(String(value));
-  const [editing, setEditing] = useState(false);
-  useEffect(() => {
-    if (!editing) setDraft(String(value));
-  }, [value, editing]);
-  const commit = () => {
-    setEditing(false);
-    const n = Number(draft);
-    if (draft.trim() !== "" && Number.isFinite(n) && n !== value) onCommit(n);
-    else setDraft(String(value));
-  };
-  return (
-    <input
-      type="number"
-      value={draft}
-      onFocus={() => setEditing(true)}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
-    />
   );
 }
 
@@ -508,108 +574,6 @@ function EffectsEditor({ token, act }: { token: Token; act: (action: TableAction
           + Add a note
         </button>
       </div>
-    </details>
-  );
-}
-
-/** Name, size and background of one map. */
-function MapEditor({ gameId, map, act }: { gameId: string; map: MapInfo & { id: string }; act: (a: TableAction) => boolean }) {
-  const [name, setName] = useState(map.name);
-  useEffect(() => setName(map.name), [map.name]);
-  const commitName = () => (name.trim() && name !== map.name ? act({ type: "updateMap", mapId: map.id, name }) : setName(map.name));
-  return (
-    <div className="map-editor">
-      <label className="field">
-        <span>Name</span>
-        <input aria-label="Map name" value={name} onChange={(e) => setName(e.target.value)} onBlur={commitName} onKeyDown={(e) => e.key === "Enter" && commitName()} />
-      </label>
-      <div className="row map-size">
-        <label className="inline">
-          Width <NumberField value={map.width} onCommit={(n) => act({ type: "updateMap", mapId: map.id, width: n })} />
-        </label>
-        <label className="inline">
-          Height <NumberField value={map.height} onCommit={(n) => act({ type: "updateMap", mapId: map.id, height: n })} />
-        </label>
-        <span className="muted small">
-          {MAP_MIN}–{MAP_MAX} tiles
-        </span>
-      </div>
-      <ImageUpload
-        folder={`games/${gameId}/assets/maps`}
-        label="Background"
-        value={map.background}
-        onChange={(url) => act({ type: "updateMap", mapId: map.id, background: url ?? null })}
-      />
-    </div>
-  );
-}
-
-/** The GM's maps: edit the current one, switch to another (players come along; positions are remembered), or make a new one. */
-function MapsPanel({ gameId, table, act }: { gameId: string; table: TableState; act: (a: TableAction) => boolean }) {
-  const [editing, setEditing] = useState<string | null>(null);
-  const [draft, setDraft] = useState({ name: "", width: 16, height: 10 });
-  const current = { ...table.map, id: table.map.id ?? "" };
-  const others = Object.values(table.maps ?? {}).sort((a, b) => a.name.localeCompare(b.name));
-  return (
-    <details className="panel maps-panel">
-      <summary>
-        Maps <span className="muted small">· {table.map.name}</span>
-      </summary>
-      <h4>
-        {current.name} <span className="badge-soft">On the table</span>
-      </h4>
-      <MapEditor gameId={gameId} map={current} act={act} />
-      {others.length > 0 && <h4>Other maps</h4>}
-      <ul className="plain map-list">
-        {others.map((m) => (
-          <li key={m.id}>
-            <div className="row-between">
-              <span>
-                <strong>{m.name}</strong>{" "}
-                <span className="muted small">
-                  {m.width}×{m.height}
-                  {Object.keys(m.tokens).length ? ` · ${Object.keys(m.tokens).length} token${Object.keys(m.tokens).length === 1 ? "" : "s"} waiting` : ""}
-                </span>
-              </span>
-              <span className="row">
-                <button
-                  disabled={!!table.combat}
-                  title={table.combat ? "End combat before changing maps" : "Players come along; everyone else stays on their map"}
-                  onClick={() => act({ type: "switchMap", mapId: m.id })}
-                >
-                  Switch
-                </button>
-                <button onClick={() => setEditing(editing === m.id ? null : m.id)}>{editing === m.id ? "Done" : "Edit"}</button>
-                <button
-                  className="danger"
-                  aria-label={`Delete ${m.name}`}
-                  onClick={() => confirm(`Delete ${m.name} and the tokens waiting on it?`) && act({ type: "deleteMap", mapId: m.id })}
-                >
-                  ✕
-                </button>
-              </span>
-            </div>
-            {editing === m.id && <MapEditor gameId={gameId} map={m} act={act} />}
-          </li>
-        ))}
-      </ul>
-      <form
-        className="new-map"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (act({ type: "createMap", name: draft.name || "New map", width: draft.width, height: draft.height })) setDraft({ name: "", width: 16, height: 10 });
-        }}
-      >
-        <h4>New map</h4>
-        <input aria-label="New map name" placeholder="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-        <label className="inline">
-          W <input aria-label="New map width" type="number" min={MAP_MIN} max={MAP_MAX} value={draft.width} onChange={(e) => setDraft({ ...draft, width: Number(e.target.value) })} />
-        </label>
-        <label className="inline">
-          H <input aria-label="New map height" type="number" min={MAP_MIN} max={MAP_MAX} value={draft.height} onChange={(e) => setDraft({ ...draft, height: Number(e.target.value) })} />
-        </label>
-        <button type="submit">+ Create map</button>
-      </form>
     </details>
   );
 }

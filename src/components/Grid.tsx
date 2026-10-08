@@ -4,6 +4,7 @@ import type { TableState, Token } from "../../shared/types.ts";
 import { arrowHitSegment, boardArrows } from "./arrows.ts";
 import { FxBubble, type FxStep } from "./ClashFx.tsx";
 import { SlotPages } from "./SlotPages.tsx";
+import { AssetLayer, PinLayer } from "./maps/MapLayers.tsx";
 
 interface Props {
   state: TableState;
@@ -28,7 +29,10 @@ export function aimTargets(table: TableState): { targetable: Set<string>; picked
   return { targetable: new Set(validTargets(table, user, page).map((t) => t.id)), picked: new Set(aim.targets) };
 }
 
-/** The battle map: a tile grid with tokens on it. Used full-screen on the board, smaller on the GM screen. */
+/**
+ * The battle map: the background image, the assets layer, a tile grid with tokens on it, and pins on
+ * top. Used full-screen on the board, smaller on the GM screen (where hidden things show faded).
+ */
 export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx }: Props) {
   const { width, height } = state.map;
   const { targetable, picked } = aimTargets(state);
@@ -84,7 +88,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
   return (
     <div
       ref={gridRef}
-      className="grid"
+      className={"grid" + (state.map.hideGrid ? " no-lines" : "")}
       style={{
         gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
         gridTemplateRows: `repeat(${height}, minmax(0, 1fr))`,
@@ -92,6 +96,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
         ...(state.map.background ? { backgroundImage: `url("${state.map.background}")`, backgroundSize: "100% 100%" } : {}),
       }}
     >
+      <AssetLayer map={state.map} />
       {cells}
       {Object.values(state.tokens).map((t) => {
         const st = t.status ?? {};
@@ -104,6 +109,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
           picked.has(t.id) && "picked",
           st.knockedOut && "ko",
           st.staggered && "staggered",
+          t.hidden && "is-hidden",
         ].filter(Boolean);
         return (
           <button
@@ -122,7 +128,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
               e.stopPropagation();
               onTokenClick?.(t);
             }}
-            title={t.name}
+            title={t.hidden ? `${t.name} (hidden from players)` : t.name}
           >
             <span className="token-name">{t.name}</span>
             <span className="bar hp" style={{ width: `${pct(t.resources.hp, t.resources.maxHp)}%` }} />
@@ -187,6 +193,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
             </div>
           </div>
         ))}
+      <PinLayer map={state.map} />
       {openSlots && <SlotPages state={state} slotIds={openSlots} onClose={() => setOpenSlots(null)} />}
     </div>
   );

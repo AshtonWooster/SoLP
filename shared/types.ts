@@ -431,7 +431,7 @@ export type TableAction =
   | { type: "spawnEnemy"; templateId: string; template: SpawnData; x: number; y: number; mapId?: string; hidden?: boolean }
   // Maps (shared/maps.ts). GM only.
   /** copyFrom: start from another map's size, background and assets (not its tokens). */
-  | { type: "createMap"; name: string; width: number; height: number; background?: string; copyFrom?: string }
+  | { type: "createMap"; id?: string; name: string; width: number; height: number; background?: string; copyFrom?: string }
   | {
       type: "updateMap";
       mapId: string;

@@ -241,7 +241,10 @@ test("copying a map takes its look but not its tokens", () => {
   assert.equal(copy.items!.length, 1);
   assert.notEqual(copy.items![0].id, "crate", "its own asset ids");
   assert.deepEqual(copy.tokens, {});
-  act(t, { type: "createMap", name: "Same", copyFrom: "library" } as never);
+  act(t, { type: "createMap", id: "same", name: "Same", copyFrom: "library" } as never);
+  assert.ok(t.maps!.same, "the editor can name the new map's id");
+  act(t, { type: "createMap", id: "library", name: "Clash" } as never);
+  assert.equal(Object.values(t.maps!).filter((m) => m.id === "library").length, 0, "but never reuse one");
   const same = Object.values(t.maps!).find((m) => m.name === "Same")!;
   assert.deepEqual([same.width, same.height], [16, 10], "size comes from the source when not given");
 });

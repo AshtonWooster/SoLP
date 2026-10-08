@@ -73,10 +73,11 @@ function size(n: unknown, fallback: number) {
 
 export function createMap(
   table: TableState,
-  a: { name?: unknown; width?: unknown; height?: unknown; background?: unknown; copyFrom?: unknown },
+  a: { id?: unknown; name?: unknown; width?: unknown; height?: unknown; background?: unknown; copyFrom?: unknown },
 ): SavedMap {
-  currentMapId(table);
-  const id = newId();
+  const taken = new Set([currentMapId(table), ...Object.keys(table.maps ?? {})]);
+  // The editor names the new map itself, so it can open it straight away.
+  const id = typeof a.id === "string" && ID_RE.test(a.id) && !taken.has(a.id) ? a.id : newId();
   const source = a.copyFrom ? findMap(table, a.copyFrom).map : undefined;
   const map: SavedMap = {
     id,
