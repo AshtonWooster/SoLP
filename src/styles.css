@@ -1045,3 +1045,9 @@ select.piece.add { color: #6fb4ff; }
 .tab-badge { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 0.75rem; background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
 .pv-edit-die .die-effects { grid-column: 1 / -1; min-width: 0; }
 .pv-edit-die .library-pick select { flex: 1 1 140px; font-size: 0.85rem; }
+.pending-edits { margin-top: 12px; border-color: var(--p-light); }
+.pending-edits h2 { font-size: 1rem; margin: 0 0 8px; }
+.pending-edit { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--line); }
+.pending-edit > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.approval-row { gap: 8px; align-items: center; margin-top: 8px; }
+.settings-player-text .chip { align-self: flex-start; margin-top: 4px; text-decoration: none; }

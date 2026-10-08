@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit && npm --prefix functions run typecheck",
     "deploy": "firebase deploy",
     "test:rules": "firebase emulators:exec --project demo-solp --only firestore,storage \"node --test tests/rules.test.ts\"",
-    "test:engine": "node --test tests/engine.test.ts tests/ruleset.test.ts tests/combat.test.ts tests/maps.test.ts tests/items.test.ts tests/arrows.test.ts tests/effects.test.ts"
+    "test:engine": "node --test tests/engine.test.ts tests/ruleset.test.ts tests/combat.test.ts tests/maps.test.ts tests/items.test.ts tests/arrows.test.ts tests/effects.test.ts tests/permissions.test.ts"
   },
   "dependencies": {
     "firebase": "^12.19.0",

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { arrayRemove, deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
 import { blankCharacter, characterChecks, maxResources } from "../../shared/ruleset.ts";
+import { pendingCount } from "../../shared/permissions.ts";
 import { type GameDoc, type GmMeta, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
@@ -13,6 +14,7 @@ import { db, friendlyError } from "../firebase.ts";
 function PlayerCard({ gameId, uid, displayName, character, onKick }: { gameId: string; uid: string; displayName: string; character?: Character; onKick: () => void }) {
   const c = character ? { ...blankCharacter(uid, displayName), ...character } : undefined;
   const todo = c ? characterChecks(c).filter((ch) => !ch.ok).length : 0;
+  const waiting = pendingCount(c);
   return (
     <li className="settings-player">
       <span className="npc-portrait">{c?.portrait ? <img src={c.portrait} alt="" /> : <span>{(c?.name.trim() || displayName || "?")[0].toUpperCase()}</span>}</span>
@@ -22,6 +24,11 @@ function PlayerCard({ gameId, uid, displayName, character, onKick }: { gameId: s
           Played by {displayName}
           {c && ` · Rank ${c.rank} · ${maxResources(c).maxHp} HP · ${todo ? `${todo} left to finish` : "ready"}`}
         </span>
+        {waiting > 0 && (
+          <Link className="chip warn" to={`/games/${gameId}/characters/${uid}`}>
+            {waiting} change{waiting === 1 ? "" : "s"} waiting for your approval
+          </Link>
+        )}
       </div>
       <div className="row wrap settings-player-actions">
         {c && (
@@ -135,7 +142,9 @@ export function Settings() {
 
         <section className="panel settings-section" aria-label="Player permissions">
           <h2>What players can edit</h2>
-          <p className="muted small">Turn a part off to lock it on every player's sheet. You can still edit it on any sheet. Decks also lock on their own during combat.</p>
+          <p className="muted small">
+            On: players change that part of their sheet freely. Off: their changes wait for your approval on their sheet, and the table keeps using what you last approved. You can always edit any sheet. Decks also lock on their own during combat.
+          </p>
           {PLAYER_EDIT_OPTIONS.map((o) => (
             <Toggle key={o.key} label={o.label} hint={o.hint} on={playerCanEdit(g, o.key)} onChange={(on) => setEdit(o.key, on)} />
           ))}
@@ -145,7 +154,7 @@ export function Settings() {
           <h2>Item library</h2>
           <Toggle
             label="Players can create items"
-            hint="Players open the item library from the game page to make new items for everyone's inventories. They can edit and delete only the items they made; you can edit all of them."
+            hint="Players make items in the item library and can change only the ones they made. On: their new items and changes reach inventories right away. Off: each waits for your approval in the item library."
             on={playersCanCreateItems(g)}
             onChange={async (on) => {
               try {
@@ -161,7 +170,7 @@ export function Settings() {
           <h2>Effect library</h2>
           <Toggle
             label="Players can create effects"
-            hint="Players build automated Status effects and Passives in the effect library and link their Passives and Proficiencies to them. A player's effect does nothing at the table until you approve it there, and again after each change they make."
+            hint="Players build automated effects in the effect library and can change only the ones they made. On: their effects work at the table right away. Off: a new or changed effect does nothing until you approve it there."
             on={playersCanCreateEffects(g)}
             onChange={async (on) => {
               try {

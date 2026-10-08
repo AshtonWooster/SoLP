@@ -18,7 +18,8 @@ service cloud.firestore {
     function isGm(gameId) {
       return signedIn() && game(gameId).gmId == request.auth.uid;
     }
-    // Game settings: may players edit this part of their sheet? On unless the GM turned it off.
+    // Game settings: may players edit this part of their sheet freely? On unless the GM turned it off;
+    // then their changes go in the sheet's pendingEdits for the GM to approve (shared/permissions.ts).
     function playerMayEdit(gameId, key) {
       return game(gameId).get("settings", {}).get("playerEdit", {}).get(key, true) != false;
     }
@@ -88,7 +89,8 @@ service cloud.firestore {
       }
 
       // One character per player. Party members can read it (allies' public info).
-      // The player edits their own; the GM can edit any and is the only one who changes Rank.
+      // The player edits their own; the GM can edit any and is the only one who changes Rank. Parts
+      // needing the GM's approval change only through the GM; the player's proposals wait in pendingEdits.
       match /characters/{uid} {
         allow read: if isMember(gameId);
         allow create: if isMember(gameId) && request.auth.uid == uid
@@ -108,43 +110,43 @@ service cloud.firestore {
         allow delete: if isGm(gameId) || (signedIn() && request.auth.uid == uid);
       }
 
-      // The item library: players browse it to fill their inventories; the GM edits it. When the GM
-      // lets players make items (game settings), they add their own and edit or delete only those.
+      // The item library: players browse it to fill their inventories; the GM edits it. Players add
+      // their own items and edit or delete only those. Unless the GM lets players make items (game
+      // settings), a player's new or changed item is pending: it waits for the GM's approval, and a
+      // player can't delete an approved one.
       match /items/{itemId} {
         allow read: if isMember(gameId);
         allow write: if isGm(gameId);
-        allow create: if isMember(gameId) && playersMakeItems(gameId)
-          && request.resource.data.createdBy == request.auth.uid;
-        allow update: if isMember(gameId) && playersMakeItems(gameId)
+        allow create: if isMember(gameId)
+          && request.resource.data.createdBy == request.auth.uid
+          && (playersMakeItems(gameId) || request.resource.data.get("pending", false) == true);
+        allow update: if isMember(gameId)
           && resource.data.get("createdBy", null) == request.auth.uid
-          && request.resource.data.createdBy == request.auth.uid;
-        allow delete: if isMember(gameId) && playersMakeItems(gameId)
-          && resource.data.get("createdBy", null) == request.auth.uid;
+          && request.resource.data.createdBy == request.auth.uid
+          && (playersMakeItems(gameId) || request.resource.data.get("pending", false) == true);
+        allow delete: if isMember(gameId)
+          && resource.data.get("createdBy", null) == request.auth.uid
+          && (playersMakeItems(gameId) || resource.data.get("pending", false) == true);
       }
 
-      function playerMayWrite(gameId, data) {
-        return playersMakeEffects(gameId)
-          || (data.get("kind", "status") in ["passive", "proficiency"] && data.get("rules", []).size() == 0);
-      }
-
-      // The effect library: Status effects, Passives, Proficiencies and Dice effects (shared/effects.ts). Everyone in the game reads
-      // it; the GM edits it. When the GM lets players make effects (game settings), they add their own and
-      // edit or delete only those, and can't approve them: the host ignores a player's effect until then.
+      // The effect library: Status effects, Passives, Proficiencies and Dice effects (shared/effects.ts).
+      // Everyone in the game reads it; the GM edits it. Players add their own entries and edit or
+      // delete only those. Unless the GM lets players make effects (game settings), a player's new or
+      // changed effect isn't approved: the host ignores it until the GM approves it, and a player
+      // can't delete an approved one.
       match /effects/{effectId} {
         allow read: if isMember(gameId);
         allow write: if isGm(gameId);
-        // Players add their own entries when the GM lets them make effects, and may always add a
-        // Passive or Proficiency in words (no rules), as they could type one on a sheet before.
-        allow create: if isMember(gameId) && playerMayWrite(gameId, request.resource.data)
+        allow create: if isMember(gameId)
           && request.resource.data.createdBy == request.auth.uid
-          && request.resource.data.get("approved", false) == false;
-        allow update: if isMember(gameId) && playerMayWrite(gameId, request.resource.data)
+          && (playersMakeEffects(gameId) || request.resource.data.get("approved", false) == false);
+        allow update: if isMember(gameId)
           && resource.data.get("createdBy", null) == request.auth.uid
           && request.resource.data.createdBy == request.auth.uid
-          && request.resource.data.get("approved", false) == false;
+          && (playersMakeEffects(gameId) || request.resource.data.get("approved", false) == false);
         allow delete: if isMember(gameId)
           && resource.data.get("createdBy", null) == request.auth.uid
-          && playerMayWrite(gameId, resource.data);
+          && (playersMakeEffects(gameId) || resource.data.get("approved", false) == false);
       }
 
       // Enemy templates: only the GM sees or edits them.

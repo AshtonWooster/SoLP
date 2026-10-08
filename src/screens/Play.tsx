@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { doc, updateDoc } from "firebase/firestore";
+import { deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
 import { blankCharacter, linkInventory, DASH_LIGHT_COST, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
-import { type Card, type GameDoc, type PageSource, playerCanEdit, type TableAction } from "../../shared/types.ts";
+import { partsNeedingApproval, proposeEdits, withProposals } from "../../shared/permissions.ts";
+import { type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
@@ -182,17 +183,33 @@ export function Play() {
     void act({ type: "endTurn" });
   };
 
+  // On parts of the sheet the GM approves (game settings), a change waits in the sheet's pendingEdits instead.
+  const needApproval = partsNeedingApproval(gameDoc.data);
+  const change = (part: PlayerEditKey, direct: Record<string, unknown>, fn: (draft: Character) => void) => {
+    if (!user || !characterDoc.data) return;
+    const ref = doc(db, "games", id, "characters", user.id);
+    if (!needApproval.includes(part)) return void updateDoc(ref, direct).catch((e) => setError(friendlyError(e)));
+    const saved = { ...blankCharacter(user.id, ""), ...characterDoc.data };
+    const view = structuredClone(withProposals(saved));
+    fn(view);
+    updateDoc(ref, { pendingEdits: proposeEdits(view, saved, needApproval).pendingEdits ?? deleteField() })
+      .then(() => setNotice("Sent to your GM for approval."))
+      .catch((e) => setError(friendlyError(e)));
+  };
   const useItem = (itemId: string) => {
-    if (!user || !c) return;
+    if (!c) return;
     // Uses count down against the item's current details from the library.
-    updateDoc(doc(db, "games", id, "characters", user.id), { "inventory.items": useItemIn(c.inventory.items, itemId) }).catch((e) =>
-      setError(friendlyError(e)),
-    );
+    change("inventory", { "inventory.items": useItemIn(c.inventory.items, itemId) }, (d) => {
+      d.inventory.items = useItemIn(linkInventory(d, library).inventory.items, itemId);
+    });
   };
   const raiseStat = (group: "primary" | "secondary", key: string) => {
-    if (!user || !c) return;
+    if (!c) return;
     const current = (c[group] as Record<string, number>)[key] ?? 0;
-    updateDoc(doc(db, "games", id, "characters", user.id), { [`${group}.${key}`]: current + 1 }).catch((e) => setError(friendlyError(e)));
+    change("stats", { [`${group}.${key}`]: current + 1 }, (d) => {
+      const stats = d[group] as Record<string, number>;
+      stats[key] = (stats[key] ?? 0) + 1;
+    });
   };
 
   const resources = [
@@ -294,7 +311,7 @@ export function Play() {
               </button>
             </header>
             <div className="info-body">
-              <InfoPanel panel={panel} c={c} sheetUrl={sheetUrl} onOpenPage={(p) => setViewing({ page: p })} onUseItem={playerCanEdit(gameDoc.data, "inventory") ? useItem : undefined} onRaiseStat={playerCanEdit(gameDoc.data, "stats") ? raiseStat : undefined} />
+              <InfoPanel panel={panel} c={c} sheetUrl={sheetUrl} onOpenPage={(p) => setViewing({ page: p })} onUseItem={useItem} onRaiseStat={raiseStat} />
             </div>
           </div>
         ) : (

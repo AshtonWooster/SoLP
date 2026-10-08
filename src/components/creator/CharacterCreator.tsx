@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import type { Character } from "../../../shared/character.ts";
 import { type Check, maxResources, PRIMARY_STATS, proficiencyCount, RANKS, rankTable, SECONDARY_STATS } from "../../../shared/ruleset.ts";
 import { friendlyError } from "../../firebase.ts";
@@ -33,8 +33,8 @@ interface Props {
   update: (fn: (d: Character) => void) => void;
   isGm: boolean;
   canEdit: boolean;
-  /** The GM turned off players editing their Stats (game settings). */
-  statsLocked?: boolean;
+  /** Shown above the Stats when the GM approves players' changes to them (game settings). */
+  statsNote?: ReactNode;
   gameId: string;
   uid: string;
   checks: Check[];
@@ -171,13 +171,13 @@ function ResourceBoard({ c }: { c: Character }) {
   );
 }
 
-function StatsStep({ c, update, locked }: Pick<Props, "c" | "update"> & { locked?: boolean }) {
+function StatsStep({ c, update, note }: Pick<Props, "c" | "update"> & { note?: ReactNode }) {
   const t = rankTable(c.rank);
   const primaryLeft = t.primaryPoints - Object.values(c.primary).reduce((a, b) => a + b, 0);
   const secondaryLeft = t.secondaryPoints - Object.values(c.secondary).reduce((a, b) => a + b, 0);
   return (
-    <fieldset className="stats-step plain-fieldset" id="stats" disabled={locked}>
-      {locked && <p className="notice small">Your GM has locked Stats. Ask them to make changes.</p>}
+    <fieldset className="stats-step plain-fieldset" id="stats">
+      {note}
       <ResourceBoard c={c} />
       <div className="stats-columns">
         <section className="stat-panel">
@@ -411,7 +411,7 @@ export function CharacterCreator(props: Props) {
       <div key={step} className={`creator-page ${dir}`}>
         {step === "intro" && <Intro {...props} />}
         {step === "license" && <FixerLicense c={c} update={update} isGm={isGm} gameId={gameId} uid={uid} />}
-        {step === "stats" && <StatsStep c={c} update={update} locked={props.statsLocked} />}
+        {step === "stats" && <StatsStep c={c} update={update} note={props.statsNote} />}
         {step === "story" && <StoryStep c={c} update={update} />}
         {step === "summary" && <SummaryStep {...props} />}
       </div>

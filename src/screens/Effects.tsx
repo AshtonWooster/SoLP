@@ -17,14 +17,15 @@ function DefEditor({
   def,
   library,
   isGm,
-  mayAutomate,
+  autoApprove,
 }: {
   gameId: string;
   id: string;
   def: EffectDef;
   library: Record<string, EffectDef>;
   isGm: boolean;
-  mayAutomate: boolean;
+  /** "Players can create effects" is on: a player's changes work without the GM's approval. */
+  autoApprove: boolean;
 }) {
   const [d, setD] = useState(def);
   const [status, setStatus] = useState("");
@@ -36,10 +37,8 @@ function DefEditor({
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const update = (next: EffectDef) => {
-    // A player's change needs the GM's approval again.
-    if (!isGm && next.createdBy) next = { ...next, approved: false };
-    // Without "Players can create effects", a player's entry stays words only.
-    if (!mayAutomate) next = { ...next, rules: [] };
+    // A player's change needs the GM's approval again, unless the GM lets players make effects.
+    if (!isGm && next.createdBy) next = { ...next, approved: autoApprove };
     setD(next);
     dirty.current = true;
     setStatus("Saving…");
@@ -59,7 +58,7 @@ function DefEditor({
   return (
     <div className="item-editor">
       <span className={"save-state " + (status === "Saved" ? "saved" : "")}>{status}</span>
-      <EffectBuilder def={d} library={{ ...library, [id]: d }} onChange={update} mayAutomate={mayAutomate} />
+      <EffectBuilder def={d} library={{ ...library, [id]: d }} onChange={update} />
     </div>
   );
 }
@@ -70,8 +69,8 @@ const kindOf = (k: string | null): EffectKind => EFFECT_KINDS.find((x) => x.valu
 
 /**
  * The effect library, one tab per kind: Status effects (Burn, Poise…), Passives, Proficiencies and
- * Dice effects, built from menus. Everyone in the game shares it. The GM edits it; players can add
- * Passives and Proficiencies in words, and automate them (with GM approval) when the GM allows.
+ * Dice effects, built from menus. Everyone in the game shares it. The GM edits it; players add their
+ * own, which need the GM's approval to work at the table unless the GM turned on "Players can create effects".
  */
 export function Effects() {
   const { id = "" } = useParams();
@@ -79,12 +78,11 @@ export function Effects() {
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
   const member = !!user && !!game.data?.members[user.id];
-  const mayAutomate = isGm || (member && playersCanCreateEffects(game.data));
+  // Players' effects work right away when the GM lets players make effects; otherwise they wait for approval.
+  const autoApprove = isGm || playersCanCreateEffects(game.data);
   const [params, setParams] = useSearchParams();
   const kind = kindOf(params.get("kind"));
   const setKind = (k: EffectKind) => setParams({ kind: k }, { replace: true });
-  // Anyone may add a Passive or Proficiency in words; Status and Dice effects need rules.
-  const mayCreate = mayAutomate || (member && (kind === "passive" || kind === "proficiency"));
   const own = useCollection<EffectDef>(member ? `games/${id}/effects` : null);
   const library = useMemo(() => effectLibrary(own), [own]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -115,9 +113,8 @@ export function Effects() {
   const create = async (from?: EffectDef) => {
     const ref = doc(collection(db, "games", id, "effects"));
     const def = from ? copyEffect(from, `${from.name} (variant)`) : { ...blankEffect(kind), name: `New ${info.label}` };
-    if (!mayAutomate) def.rules = [];
     try {
-      await setDoc(ref, cleanEffect({ ...def, updatedAt: Date.now(), ...(isGm ? {} : { createdBy: user!.id, approved: false }) }));
+      await setDoc(ref, cleanEffect({ ...def, updatedAt: Date.now(), ...(isGm ? {} : { createdBy: user!.id, approved: autoApprove }) }));
       setSelected(ref.id);
     } catch (err) {
       setMessage(friendlyError(err));
@@ -127,7 +124,6 @@ export function Effects() {
   const current = selected && library[selected]?.kind === kind ? selected : null;
   const def = current ? library[current] : undefined;
   const mayEdit = (key: string, d: EffectDef) => !isPreset(key) && (isGm || d.createdBy === user!.id);
-  const mayVariant = (d: EffectDef) => mayAutomate || ((d.kind === "passive" || d.kind === "proficiency") && d.rules.length === 0);
   const waitingCount = (k: EffectKind) => Object.values(own ?? {}).filter((d) => d.kind === k && waiting(d)).length;
   const maker = (d: EffectDef) => (d.createdBy ? (game.data!.members[d.createdBy]?.displayName ?? "a former player") : "the GM");
 
@@ -143,9 +139,9 @@ export function Effects() {
           <p className="muted">
             {isGm
               ? "Everything shared in this game: Status effects, Passives, Proficiencies and Dice effects. Automate any of them from menus: when it happens, any checks, and what it does. Sheets pick them from menus."
-              : mayAutomate
-                ? "Everything shared in this game. Your GM lets players automate entries: build one from menus and it works at the table once your GM approves it."
-                : "Everything shared in this game. You can add Passives and Proficiencies in words; your GM can let players automate them in Game settings."}
+              : autoApprove
+                ? "Everything shared in this game. Make your own and automate them from menus: your GM lets players' effects work at the table right away."
+                : "Everything shared in this game. Make your own and automate them from menus: an automated one works at the table once your GM approves it."}
           </p>
           {message && (
             <p className="muted" role="status">
@@ -177,7 +173,7 @@ export function Effects() {
           <div className="equip-editor">
             {current && def && mayEdit(current, def) ? (
               <>
-                <DefEditor key={current} gameId={id} id={current} def={def} library={library} isGm={isGm} mayAutomate={mayAutomate} />
+                <DefEditor key={current} gameId={id} id={current} def={def} library={library} isGm={isGm} autoApprove={autoApprove} />
                 <div className="row wrap">
                   {isGm && def.createdBy && def.rules.length > 0 && (
                     <button
@@ -188,22 +184,25 @@ export function Effects() {
                       {def.approved ? "Withdraw approval" : `Approve ${maker(def)}'s effect`}
                     </button>
                   )}
-                  {mayVariant(def) && (
-                    <button type="button" onClick={() => create(def)}>
-                      Make a variant
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={async () => {
-                      if (!confirm(`Delete ${def.name || "this entry"}? Sheets that have it keep its words.`)) return;
-                      await deleteDoc(doc(db, "games", id, "effects", current)).catch((e) => setMessage(friendlyError(e)));
-                      setSelected(null);
-                    }}
-                  >
-                    Delete
+                  <button type="button" onClick={() => create(def)}>
+                    Make a variant
                   </button>
+                  {/* Removing an approved effect is a change too: only the GM can, unless players' effects need no approval. */}
+                  {autoApprove || !def.approved ? (
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={async () => {
+                        if (!confirm(`Delete ${def.name || "this entry"}? Sheets that have it keep its words.`)) return;
+                        await deleteDoc(doc(db, "games", id, "effects", current)).catch((e) => setMessage(friendlyError(e)));
+                        setSelected(null);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  ) : (
+                    <span className="muted small">Approved by your GM: ask them to delete it.</span>
+                  )}
                 </div>
               </>
             ) : current && def ? (
@@ -217,15 +216,13 @@ export function Effects() {
                   <p>{effectText(def, library)}</p>
                 </div>
                 <p className="muted small">{isPreset(current) ? "Built in. Make a variant to change it." : `Made by ${maker(def)}. Only they and the GM can change it.`}</p>
-                {mayVariant(def) && (
-                  <button type="button" onClick={() => create(def)}>
-                    Make a variant
-                  </button>
-                )}
+                <button type="button" onClick={() => create(def)}>
+                  Make a variant
+                </button>
               </div>
             ) : (
               <p className="muted equip-empty">
-                Pick one of the {info.plural.toLowerCase()} to see it{mayCreate ? ", or make a new one" : ""}. {info.hint}.
+                Pick one of the {info.plural.toLowerCase()} to see it, or make a new one. {info.hint}.
               </p>
             )}
           </div>
@@ -239,13 +236,11 @@ export function Effects() {
               )}
             </div>
             <ul className="plain effect-list">
-              {mayCreate && (
-                <li>
-                  <button type="button" className="equip-add-page library-new" onClick={() => create()}>
-                    + New {info.label}
-                  </button>
-                </li>
-              )}
+              <li>
+                <button type="button" className="equip-add-page library-new" onClick={() => create()}>
+                  + New {info.label}
+                </button>
+              </li>
               {list.map(([key, d]) => (
                 <li key={key}>
                   <button type="button" className={"effect-row" + (key === current ? " selected" : "")} onClick={() => setSelected(key)}>

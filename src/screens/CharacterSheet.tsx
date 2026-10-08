@@ -3,7 +3,8 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import type { Character, ItemTemplate } from "../../shared/character.ts";
 import { blankCharacter, characterChecks, linkInventory } from "../../shared/ruleset.ts";
-import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, playersCanCreateEffects, playersCanCreateItems, type TableState } from "../../shared/types.ts";
+import { approveEdits, describeEdits, partsNeedingApproval, proposeEdits, rejectEdits, withProposals } from "../../shared/permissions.ts";
+import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playersCanCreateEffects, type TableState } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { DeckTab } from "../components/DeckTab.tsx";
 import { AugmentTab } from "../components/creator/AugmentTab.tsx";
@@ -21,14 +22,23 @@ const SAVE_DELAY_MS = 800;
 /**
  * Loads a character and saves edits shortly after each change. Edits made elsewhere (the GM,
  * another device) are picked up whenever there are no unsaved local edits.
+ *
+ * The sheet's player sees their changes waiting for the GM's approval in place; their edits to
+ * parts the GM approves (needApproval) are saved as proposals instead (shared/permissions.ts).
  */
-function useCharacter(gameId: string, uid: string, fallbackName: string, canEdit: boolean) {
+function useCharacter(gameId: string, uid: string, fallbackName: string, canEdit: boolean, isPlayer: boolean, needApproval: PlayerEditKey[]) {
   const [character, setCharacter] = useState<Character | null>(null);
   const [error, setError] = useState("");
   const [save, setSave] = useState<SaveState>("idle");
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latest = useRef<Character | null>(null);
+  // The sheet as last saved, and the parts whose changes need approval right now.
+  const saved = useRef<Character | null>(null);
+  const approval = useRef(needApproval);
+  approval.current = needApproval;
+  const proposer = useRef(isPlayer);
+  proposer.current = isPlayer;
   const ref = doc(db, "games", gameId, "characters", uid);
 
   useEffect(
@@ -40,8 +50,10 @@ function useCharacter(gameId: string, uid: string, fallbackName: string, canEdit
           const data = snap.data() as Character | undefined;
           // Fill in anything added to the sheet since this character was saved.
           const c = data ? { ...blankCharacter(uid, fallbackName), ...data } : null;
-          latest.current = c;
-          setCharacter(c);
+          saved.current = c;
+          const view = c && proposer.current ? withProposals(c) : c;
+          latest.current = view;
+          setCharacter(view);
         },
         (err) => setError(friendlyError(err)),
       ),
@@ -54,7 +66,9 @@ function useCharacter(gameId: string, uid: string, fallbackName: string, canEdit
     if (!c) return;
     setSave("saving");
     try {
-      await setDoc(ref, { ...c, updatedAt: Date.now() });
+      const out = { ...(proposer.current ? proposeEdits(c, saved.current ?? c, approval.current) : c), updatedAt: Date.now() };
+      await setDoc(ref, out);
+      saved.current = out;
       dirty.current = false;
       setSave("saved");
     } catch (err) {
@@ -97,7 +111,15 @@ function useCharacter(gameId: string, uid: string, fallbackName: string, canEdit
     void write();
   };
 
-  return { character, error, save, update, create };
+  /** The player takes back their changes to a part waiting for approval. */
+  const withdraw = (key: PlayerEditKey) =>
+    update((d) => {
+      const base = saved.current;
+      if (!base) return;
+      for (const f of PLAYER_EDIT_OPTIONS.find((o) => o.key === key)!.fields) (d as unknown as Record<string, unknown>)[f] = structuredClone(base[f as keyof Character]);
+    });
+
+  return { character, error, save, update, create, withdraw };
 }
 
 const TABS = [
@@ -109,6 +131,36 @@ const TABS = [
 type Tab = (typeof TABS)[number][0];
 const CREATOR_STEPS: CreatorStep[] = ["intro", "license", "stats", "story", "summary"];
 
+/** For the GM: the player's changes waiting for approval, part by part, to approve or reject. */
+function PendingEdits({ c, name, update }: { c: Character; name: string; update: (fn: (d: Character) => void) => void }) {
+  return (
+    <section className="panel pending-edits" aria-label="Changes waiting for approval">
+      <h2>{name}'s changes waiting for your approval</h2>
+      <ul className="plain">
+        {PLAYER_EDIT_OPTIONS.filter((o) => c.pendingEdits?.[o.key]).map((o) => {
+          const lines = describeEdits(c, o.key);
+          return (
+            <li key={o.key} className="pending-edit">
+              <div>
+                <strong>{o.label}</strong>
+                <span className="muted small">{lines.length ? lines.join(" · ") : "No difference from the sheet now"}</span>
+              </div>
+              <div className="row">
+                <button type="button" className="chip go" onClick={() => update((d) => approveEdits(d, o.key))}>
+                  Approve
+                </button>
+                <button type="button" onClick={() => update((d) => rejectEdits(d, o.key))}>
+                  Reject
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 /** Character creation and editing: a stepped creator, then a tab each for the rest (Act 5). */
 export function CharacterSheet() {
   const { id = "", uid = "" } = useParams();
@@ -119,7 +171,9 @@ export function CharacterSheet() {
   const isMine = user?.id === uid;
   const canEdit = isMine || isGm;
   const ownerName = game.data?.members[uid]?.displayName ?? "";
-  const { character: c, error, save, update, create } = useCharacter(id, uid, ownerName, canEdit);
+  // Parts of the sheet whose changes the GM approves (game settings). The GM's own edits apply directly.
+  const needApproval = isMine && !isGm ? partsNeedingApproval(game.data) : [];
+  const { character: c, error, save, update, create, withdraw } = useCharacter(id, uid, ownerName, canEdit, isMine && !isGm, needApproval);
   const [params, setParams] = useSearchParams();
   const tab: Tab = TABS.some(([t]) => t === params.get("tab")) ? (params.get("tab") as Tab) : "sheet";
   // Decks can't change mid-combat (Act 6). The GM's table saves combat state every few seconds.
@@ -127,12 +181,21 @@ export function CharacterSheet() {
   // The GM's item library: inventory items take their details from it.
   const library = useCollection<ItemTemplate>(`games/${id}/items`);
   const decksLocked = !!table.data?.combat && !isGm;
-  // Parts of the sheet the GM lets players edit (game settings). The GM can always edit.
-  const may = (key: PlayerEditKey) => canEdit && (isGm || playerCanEdit(game.data, key));
-  const lockNote = (key: PlayerEditKey) =>
-    isMine && !isGm && !playerCanEdit(game.data, key) ? (
-      <p className="notice small lock-note">Your GM has locked {PLAYER_EDIT_OPTIONS.find((o) => o.key === key)!.label}. Ask them to make changes.</p>
-    ) : null;
+  // On parts the GM approves, the player's changes wait for the GM: say so, and let them take the changes back.
+  const approvalNote = (key: PlayerEditKey) => {
+    if (!needApproval.includes(key) || !c) return null;
+    const label = PLAYER_EDIT_OPTIONS.find((o) => o.key === key)!.label;
+    return c.pendingEdits?.[key] ? (
+      <div className="notice small lock-note row-between">
+        <span>Your changes to {label} are waiting for your GM's approval. Until then the table uses what your GM last approved.</span>
+        <button type="button" onClick={() => withdraw(key)}>
+          Withdraw changes
+        </button>
+      </div>
+    ) : (
+      <p className="notice small lock-note">Your GM approves changes to {label}. Edit away: your changes take effect once your GM approves them.</p>
+    );
+  };
 
   if (game.error || error) {
     return (
@@ -213,6 +276,7 @@ export function CharacterSheet() {
             </span>
           </p>
           {!canEdit && <p className="muted">Only {owner.displayName} and the GM can edit this sheet.</p>}
+          {isGm && c.pendingEdits && <PendingEdits c={c} name={owner.displayName} update={update} />}
           <nav className="tabs" role="tablist">
             {TABS.map(([t, label]) => (
               <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "tab active" : "tab"} onClick={() => goTab(t)}>
@@ -224,29 +288,29 @@ export function CharacterSheet() {
 
         {tab === "sheet" && (
           <fieldset disabled={!canEdit} className="sheet-body">
-            <CharacterCreator c={sheet} update={update} isGm={isGm} canEdit={canEdit} statsLocked={isMine && !isGm && !playerCanEdit(game.data, "stats")} gameId={id} uid={uid} checks={checks} step={step} setStep={setStep} goTab={goTab} />
+            <CharacterCreator c={sheet} update={update} isGm={isGm} canEdit={canEdit} statsNote={approvalNote("stats")} gameId={id} uid={uid} checks={checks} step={step} setStep={setStep} goTab={goTab} />
           </fieldset>
         )}
 
         {tab === "augment" && (
-          <fieldset disabled={!may("augment")} className="sheet-body">
-            {lockNote("augment")}
+          <fieldset disabled={!canEdit} className="sheet-body">
+            {approvalNote("augment")}
             <AugmentTab c={sheet} update={update} />
           </fieldset>
         )}
 
         {tab === "inventory" && (
-          <fieldset disabled={!may("inventory")} className="sheet-body">
-            {lockNote("inventory")}
+          <fieldset disabled={!canEdit} className="sheet-body">
+            {approvalNote("inventory")}
             <Section id="inventory" title="Inventory" intro="Each Slot holds one item, or a stack of one stacking item. Usable items add their Page to your Auxiliary Deck. Your one Trinket is active only while in the Trinket Slot. Hover an item to see its card.">
-              <InventoryTab c={c} library={library} gameId={id} isGm={isGm} canEdit={may("inventory")} update={update} canMakeItems={isMine && playersCanCreateItems(game.data)} />
+              <InventoryTab c={c} library={library} gameId={id} isGm={isGm} canEdit={canEdit} update={update} canMakeItems={isMine} />
             </Section>
           </fieldset>
         )}
 
         {tab === "decks" && (
-          <fieldset disabled={!may("equipment")} className="sheet-body">
-            {lockNote("equipment")}
+          <fieldset disabled={!canEdit} className="sheet-body">
+            {approvalNote("equipment")}
             <DeckTab c={linkInventory(sheet, library)} update={update} gameId={id} uid={uid} decksLocked={decksLocked} />
           </fieldset>
         )}

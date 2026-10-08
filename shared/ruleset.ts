@@ -240,6 +240,7 @@ export function cleanTemplate(raw: unknown): ItemTemplate | null {
     else delete t.page.image;
   }
   if (typeof r.createdBy === "string" && r.createdBy) t.createdBy = r.createdBy;
+  if (t.createdBy && r.pending === true) t.pending = true;
   if (r.usable === true) t.usable = true;
   if (r.consumable === true) {
     t.consumable = true;
@@ -254,7 +255,8 @@ export function cleanTemplate(raw: unknown): ItemTemplate | null {
  */
 export function linkItem(item: InventoryItem, library: Record<string, ItemTemplate> | undefined): InventoryItem {
   const t = item.templateId ? library?.[item.templateId] : undefined;
-  if (!t) return item;
+  // A player's change waiting for the GM's approval doesn't reach inventories yet.
+  if (!t || t.pending === true) return item;
   const { updatedAt: _u, ...details } = t;
   const maxStack = t.stacking ? Math.max(1, t.maxStack) : 1;
   const linked: InventoryItem = { ...details, id: item.id, templateId: item.templateId, count: Math.min(Math.max(1, item.count), maxStack) };
