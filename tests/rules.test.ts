@@ -7,7 +7,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { getBytes, ref, uploadBytes } from "firebase/storage";
 
 let env: RulesTestEnvironment;
@@ -87,7 +87,7 @@ test("game settings: only the GM changes them and kicks players; the GM can't be
   await assertFails(getDoc(doc(as("p1"), "games", GAME, "table", "state")));
 });
 
-test("players can't change the parts of their sheet the GM locked; the GM still can", async () => {
+test("on sheet parts needing approval, players only propose changes; the GM applies them", async () => {
   const sheet = { ownerId: "p1", name: "Roland", rank: 9, primary: { justice: 0 }, secondary: {}, inventory: { items: [] }, ahn: 0, augment: { name: "" }, proficiencies: [], weapons: [], armor: null, deck: [], ego: [] };
   const ref = (who: string) => doc(as(who), "games", GAME, "characters", "p1");
   await assertSucceeds(setDoc(ref("p1"), sheet));
@@ -100,10 +100,13 @@ test("players can't change the parts of their sheet the GM locked; the GM still 
   await assertFails(updateDoc(ref("p1"), { "augment.name": "Gloves" }));
   await assertFails(updateDoc(ref("p1"), { weapons: [{ id: "w" }] }));
   await assertFails(updateDoc(ref("p1"), { deck: [{ pageId: "a", copies: 1 }] }));
-  // Unlocked parts, and a full save that leaves locked parts as they are, still work.
+  // The player's changes wait in pendingEdits; a full save that leaves those parts as they are still works.
+  await assertSucceeds(updateDoc(ref("p1"), { "pendingEdits.stats": { primary: { justice: 3 } }, "pendingEdits.inventory": { ahn: 500 } }));
+  await assertSucceeds(setDoc(ref("p1"), { ...sheet, name: "Roland again", pendingEdits: { stats: { primary: { justice: 3 } } } }));
   await assertSucceeds(updateDoc(ref("p1"), { name: "Roland the Black Silence" }));
-  await assertSucceeds(setDoc(ref("p1"), { ...sheet, name: "Roland again" }));
-  await assertSucceeds(updateDoc(ref("gm"), { "primary.justice": 3, ahn: 500 }));
+  // The GM approves: the change takes effect and the proposal goes.
+  await assertSucceeds(updateDoc(ref("gm"), { "primary.justice": 3, pendingEdits: deleteField() }));
+  // On (the default), players change those parts directly.
   await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playerEdit.stats": true }));
   await assertSucceeds(updateDoc(ref("p1"), { "primary.justice": 4 }));
   await assertFails(updateDoc(ref("p1"), { ahn: 1 }));
@@ -192,7 +195,7 @@ test("enemy templates are GM-only", async () => {
   await assertSucceeds(deleteDoc(ref("gm")));
 });
 
-test("item library: members browse it, only the GM creates and edits items", async () => {
+test("item library: members browse it; only the GM edits items that aren't theirs", async () => {
   const ref = (who: string) => doc(as(who), "games", GAME, "items", "potion");
   await assertSucceeds(setDoc(ref("gm"), { name: "Potion", kind: "item", stacking: true, maxStack: 3 }));
   await assertSucceeds(getDocs(collection(as("p1"), "games", GAME, "items")));
@@ -204,75 +207,66 @@ test("item library: members browse it, only the GM creates and edits items", asy
   await assertSucceeds(deleteDoc(ref("gm")));
 });
 
-test("players make items only when the GM allows it, and change only their own", async () => {
+test("players' items need the GM's approval unless the GM lets players make items; they change only their own", async () => {
   const items = (who: string) => collection(as(who), "games", GAME, "items");
   const item = (who: string, id: string) => doc(as(who), "games", GAME, "items", id);
   await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), "games", GAME, "items", "gmItem"), { name: "Ore", kind: "item" }));
+  // Off (the default): a player's new or changed item must wait for approval.
   await assertFails(setDoc(item("p1", "mine"), { name: "Salve", kind: "tool", createdBy: "p1" }));
-  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateItems": true }));
-  await assertSucceeds(setDoc(item("p1", "mine"), { name: "Salve", kind: "tool", createdBy: "p1" }));
-  await assertFails(setDoc(item("p1", "fake"), { name: "Fake", kind: "item", createdBy: "gm" }));
-  await assertFails(setDoc(item("p1", "none"), { name: "None", kind: "item" }));
+  await assertSucceeds(setDoc(item("p1", "mine"), { name: "Salve", kind: "tool", createdBy: "p1", pending: true }));
+  await assertFails(updateDoc(item("p1", "mine"), { pending: false }));
   await assertSucceeds(updateDoc(item("p1", "mine"), { name: "Better Salve" }));
+  await assertSucceeds(updateDoc(item("gm", "mine"), { pending: deleteField() }));
+  // Approved: the player can't change it without approval again, or delete it.
+  await assertFails(updateDoc(item("p1", "mine"), { name: "Infinite Salve" }));
+  await assertFails(deleteDoc(item("p1", "mine")));
+  await assertSucceeds(updateDoc(item("p1", "mine"), { name: "Strong Salve", pending: true }));
+  await assertSucceeds(updateDoc(item("gm", "mine"), { pending: deleteField() }));
+  await assertFails(updateDoc(item("p1", "gmItem"), { name: "Gold", pending: true }));
+  await assertFails(setDoc(item("p1", "fake"), { name: "Fake", kind: "item", createdBy: "gm", pending: true }));
+  await assertFails(setDoc(item("stranger", "s"), { name: "S", kind: "item", createdBy: "stranger", pending: true }));
+  // On: players' items go straight into use.
+  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateItems": true }));
+  await assertSucceeds(setDoc(item("p1", "free"), { name: "Bandage", kind: "tool", createdBy: "p1" }));
+  await assertSucceeds(updateDoc(item("p1", "mine"), { name: "Better Salve" }));
+  await assertFails(setDoc(item("p1", "none"), { name: "None", kind: "item" }));
   await assertFails(updateDoc(item("p1", "mine"), { createdBy: "gm" }));
   await assertFails(updateDoc(item("p1", "gmItem"), { name: "Gold" }));
   await assertFails(deleteDoc(item("p1", "gmItem")));
   await assertSucceeds(updateDoc(item("gm", "mine"), { name: "GM's tweak" }));
-  await assertFails(setDoc(item("stranger", "s"), { name: "S", kind: "item", createdBy: "stranger" }));
   await assertSucceeds(getDocs(items("p1")));
-  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateItems": false }));
-  await assertFails(updateDoc(item("p1", "mine"), { name: "Locked" }));
-  await assertFails(deleteDoc(item("p1", "mine")));
+  await assertSucceeds(deleteDoc(item("p1", "free")));
 });
 
-test("effect library: members read it; players make effects only when allowed, and can't approve them", async () => {
+test("effect library: members read it; players' effects need the GM's approval unless the GM lets players make effects", async () => {
   const fx = (who: string, id: string) => doc(as(who), "games", GAME, "effects", id);
   const burn = { name: "Burn", kind: "status", decay: "halfAtTurnEnd", rules: [] };
+  const rule = { id: "r", when: "turnStart", checks: [], actions: [{ do: "heal", amount: { kind: "number", value: 1 }, who: "me" }] };
   await assertSucceeds(setDoc(fx("gm", "burn"), burn));
   await assertSucceeds(getDocs(collection(as("p1"), "games", GAME, "effects")));
   await assertFails(getDocs(collection(as("stranger"), "games", GAME, "effects")));
-  await assertFails(setDoc(fx("p1", "mine"), { ...burn, createdBy: "p1" }));
-  await assertFails(updateDoc(fx("p1", "burn"), { name: "Weak Burn" }));
-  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateEffects": true }));
-  await assertSucceeds(setDoc(fx("p1", "mine"), { ...burn, name: "Frostbite", createdBy: "p1", approved: false }));
+  // Off (the default): players make any effect, automated too, but can't approve it.
+  await assertSucceeds(setDoc(fx("p1", "mine"), { ...burn, name: "Frostbite", rules: [rule], createdBy: "p1", approved: false }));
+  await assertSucceeds(setDoc(fx("p1", "die"), { name: "Bleed on hit", kind: "die", decay: "none", rules: [rule], createdBy: "p1" }));
   await assertFails(setDoc(fx("p1", "sneaky"), { ...burn, createdBy: "p1", approved: true }));
   await assertFails(setDoc(fx("p1", "fake"), { ...burn, createdBy: "gm" }));
   await assertFails(updateDoc(fx("p1", "mine"), { approved: true }));
   await assertFails(updateDoc(fx("p1", "burn"), { name: "Weak Burn" }));
   await assertFails(deleteDoc(fx("p1", "burn")));
   await assertSucceeds(updateDoc(fx("gm", "mine"), { approved: true }));
-  // Any change by the player sends it back for approval.
+  // Any change by the player sends it back for approval, and they can't delete an approved one.
   await assertFails(updateDoc(fx("p1", "mine"), { name: "Deep Frostbite" }));
+  await assertFails(deleteDoc(fx("p1", "mine")));
   await assertSucceeds(updateDoc(fx("p1", "mine"), { name: "Deep Frostbite", approved: false }));
   await assertSucceeds(deleteDoc(fx("p1", "mine")));
-  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateEffects": false }));
-  await assertFails(setDoc(fx("p1", "again"), { ...burn, createdBy: "p1" }));
-});
-
-test("effect library: players may always add Passives and Proficiencies in words, but not automate them", async () => {
-  const fx = (who: string, id: string) => doc(as(who), "games", GAME, "effects", id);
-  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateEffects": false }));
-  const words = { name: "Steady Hands", kind: "passive", cost: 1, note: "Gain 1 Poise each turn", decay: "none", rules: [], createdBy: "p1", approved: false };
-  const rule = { id: "r", when: "turnStart", checks: [], actions: [{ do: "heal", amount: { kind: "number", value: 1 }, who: "me" }] };
-  await assertSucceeds(setDoc(fx("p1", "steady"), words));
-  await assertSucceeds(setDoc(fx("p1", "prof"), { ...words, name: "Swords", kind: "proficiency" }));
-  await assertSucceeds(updateDoc(fx("p1", "steady"), { note: "Gain 2 Poise each turn", approved: false }));
-  await assertFails(updateDoc(fx("p1", "steady"), { rules: [rule], approved: false }));
-  await assertFails(setDoc(fx("p1", "auto"), { ...words, rules: [rule] }));
-  await assertFails(setDoc(fx("p1", "die"), { ...words, kind: "die" }));
-  await assertFails(setDoc(fx("p1", "status"), { ...words, kind: "status" }));
-  await assertFails(setDoc(fx("p1", "fake"), { ...words, createdBy: "gm" }));
-  await assertSucceeds(setDoc(fx("gm", "gms"), { ...words, createdBy: null, approved: true }));
-  await assertFails(updateDoc(fx("p1", "gms"), { note: "Mine now", createdBy: "p1", approved: false }));
-  await assertFails(deleteDoc(fx("p1", "gms")));
-  await assertSucceeds(deleteDoc(fx("p1", "prof")));
+  // On: players' effects work right away.
   await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateEffects": true }));
-  await assertSucceeds(updateDoc(fx("p1", "steady"), { rules: [rule], approved: false }));
-  await assertSucceeds(setDoc(fx("p1", "die"), { ...words, kind: "die", rules: [rule] }));
-  await env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.playersCreateEffects": false }));
-  // Once automated, it's locked again until the GM turns the setting back on.
-  await assertFails(updateDoc(fx("p1", "steady"), { name: "Steadier", approved: false }));
-  await assertSucceeds(updateDoc(fx("p1", "steady"), { rules: [], approved: false }));
+  await assertSucceeds(setDoc(fx("p1", "free"), { ...burn, name: "Chill", rules: [rule], createdBy: "p1", approved: true }));
+  await assertSucceeds(updateDoc(fx("p1", "free"), { name: "Deep Chill", approved: true }));
+  await assertFails(updateDoc(fx("p1", "burn"), { name: "Weak Burn", approved: true }));
+  await assertFails(setDoc(fx("p1", "fake2"), { ...burn, createdBy: "gm", approved: true }));
+  await assertSucceeds(deleteDoc(fx("p1", "free")));
+  await assertFails(setDoc(fx("stranger", "s"), { ...burn, createdBy: "stranger" }));
 });
 
 test("only the GM sees the invite code and GM notes", async () => {

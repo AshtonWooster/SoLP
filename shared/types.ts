@@ -45,16 +45,22 @@ export interface GameDoc {
   settings?: GameSettings;
 }
 
-/** Parts of their character sheet players may edit. Each is on unless the GM turns it off. */
+/**
+ * Parts of their character sheet players may edit freely. Each is on unless the GM turns it off;
+ * then a player's changes to it wait for the GM's approval (shared/permissions.ts).
+ */
 export type PlayerEditKey = "stats" | "inventory" | "augment" | "equipment";
 
 export interface GameSettings {
   playerEdit?: Partial<Record<PlayerEditKey, boolean>>;
-  /** Players may add items to the item library (and edit or delete the ones they made). Off unless the GM turns it on. */
+  /**
+   * Players' new and changed items in the item library go straight into use. Off unless the GM turns
+   * it on: then each waits for the GM's approval.
+   */
   playersCreateItems?: boolean;
   /**
-   * Players may add automated effects to the effect library (and edit or delete the ones they made).
-   * Theirs do nothing at the table until the GM approves them. Off unless the GM turns it on.
+   * Players' new and changed automated effects in the effect library work at the table right away.
+   * Off unless the GM turns it on: then each does nothing until the GM approves it.
    */
   playersCreateEffects?: boolean;
 }
@@ -74,7 +80,7 @@ export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: str
   { key: "equipment", label: "Weapons, Armor & Decks", hint: "Weapons, Armor, their Pages, the Combat Deck and E.G.O. Pages", fields: ["weapons", "armor", "deck", "ego"] },
 ];
 
-/** Whether players in this game may edit a part of their sheet (the GM always can). */
+/** Whether players in this game may edit a part of their sheet without the GM's approval (the GM always can). */
 export function playerCanEdit(game: GameDoc | undefined, key: PlayerEditKey): boolean {
   return game?.settings?.playerEdit?.[key] !== false;
 }

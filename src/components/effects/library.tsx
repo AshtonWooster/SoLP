@@ -13,8 +13,8 @@ export interface LibraryValue {
   library: Record<string, EffectDef>;
   uid: string;
   isGm: boolean;
-  /** The GM, or a player whose GM turned on "Players can create effects": may build rules. */
-  mayAutomate: boolean;
+  /** The GM, or a player whose GM turned on "Players can create effects": their effects work without approval. */
+  autoApprove: boolean;
 }
 
 /** The effect library, for editors deep in a character sheet or Page. */
@@ -28,16 +28,19 @@ export function useEffectLibrary(gameId: string | null): Record<string, EffectDe
 }
 
 /** The context value for a screen: the library, and who's using it. */
-export function useLibraryValue(gameId: string, uid: string | undefined, isGm: boolean, mayAutomate = isGm): LibraryValue {
+export function useLibraryValue(gameId: string, uid: string | undefined, isGm: boolean, autoApprove = isGm): LibraryValue {
   const library = useEffectLibrary(gameId || null);
-  return useMemo(() => ({ gameId, library, uid: uid ?? "", isGm, mayAutomate: isGm || mayAutomate }), [gameId, library, uid, isGm, mayAutomate]);
+  return useMemo(() => ({ gameId, library, uid: uid ?? "", isGm, autoApprove: isGm || autoApprove }), [gameId, library, uid, isGm, autoApprove]);
 }
 
-/** Adds an entry to the game's library (a player's is marked as theirs). Returns its id. */
+/**
+ * Adds an entry to the game's library (a player's is marked as theirs, and waits for the GM's
+ * approval unless the GM turned on "Players can create effects"). Returns its id.
+ */
 export async function addToLibrary(lib: LibraryValue, def: EffectDef): Promise<string> {
   const ref = doc(collection(db, "games", lib.gameId, "effects"));
-  const clean = cleanEffect({ ...def, updatedAt: Date.now(), ...(lib.isGm ? {} : { createdBy: lib.uid, approved: false }) });
-  if (!lib.isGm) clean.approved = false;
+  const clean = cleanEffect({ ...def, updatedAt: Date.now(), ...(lib.isGm ? {} : { createdBy: lib.uid, approved: lib.autoApprove }) });
+  if (!lib.isGm) clean.approved = lib.autoApprove;
   await setDoc(ref, clean);
   return ref.id;
 }
@@ -68,11 +71,9 @@ function LibrarySelect({ kind, label, onPick, disabled, exclude = [] }: { kind: 
           </option>
         ))}
       </select>
-      {(lib.mayAutomate || kind === "passive" || kind === "proficiency") && (
-        <a className="small" href={`/games/${lib.gameId}/effects?kind=${kind}`} target="_blank" rel="noreferrer">
-          Make a new {kindInfo(kind).label} ↗
-        </a>
-      )}
+      <a className="small" href={`/games/${lib.gameId}/effects?kind=${kind}`} target="_blank" rel="noreferrer">
+        Make a new {kindInfo(kind).label} ↗
+      </a>
     </div>
   );
 }

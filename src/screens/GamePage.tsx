@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import type { Character } from "../../shared/character.ts";
 import { characterChecks } from "../../shared/ruleset.ts";
+import { pendingCount } from "../../shared/permissions.ts";
 import { type GameDoc, type GmMeta, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { TopBar } from "../components/TopBar.tsx";
@@ -98,15 +99,13 @@ export function GamePage() {
                   : "Follow the rulebook's six steps"}
               </small>
             </Link>
-            {playersCanCreateItems(game.data) && (
-              <Link className="big-button secondary" to={`/games/${id}/items`}>
-                Item library
-                <small>Your GM lets players make items</small>
-              </Link>
-            )}
+            <Link className="big-button secondary" to={`/games/${id}/items`}>
+              Item library
+              <small>{playersCanCreateItems(game.data) ? "Your GM lets players make items" : "Make items for your GM to approve"}</small>
+            </Link>
             <Link className="big-button secondary" to={`/games/${id}/effects`}>
               Effect library
-              <small>{playersCanCreateEffects(game.data) ? "Your GM lets players make effects" : "What each automated effect does"}</small>
+              <small>{playersCanCreateEffects(game.data) ? "Your GM lets players make effects" : "Make effects for your GM to approve"}</small>
             </Link>
           </div>
         )}
@@ -123,6 +122,7 @@ export function GamePage() {
                   {c ? (
                     <Link to={`/games/${id}/characters/${uid}`}>
                       {c.name || "Unnamed"} <span className="muted small">· {characterStatus(c)}</span>
+                      {isGm && pendingCount(c) > 0 && <span className="chip static warn">Changes to approve</span>}
                     </Link>
                   ) : (
                     <span className="muted small">No character yet</span>

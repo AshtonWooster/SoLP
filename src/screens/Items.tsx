@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { collection, deleteDoc, doc, getDocs, query, setDoc, where, writeBatch } from "firebase/firestore";
+import { collection, deleteDoc, deleteField, doc, getDocs, query, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import type { InventoryItem, ItemTemplate } from "../../shared/character.ts";
 import { blankTemplate, cleanTemplate, ITEM_KINDS } from "../../shared/ruleset.ts";
 import { type GameDoc, playersCanCreateItems } from "../../shared/types.ts";
@@ -14,7 +14,22 @@ const SAVE_DELAY_MS = 500;
 const EXPORT_FORMAT = "solp-items";
 
 /** Edits one library item, saving shortly after each change. */
-function TemplateEditor({ gameId, id, template, onDeleted }: { gameId: string; id: string; template: ItemTemplate; onDeleted: () => void }) {
+function TemplateEditor({
+  gameId,
+  id,
+  template,
+  onDeleted,
+  needsApproval,
+  mayDelete,
+}: {
+  gameId: string;
+  id: string;
+  template: ItemTemplate;
+  onDeleted: () => void;
+  /** A player's change waits for the GM's approval ("Players can create items" is off). */
+  needsApproval: boolean;
+  mayDelete: boolean;
+}) {
   const [t, setT] = useState(template);
   const [status, setStatus] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -32,7 +47,9 @@ function TemplateEditor({ gameId, id, template, onDeleted }: { gameId: string; i
     clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       try {
-        await setDoc(doc(db, "games", gameId, "items", id), cleanTemplate(next)!);
+        const clean = cleanTemplate(next)!;
+        if (needsApproval) clean.pending = true;
+        await setDoc(doc(db, "games", gameId, "items", id), clean);
         dirty.current = false;
         setStatus("Saved");
       } catch (err) {
@@ -48,11 +65,15 @@ function TemplateEditor({ gameId, id, template, onDeleted }: { gameId: string; i
         item={t}
         artFolder={`games/${gameId}/assets/items`}
         onChange={update}
-        onRemove={async () => {
-          clearTimeout(timer.current);
-          await deleteDoc(doc(db, "games", gameId, "items", id));
-          onDeleted();
-        }}
+        onRemove={
+          mayDelete
+            ? async () => {
+                clearTimeout(timer.current);
+                await deleteDoc(doc(db, "games", gameId, "items", id));
+                onDeleted();
+              }
+            : undefined
+        }
       />
     </div>
   );
@@ -76,8 +97,9 @@ export function Items() {
   const { user } = useAuth();
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
-  // Players can open the library too when the GM lets them make items (game settings).
-  const canOpen = isGm || (!!user && !!game.data?.members[user.id] && playersCanCreateItems(game.data));
+  // Players make items too: straight into use when the GM lets them (game settings), otherwise for the GM to approve.
+  const canOpen = isGm || (!!user && !!game.data?.members[user.id]);
+  const needsApproval = !isGm && !playersCanCreateItems(game.data);
   const items = useCollection<ItemTemplate>(canOpen ? `games/${id}/items` : null);
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -107,7 +129,7 @@ export function Items() {
       <>
         <TopBar />
         <main className="center">
-          <p className="error">Only the GM can edit the item library.</p>
+          <p className="error">Only people in this game can see its item library.</p>
           <Link to={`/games/${id}`}>Back to the game</Link>
         </main>
       </>
@@ -120,9 +142,13 @@ export function Items() {
 
   const create = async () => {
     const ref = doc(collection(db, "games", id, "items"));
-    await setDoc(ref, { ...blankTemplate("item"), name: "New item", ...(isGm ? {} : { createdBy: user!.id }) }).catch((e) => setMessage(friendlyError(e)));
+    await setDoc(ref, { ...blankTemplate("item"), name: "New item", ...(isGm ? {} : { createdBy: user!.id }), ...(needsApproval ? { pending: true } : {}) }).catch((e) =>
+      setMessage(friendlyError(e)),
+    );
     setSelected(ref.id);
   };
+
+  const approve = (tid: string) => updateDoc(doc(db, "games", id, "items", tid), { pending: deleteField() }).catch((e) => setMessage(friendlyError(e)));
 
   const exportItems = () => {
     const data = { format: EXPORT_FORMAT, version: 1, game: game.data!.name, items: Object.values(items ?? {}) };
@@ -170,7 +196,9 @@ export function Items() {
           <p className="muted">
             {isGm
               ? "Make the items players can add to their inventories. Edits reach every inventory holding the item."
-              : "Your GM lets players make items. Make new ones here, then add them from your Inventory. You can edit or delete the items you made."}
+              : needsApproval
+                ? "Make new items here. Your GM approves each new item or change before it reaches inventories. You can edit the items you made."
+                : "Your GM lets players make items. Make new ones here, then add them from your Inventory. You can edit or delete the items you made."}
           </p>
           {isGm && (
           <div className="row wrap items-actions">
@@ -208,7 +236,29 @@ export function Items() {
         <div className="equip-studio items-studio">
           <div className="equip-editor">
             {current && mayEdit(items![current]) ? (
-              <TemplateEditor key={current} gameId={id} id={current} template={{ ...blankTemplate(), ...items![current] }} onDeleted={() => setSelected(null)} />
+              <>
+                <TemplateEditor
+                  key={current}
+                  gameId={id}
+                  id={current}
+                  template={{ ...blankTemplate(), ...items![current] }}
+                  onDeleted={() => setSelected(null)}
+                  needsApproval={needsApproval}
+                  mayDelete={!needsApproval || items![current].pending === true}
+                />
+                {items![current].pending && (
+                  <div className="row wrap approval-row">
+                    <span className="chip static warn">Waiting for approval</span>
+                    {isGm ? (
+                      <button type="button" className="chip go" onClick={() => approve(current)}>
+                        Approve {maker(items![current])}'s item
+                      </button>
+                    ) : (
+                      <span className="muted small">It reaches inventories once your GM approves it.</span>
+                    )}
+                  </div>
+                )}
+              </>
             ) : current ? (
               <div className="item-editor">
                 <ItemCard item={items![current]} />
@@ -232,7 +282,7 @@ export function Items() {
                 + New item
               </button>
               {list.map(([tid, t]) => (
-                <ItemCard key={tid} item={t} size="thumb" selected={tid === current} onClick={() => setSelected(tid)} />
+                <ItemCard key={tid} item={t} size="thumb" selected={tid === current} note={t.pending ? "Waiting for approval" : undefined} onClick={() => setSelected(tid)} />
               ))}
             </div>
             {items && list.length === 0 && Object.keys(items).length > 0 && <p className="muted">No items match.</p>}

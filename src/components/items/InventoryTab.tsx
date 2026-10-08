@@ -86,7 +86,7 @@ export function InventoryTab({
   update,
   canMakeItems,
 }: {
-  /** The GM lets players make items (game settings): link to the item library. */
+  /** The sheet's player, who can make items in the item library: link to it. */
   canMakeItems?: boolean;
   c: Character;
   library: Record<string, ItemTemplate> | undefined;
@@ -104,6 +104,8 @@ export function InventoryTab({
   const entries = useMemo(
     () =>
       Object.entries(library ?? {})
+        // Players' items waiting for the GM's approval can't be added yet.
+        .filter(([, t]) => t.pending !== true)
         .filter(([, t]) => (kind === "all" || t.kind === kind) && t.name.toLowerCase().includes(search.trim().toLowerCase()))
         .sort((a, b) => a[1].name.localeCompare(b[1].name)),
     [library, kind, search],

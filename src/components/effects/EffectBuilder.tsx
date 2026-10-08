@@ -311,18 +311,14 @@ export function EffectBuilder({
   def,
   library,
   onChange,
-  mayAutomate = true,
 }: {
   def: EffectDef;
   library: Record<string, EffectDef>;
   onChange: (d: EffectDef) => void;
-  /** False for a player whose GM hasn't turned on "Players can create effects": words only. */
-  mayAutomate?: boolean;
 }) {
   const warnings = effectWarnings(def);
   const info = EFFECT_KINDS.find((k) => k.value === def.kind)!;
   const optionalRules = def.kind === "passive" || def.kind === "proficiency";
-  const showRules = mayAutomate || def.rules.length > 0;
   const setKind = (kind: EffectKind) => {
     const next: EffectDef = { ...def, kind, decay: kind === "status" ? def.decay : "none" };
     if (kind === "passive") next.cost = def.cost ?? 1;
@@ -334,7 +330,7 @@ export function EffectBuilder({
     <div className="effect-builder">
       <div className="row wrap">
         <input className="effect-name" aria-label="Effect name" placeholder={`Name your ${info.label}`} value={def.name} onChange={(e) => onChange({ ...def, name: e.target.value })} />
-        <Select label="Kind" value={def.kind} options={EFFECT_KINDS.filter((k) => mayAutomate || k.value === def.kind || k.value === "passive" || k.value === "proficiency").map((k) => ({ value: k.value, label: k.label }))} onChange={setKind} />
+        <Select label="Kind" value={def.kind} options={EFFECT_KINDS.map((k) => ({ value: k.value, label: k.label }))} onChange={setKind} />
         {def.kind === "passive" && (
           <label className="inline">
             Cost{" "}
@@ -370,9 +366,8 @@ export function EffectBuilder({
         </label>
       )}
 
-      {showRules && optionalRules && <h4 className="rules-head">Automate it {def.rules.length ? "" : <span className="muted small">(optional)</span>}</h4>}
-      {showRules &&
-        def.rules.map((r, i) => (
+      {optionalRules && <h4 className="rules-head">Automate it {def.rules.length ? "" : <span className="muted small">(optional)</span>}</h4>}
+      {def.rules.map((r, i) => (
           <RuleCard
             key={r.id}
             rule={r}
@@ -383,12 +378,9 @@ export function EffectBuilder({
             onRemove={() => onChange({ ...def, rules: def.rules.filter((_, j) => j !== i) })}
           />
         ))}
-      {mayAutomate && (
-        <button type="button" disabled={def.rules.length >= 8} onClick={() => onChange({ ...def, rules: [...def.rules, blankRule(def.kind === "die" ? "hit" : "turnEnd")] })}>
-          + Add a rule
-        </button>
-      )}
-      {!mayAutomate && optionalRules && <p className="muted small">Your GM hasn't turned on player-made automation, so the GM handles what this does.</p>}
+      <button type="button" disabled={def.rules.length >= 8} onClick={() => onChange({ ...def, rules: [...def.rules, blankRule(def.kind === "die" ? "hit" : "turnEnd")] })}>
+        + Add a rule
+      </button>
 
       {def.kind === "status" && (
         <section className="rule-card stacks">

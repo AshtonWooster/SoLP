@@ -1,6 +1,8 @@
 // A player character, built with the steps in Act 5 of the ruleset ("Creating a Character").
 // Stored at games/{gameId}/characters/{uid}: one character per player per game.
 
+import type { PlayerEditKey } from "./types.ts";
+
 export type PrimaryStat = "fortitude" | "prudence" | "justice" | "temperance";
 
 /** A modular, always-active effect on an Augment, Weapon or Armor. Negative cost = Negative Passive. */
@@ -131,8 +133,13 @@ export interface InventoryItem {
  */
 export type ItemTemplate = Omit<InventoryItem, "id" | "templateId" | "count" | "uses"> & {
   updatedAt?: number;
-  /** The player who made it, when the GM lets players make items. Missing: the GM's. */
+  /** The player who made it. Missing: the GM's. */
   createdBy?: string;
+  /**
+   * A player's new or changed item waiting for the GM's approval (when "Players can create items"
+   * is off). It stays out of inventories until then.
+   */
+  pending?: boolean;
 };
 
 export interface Inventory {
@@ -171,6 +178,11 @@ export interface Character {
   ego: Page[];
   /** Portrait image URL. */
   portrait?: string;
+  /**
+   * The player's changes to parts of the sheet the GM approves (game settings), by part: the new
+   * values of that part's fields. They take effect once the GM approves them (shared/permissions.ts).
+   */
+  pendingEdits?: Partial<Record<PlayerEditKey, Partial<Character>>>;
   updatedAt: number;
 }
 
