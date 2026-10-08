@@ -80,7 +80,9 @@ export function MapPreview({
           </button>
         </div>
         <div className="overlay-body">
-          <MapPicture map={map} tokens={tokens} asPlayers={asPlayers} className="preview" />
+          <div className="preview-frame" style={{ maxWidth: `calc(60vh * ${map.width} / ${map.height})` }}>
+            <MapPicture map={map} tokens={tokens} asPlayers={asPlayers} />
+          </div>
           <label className="me-check">
             <input type="checkbox" checked={asPlayers} onChange={(e) => setAsPlayers(e.target.checked)} /> Show it the way players will see it
           </label>

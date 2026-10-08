@@ -66,19 +66,9 @@ export function MapPicture({ map: full, tokens, asPlayers, className = "" }: { m
   const map = asPlayers ? visibleMap(full) : full;
   const shown = asPlayers ? tokens.filter((t) => !t.hidden) : tokens;
   return (
-    <div
-      className={"map-picture " + className + (map.hideGrid ? " no-lines" : "")}
-      style={{
-        aspectRatio: `${map.width} / ${map.height}`,
-        backgroundSize: `${100 / map.width}% ${100 / map.height}%, 100% 100%`,
-        backgroundImage: [
-          map.hideGrid ? "none" : "linear-gradient(#2a242099 1px, transparent 1px), linear-gradient(90deg, #2a242099 1px, transparent 1px)",
-          map.background ? `url("${map.background}")` : "none",
-        ].join(", "),
-      }}
-      role="img"
-      aria-label={`${full.name}, ${full.width} by ${full.height} tiles`}
-    >
+    <div className={"map-picture " + className} style={{ aspectRatio: `${map.width} / ${map.height}` }} role="img" aria-label={`${full.name}, ${full.width} by ${full.height} tiles`}>
+      {map.background && <img className={"picture-bg" + (map.backgroundHidden ? " is-hidden" : "")} src={map.background} alt="" />}
+      {!map.hideGrid && <span className="picture-lines" style={{ backgroundSize: `${100 / map.width}% ${100 / map.height}%` }} />}
       {map.background && map.backgroundHidden && !asPlayers && <span className="hidden-tag">Background hidden</span>}
       <AssetLayer map={map} />
       {shown.map((t) => (
