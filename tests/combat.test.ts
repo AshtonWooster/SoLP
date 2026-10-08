@@ -581,3 +581,52 @@ test("sides: allies are with the party, neutrals oppose everyone", async () => {
   assert.equal(opposed("neutral", "player"), true);
   assert.equal(opposed("enemy", "enemy"), false);
 });
+
+test("an unopposed attack doesn't clash: both Pages land One-Sided on their owners' turns", () => {
+  const s = setup([page("slash", "melee", [die("slash", 6)])], [page("bite", "melee", [die("pierce", 4)])]);
+  endTurn(s, p1);
+  enemyPlay(s, "bite", ["roland"]);
+  endTurn(s);
+  const card = s.c().decks.roland.hand.find((x) => x.pageId === "slash")!;
+  s.act({ type: "aim", source: "hand", cardId: card.id });
+  s.act({ type: "slot", targets: ["rat"], unopposed: true });
+  assert.ok(s.c().slots.every((x) => !x.clashWith), "no Clash");
+  assert.match(s.table.log.at(-1)!, /unopposed/);
+  endTurn(s, p1); // Rat's turn: the Bite hits Roland.
+  assert.equal(s.hp("roland"), 26);
+  assert.equal(s.hp("rat"), 30);
+  endTurn(s); // Roland's turn: the Slash hits the Rat.
+  assert.equal(s.hp("rat"), 24);
+  assert.equal(s.c().slots.length, 0);
+});
+
+test("a single-target Page can clash with the target's chosen Speed Die", () => {
+  const s = setup([page("slash", "melee", [die("slash", 6)])], [page("bite", "melee", [die("pierce", 4)]), page("claw", "melee", [die("slash", 2)])]);
+  s.c().order.find((x) => x.tokenId === "rat")!.dice = 2;
+  endTurn(s, p1);
+  enemyPlay(s, "bite", ["roland"]); // Die 1
+  enemyPlay(s, "claw", ["roland"]); // Die 2
+  endTurn(s);
+  const card = s.c().decks.roland.hand.find((x) => x.pageId === "slash")!;
+  s.act({ type: "aim", source: "hand", cardId: card.id });
+  assert.throws(() => s.act({ type: "slot", targets: ["rat"], targetDie: 2 }), /no Speed Die 3/);
+  s.act({ type: "slot", targets: ["rat"], targetDie: 1 });
+  const slash = s.c().slots.find((x) => x.ownerId === "roland")!;
+  const claw = s.c().slots.find((x) => x.pageId === "claw")!;
+  const bite = s.c().slots.find((x) => x.pageId === "bite")!;
+  assert.equal(slash.clashWith, claw.id);
+  assert.equal(slash.targets[0].die, 1);
+  assert.equal(bite.clashWith, undefined, "the Page on the other die is left alone");
+});
+
+test("slotting without a chosen die still clashes with the target's first Speed Die", () => {
+  const s = setup([page("slash", "melee", [die("slash", 6)])], [page("bite", "melee", [die("pierce", 4)]), page("claw", "melee", [die("slash", 2)])]);
+  s.c().order.find((x) => x.tokenId === "rat")!.dice = 2;
+  endTurn(s, p1);
+  enemyPlay(s, "bite", ["roland"]);
+  enemyPlay(s, "claw", ["roland"]);
+  endTurn(s);
+  play(s, "slash", ["rat"]);
+  const bite = s.c().slots.find((x) => x.pageId === "bite")!;
+  assert.equal(s.c().slots.find((x) => x.ownerId === "roland")!.clashWith, bite.id);
+});

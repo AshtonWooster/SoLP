@@ -4,7 +4,7 @@ import { type Check, maxResources, PRIMARY_STATS, proficiencyCount, RANKS, rankT
 import { friendlyError } from "../../firebase.ts";
 import { Stepper } from "../Fields.tsx";
 import { uploadImage } from "../ImageUpload.tsx";
-import { StatIcon } from "../LorIcons.tsx";
+import { SecondaryStatIcon, StatIcon } from "../LorIcons.tsx";
 
 export type CreatorStep = "intro" | "license" | "stats" | "story" | "summary";
 export type SheetTab = "sheet" | "augment" | "inventory" | "decks";
@@ -212,7 +212,9 @@ function StatsStep({ c, update, note }: Pick<Props, "c" | "update"> & { note?: R
           {SECONDARY_STATS.map((s) => (
             <div className="stat-row" key={s.key}>
               <div>
-                <strong>{s.label}</strong>
+                <strong>
+                  <SecondaryStatIcon stat={s.key} /> {s.label}
+                </strong>
                 <div className="muted small">{s.effect}</div>
               </div>
               <Stepper
@@ -291,7 +293,9 @@ function SummaryStep({ c, update, isGm, gameId, uid, checks, setStep, goTab }: P
               ))}
               {SECONDARY_STATS.map((s) => (
                 <div key={s.key}>
-                  <span className="muted small">{s.label}</span>
+                  <span className="muted small">
+                    <SecondaryStatIcon stat={s.key} size={14} /> {s.label}
+                  </span>
                   <strong>{c.secondary[s.key] ?? 0}</strong>
                 </div>
               ))}
