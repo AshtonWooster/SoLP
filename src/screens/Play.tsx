@@ -22,6 +22,8 @@ import { db, friendlyError } from "../firebase.ts";
 import { useClient } from "../net/hooks.ts";
 
 type Category = "combat" | "ego" | "aux";
+/** Statuses that just ask for the next pick; the target popup asks for those itself. */
+const PICK_PROMPTS = ["Pick a Page", "Pick targets", "Pick a target"];
 const CATEGORIES: { key: Category; label: string; source: PageSource }[] = [
   { key: "combat", label: "Combat", source: "hand" },
   { key: "ego", label: "E.G.O.", source: "ego" },
@@ -172,11 +174,9 @@ export function Play() {
     setCategory(cat);
     setSelected((s) => ({ ...s, [cat]: card.id }));
     setViewing(null);
-    // Die, target and Page all chosen: place it right away.
-    const p = combat?.pages[card.pageId];
-    if (p && canAct && mine && target && !isMassAttack(p.type) && validTargets(table, mine, p).some((t) => t.id === target)) {
-      use(cat, card, [target]);
-    }
+    // Picking a Page goes straight to picking its target.
+    setTarget(undefined);
+    if (combat && mine) setOverlay("targets");
   };
 
   const pickTarget = (tokenId: string) => {
@@ -318,22 +318,11 @@ export function Play() {
       <section className="player-bottom">
         {combat && mine && deck && (
           <div className="select-strip">
-            <button
-              type="button"
-              className={"pick-button" + (page ? " picked" : "")}
-              disabled={!page || !selectedCard}
-              onClick={() => page && selectedCard && setViewing({ page, card: selectedCard, category })}
-            >
-              <span className="pick-label">Page</span>
-              <span className="pick-value">{page ? page.name || "Unnamed" : "Tap a Page below"}</span>
-            </button>
-            <button type="button" className={"pick-button" + (targets.length ? " picked" : "")} onClick={() => setOverlay("targets")}>
-              <span className="pick-label">Target</span>
-              <span className="pick-value">{targets.length ? targets.map((t) => table.tokens[t]?.name).join(", ") : "Pick a target"}</span>
-            </button>
-            <span className={"chip static " + (problem ? "warn" : "ok")} role="status">
-              {problem || "Ready"}
-            </span>
+            {problem && !PICK_PROMPTS.includes(problem) && (
+              <span className="chip static warn" role="status">
+                {problem}
+              </span>
+            )}
             {page && selectedCard && !problem && (
               <button type="button" className="chip go" onClick={() => use(category, selectedCard, targets)}>
                 Use{mass ? ` on ${targets.length}` : ""}
@@ -420,10 +409,11 @@ export function Play() {
           </button>
         </Overlay>
       )}
-      {pending && combat && (
+      {pending && combat && combat.pages[pending.card.pageId] && (
         <SlotChoice
           table={table}
-          pageName={combat.pages[pending.card.pageId]?.name ?? ""}
+          page={combat.pages[pending.card.pageId]}
+          meId={mine?.id}
           targetId={pending.target}
           onClose={() => setPending(null)}
           onPick={(how) => {
@@ -491,7 +481,7 @@ export function Play() {
           action={
             viewing.card && viewing.category
               ? selected[viewing.category] === viewing.card.id
-                ? { label: "Deselect", run: () => (clearSelection(viewing.category), setViewing(null)) }
+                ? { label: "Choose target", run: () => (setCategory(viewing.category!), setViewing(null), setOverlay("targets")) }
                 : { label: "Select this Page", run: () => selectCard(viewing.category!, viewing.card!) }
               : undefined
           }

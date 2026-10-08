@@ -5,6 +5,7 @@ import { test } from "node:test";
 import type { Dice, DiceKind, Page, PageType } from "../shared/character.ts";
 import { activeToken, applyAction, type Actor, type EngineContext, type Loadout } from "../shared/engine.ts";
 import { DASH_MOVEMENT, STARTING_HAND } from "../shared/ruleset.ts";
+import { clashOdds } from "../shared/combat.ts";
 import type { TableAction, TableState, Token } from "../shared/types.ts";
 
 const gm: Actor = { uid: "gm", role: "gm", displayName: "GM" };
@@ -629,4 +630,15 @@ test("slotting without a chosen die still clashes with the target's first Speed 
   play(s, "slash", ["rat"]);
   const bite = s.c().slots.find((x) => x.pageId === "bite")!;
   assert.equal(s.c().slots.find((x) => x.ownerId === "roland")!.clashWith, bite.id);
+});
+
+test("clash odds compare two dice's Power ranges", () => {
+  // 1d4+2 (3-6) vs 1d4 (1-4): of 16 pairs, 13 wins, 2 draws (3 v 3, 4 v 4) and 1 loss.
+  const odds = clashOdds({ id: "a", kind: "slash", counter: false, sides: 4, basePower: 2 }, { id: "b", kind: "pierce", counter: false, sides: 4, basePower: 0 });
+  assert.equal(odds.win + odds.draw + odds.lose, 1);
+  assert.equal(odds.win, 13 / 16);
+  assert.equal(odds.draw, 2 / 16);
+  const same = clashOdds({ id: "a", kind: "slash", counter: false, sides: 6, basePower: 0 }, { id: "b", kind: "block", counter: false, sides: 6, basePower: 0 });
+  assert.equal(same.win, same.lose);
+  assert.equal(same.draw, 1 / 6);
 });
