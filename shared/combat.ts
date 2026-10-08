@@ -948,3 +948,24 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   }
   log(table, `${token.name} slots ${page.name} against ${names} (${page.cost} Light).`);
 }
+
+/**
+ * Chance that die `a` beats, draws with, or loses to die `b` in one clash, from their Power ranges
+ * alone (before Stats, Effects and Counter Dice). Used for the clash preview on phones.
+ */
+export function clashOdds(a: Dice, b: Dice): { win: number; draw: number; lose: number } {
+  let win = 0;
+  let draw = 0;
+  const sa = Math.max(1, a.sides);
+  const sb = Math.max(1, b.sides);
+  for (let i = 1; i <= sa; i++) {
+    for (let j = 1; j <= sb; j++) {
+      const pa = Math.max(0, i + a.basePower);
+      const pb = Math.max(0, j + b.basePower);
+      if (pa > pb) win++;
+      else if (pa === pb) draw++;
+    }
+  }
+  const total = sa * sb;
+  return { win: win / total, draw: draw / total, lose: (total - win - draw) / total };
+}
