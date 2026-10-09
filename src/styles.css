@@ -70,7 +70,19 @@ button:disabled { opacity: 0.6; cursor: default; }
 .role-badge { font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 999px; align-self: center; vertical-align: middle; }
 .role-badge.role-gm { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
 .role-badge.role-player { background: color-mix(in srgb, var(--sanity) 25%, transparent); color: var(--sanity); }
-.game-page { max-width: 720px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; }
+.game-page { max-width: 1040px; margin: 0 auto; padding: 24px 16px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
+.game-page-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.game-players { display: flex; flex-direction: column; gap: 10px; }
+.game-players h3 { margin: 0; }
+.game-players ul { display: flex; flex-direction: column; gap: 12px; }
+.game-player { display: flex; flex-direction: column; gap: 6px; }
+.game-player-name { font-weight: 600; }
+.player-preview { display: flex; align-items: center; gap: 10px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; color: var(--text); text-decoration: none; }
+.player-preview .npc-portrait { width: 44px; height: 44px; font-size: 1.1rem; }
+.player-preview-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; align-items: flex-start; }
+.player-preview-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.player-preview.clickable:hover { border-color: var(--accent); }
+@media (max-width: 820px) { .game-page { grid-template-columns: 1fr; } }
 .screen-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .invite-code { font-size: 1.3rem; letter-spacing: 0.15em; color: var(--accent); }
 .center { max-width: 420px; margin: 0 auto; padding: 3rem 16px; display: flex; flex-direction: column; gap: 1rem; }
