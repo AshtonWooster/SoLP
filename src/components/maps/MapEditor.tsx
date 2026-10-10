@@ -693,7 +693,6 @@ function MapSettings({ gameId, map, act }: { gameId: string; map: MapInfo & { id
 function PlaceCharacters({ gameId, map, act }: { gameId: string; map: MapInfo & { id: string }; act: Act }) {
   const templates = useCollection<NpcTemplate>(`games/${gameId}/enemies`);
   const [hidden, setHidden] = useState(false);
-  const [name, setName] = useState("");
   const list = Object.entries(templates ?? {})
     .map(([tid, raw]) => [tid, normalizeNpc(raw)] as const)
     .sort((a, b) => a[1].name.localeCompare(b[1].name));
@@ -721,16 +720,6 @@ function PlaceCharacters({ gameId, map, act }: { gameId: string; map: MapInfo & 
           </li>
         ))}
       </ul>
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (act({ type: "addToken", name: name || "Enemy", side: "enemy", x: map.width - 3, y, mapId: map.id, hidden })) setName("");
-        }}
-      >
-        <input aria-label="New token name" placeholder="Quick enemy name" value={name} onChange={(e) => setName(e.target.value)} />
-        <button>Add</button>
-      </form>
     </section>
   );
 }

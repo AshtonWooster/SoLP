@@ -159,3 +159,44 @@ export function ResistanceGrid({
     </div>
   );
 }
+
+export type ResourceKey = "hp" | "stagger" | "light" | "sanity";
+
+/** Health, Stagger Resist, Light and Sanity, each with its emblem and color. */
+export const RESOURCES: { key: ResourceKey; max: "maxHp" | "maxStagger" | "maxLight" | "maxSanity"; label: string }[] = [
+  { key: "hp", max: "maxHp", label: "Health" },
+  { key: "stagger", max: "maxStagger", label: "Stagger Resist" },
+  { key: "light", max: "maxLight", label: "Light" },
+  { key: "sanity", max: "maxSanity", label: "Sanity" },
+];
+
+const RESOURCE_ICONS: Record<ResourceKey, { color: string; body: React.ReactNode }> = {
+  // A drop of blood.
+  hp: { color: "var(--hp)", body: <path d="M12 2.8 C12 2.8 5 10.4 5 14.6 C5 18.5 8.1 21.2 12 21.2 C15.9 21.2 19 18.5 19 14.6 C19 10.4 12 2.8 12 2.8 Z" /> },
+  // A cracked shield.
+  stagger: {
+    color: "var(--p-stagger)",
+    body: <path fillRule="evenodd" d="M4 3.5 H20 V12 C20 16.8 16.6 19.6 12 21.5 C7.4 19.6 4 16.8 4 12 Z M12.6 5 L10 10.5 L13.2 12 L10.6 18.5 L11.4 18.7 L14.8 11.4 L11.8 10 L13.6 5 Z" />,
+  },
+  // A sun.
+  light: {
+    color: "var(--p-light)",
+    body: (
+      <>
+        <circle cx="12" cy="12" r="4.6" />
+        <path d="M11.2 1.8 H12.8 V5.4 H11.2 Z M11.2 18.6 H12.8 V22.2 H11.2 Z M1.8 11.2 H5.4 V12.8 H1.8 Z M18.6 11.2 H22.2 V12.8 H18.6 Z M4.2 5.3 L5.3 4.2 L7.8 6.7 L6.7 7.8 Z M16.2 17.3 L17.3 16.2 L19.8 18.7 L18.7 19.8 Z M4.2 18.7 L6.7 16.2 L7.8 17.3 L5.3 19.8 Z M16.2 6.7 L18.7 4.2 L19.8 5.3 L17.3 7.8 Z" />
+      </>
+    ),
+  },
+  // A crescent moon.
+  sanity: { color: "var(--sanity)", body: <path d="M15.5 3 C10.2 3.6 6.3 8 6.3 13.2 C6.3 17.6 9.3 21 13.6 21 C16.6 21 19.2 19.4 20.6 16.9 C13.5 18.4 9.4 10.6 15.5 3 Z" /> },
+};
+
+export function ResourceIcon({ res, size = 20 }: { res: ResourceKey; size?: number }) {
+  const icon = RESOURCE_ICONS[res];
+  return (
+    <svg className="res-icon" viewBox="0 0 24 24" width={size} height={size} style={{ fill: icon.color }} aria-hidden="true" data-res={res}>
+      {icon.body}
+    </svg>
+  );
+}

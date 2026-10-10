@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import QRCode from "qrcode";
+import type { Character } from "../../shared/character.ts";
+import { tokenGear } from "../../shared/tokenPreview.ts";
 import type { GameDoc, GmMeta, TableAction } from "../../shared/types.ts";
-import { useAuth, useDoc } from "../api.ts";
+import { useAuth, useCollection, useDoc } from "../api.ts";
+import { TokenPopup } from "../components/TokenPopup.tsx";
 import { activeToken, reachableTiles } from "../../shared/engine.ts";
 import { isMassAttack } from "../../shared/ruleset.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
@@ -30,6 +33,9 @@ export function Board() {
   // Outside combat: the token picked up to move anywhere (your own, or any on the GM's account).
   const [carrying, setCarrying] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // The token tapped to see its character (when the tap does nothing else).
+  const [peekId, setPeekId] = useState<string | null>(null);
+  const characters = useCollection<Character>(isMember ? `games/${id}/characters` : null);
   // Damage from a clash shows once its die has played on the board.
   const { step: fx, table } = useClashPlayback(snapshot.table);
   const active = table ? activeToken(table) : undefined;
@@ -61,13 +67,18 @@ export function Board() {
   if (!isMember) return <TableError error="You're not in this game." gameId={id} />;
   if (!table || snapshot.status === "closed") return <Waiting snapshot={snapshot} gameId={id} />;
 
-  const send = (action: TableAction) => client?.act(action).then(() => setError(""), (e: Error) => setError(e.message));
+  const send = (action: TableAction) =>
+    client?.act(action).then(
+      () => setError(""),
+      (e: Error) => setError(e.message),
+    );
   const aim = combat?.aim;
   const aimedPage = aim && combat && (combat.pages[aim.pageId] ?? table.tokens[aim.tokenId]?.pages?.find((p) => p.id === aim.pageId));
   const aiming = !!aim && mayAct && aim.tokenId === playerTurn?.id;
   const mass = !!aimedPage && isMassAttack(aimedPage.type);
   const { targetable } = aimTargets(table);
   const recent = table.log.slice(-8);
+  const peek = peekId ? table.tokens[peekId] : undefined;
 
   return (
     <main className="board">
@@ -82,29 +93,41 @@ export function Board() {
         {!combat && <span className="muted small">{carrying ? "Tap a tile to move there." : "Tap your token, then a tile, to move."}</span>}
       </header>
       <div className={combat ? "board-layout" : ""}>
-        <Grid
-          state={table}
-          activeId={active?.id}
-          selectedId={moving ? playerTurn?.id : carrying}
-          reachable={reachable}
-          fx={fx}
-          onTokenClick={(t) => {
-            if (aiming && targetable.has(t.id)) {
-              send(mass ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
-              return;
-            }
-            if (mayAct && playerTurn && t.id === playerTurn.id) return setMoving((m) => !m);
-            if (!combat && (isGm || t.ownerId === user?.id)) setCarrying((c) => (c === t.id ? null : t.id));
-          }}
-          onCellClick={(x, y) => {
-            if (!combat && carrying) {
-              send({ type: "move", tokenId: carrying, x, y });
-              return setCarrying(null);
-            }
-            if (!reachable?.has(`${x},${y}`)) return setMoving(false);
-            send({ type: "turnMove", x, y })?.then(() => setMoving(false));
-          }}
-        />
+        <div className="board-map">
+          <Grid
+            state={table}
+            activeId={active?.id}
+            selectedId={moving ? playerTurn?.id : carrying}
+            reachable={reachable}
+            fx={fx}
+            onTokenClick={(t) => {
+              if (aiming && targetable.has(t.id)) {
+                send(mass ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
+                return;
+              }
+              if (mayAct && playerTurn && t.id === playerTurn.id) return setMoving((m) => !m);
+              if (!combat && (isGm || t.ownerId === user?.id)) return setCarrying((c) => (c === t.id ? null : t.id));
+              setPeekId((p) => (p === t.id ? null : t.id));
+            }}
+            onCellClick={(x, y) => {
+              if (!combat && carrying) {
+                send({ type: "move", tokenId: carrying, x, y });
+                return setCarrying(null);
+              }
+              if (!reachable?.has(`${x},${y}`)) return setMoving(false);
+              send({ type: "turnMove", x, y })?.then(() => setMoving(false));
+            }}
+          />
+          {peek && (
+            <TokenPopup
+              key={peek.id}
+              token={peek}
+              // Players see their party's gear; a GM character's deck stays the GM's secret.
+              gear={peek.side === "player" ? tokenGear(peek, peek.ownerId ? characters?.[peek.ownerId] : undefined) : undefined}
+              onClose={() => setPeekId(null)}
+            />
+          )}
+        </div>
         {combat && (
           <aside className="board-side">
             <div className="board-turn">
