@@ -1,32 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import type { GameDoc, GmMeta, Resources, TableAction, TableState, Token } from "../../shared/types.ts";
+import type { GameDoc, GmMeta, TableAction, TableState, Token } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
-import { activeToken, newId } from "../../shared/engine.ts";
+import { activeToken } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
 import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
-import { EnemyDeckEditor } from "../components/EnemyDeckEditor.tsx";
 import { isMassAttack, normalizeNpc, NPC_SIDES, npcSpawnData } from "../../shared/ruleset.ts";
-import type { NpcTemplate } from "../../shared/character.ts";
+import type { Character, NpcTemplate } from "../../shared/character.ts";
+import { playerList } from "../../shared/players.ts";
+import { tokenGear } from "../../shared/tokenPreview.ts";
+import { PlayerPreview } from "../components/PlayerPreview.tsx";
+import { TokenPopup } from "../components/TokenPopup.tsx";
 import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { MapEditor } from "../components/maps/MapEditor.tsx";
 import { MapList, MapPreview, NewMapForm } from "../components/maps/MapsList.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
-import { effectText } from "../components/effects/EffectBuilder.tsx";
-import { useEffectLibrary } from "../components/effects/library.tsx";
-import { isLive } from "../../shared/effects.ts";
 import { useHost } from "../net/hooks.ts";
-import { NumberField } from "../components/NumberField.tsx";
-
-const RESOURCE_FIELDS: [keyof Resources, keyof Resources, string][] = [
-  ["hp", "maxHp", "Health"],
-  ["stagger", "maxStagger", "Stagger Resist"],
-  ["light", "maxLight", "Light"],
-  ["sanity", "maxSanity", "Sanity"],
-];
 
 /** The GM's laptop: runs the table and can override anything. */
 export function Gm() {
@@ -47,6 +39,9 @@ export function Gm() {
   const tab = params.get("tab") === "maps" ? "maps" : "table";
   const [editingId, setEditingId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  // Player characters (for the player list and their tokens' gear) and the GM's own characters.
+  const characters = useCollection<Character>(isGm ? `games/${id}/characters` : null);
+  const templates = useCollection<NpcTemplate>(isGm ? `games/${id}/enemies` : null);
 
   if (game.error) return <TableError error={game.error} gameId={id} />;
   if (game.loading) return <main className="center muted">Loading…</main>;
@@ -71,12 +66,12 @@ export function Gm() {
 
   const table = snapshot.table;
   const selected = selectedId ? table?.tokens[selectedId] : undefined;
-  const players = Object.entries(game.data!.members).filter(([, m]) => m.role === "player");
+  const players = playerList(id, game.data!, characters, true);
   const setTab = (next: "table" | "maps") => {
     setActionError("");
     setParams(next === "maps" ? { tab: "maps" } : {}, { replace: true });
   };
-  const editing = table && editingId && (editingId === table.map.id || table.maps?.[editingId]) ? editingId : table?.map.id ?? "";
+  const editing = table && editingId && (editingId === table.map.id || table.maps?.[editingId]) ? editingId : (table?.map.id ?? "");
   const openInEditor = (mapId: string) => {
     setEditingId(mapId);
     setPreviewId(null);
@@ -85,7 +80,9 @@ export function Gm() {
 
   const header = (
     <header className="gm-header">
-      <Link to={`/games/${id}`} className="muted">← {game.data!.name}</Link>
+      <Link to={`/games/${id}`} className="muted">
+        ← {game.data!.name}
+      </Link>
       <nav className="gm-tabs" aria-label="GM screen">
         <button className={tab === "table" ? "on" : ""} aria-current={tab === "table" ? "page" : undefined} onClick={() => setTab("table")}>
           Table
@@ -95,7 +92,9 @@ export function Gm() {
         </button>
       </nav>
       <ConnectionBadge status={snapshot.status} />
-      <a href={`/games/${id}/board`} target="_blank" rel="noreferrer">Open board</a>
+      <a href={`/games/${id}/board`} target="_blank" rel="noreferrer">
+        Open board
+      </a>
       {meta.data && <span className="muted">Invite code: {meta.data.inviteCode}</span>}
       {actionError && <span className="error">{actionError}</span>}
     </header>
@@ -127,7 +126,8 @@ export function Gm() {
                 ) : (
                   <>
                     <span>
-                      Players are on <strong>{table.map.name}</strong>. You're getting <strong>{table.maps?.[editing]?.name}</strong> ready; they can't see it until you move them.
+                      Players are on <strong>{table.map.name}</strong>. You're getting <strong>{table.maps?.[editing]?.name}</strong> ready; they can't see it
+                      until you move them.
                     </span>
                     <button className="big-button" onClick={() => setPreviewId(editing)}>
                       Move players here…
@@ -153,255 +153,182 @@ export function Gm() {
     );
   }
 
+  const sheetHref = (t: Token) =>
+    (t.side === "player" ? t.ownerId && `/games/${id}/characters/${t.ownerId}` : t.templateId && `/games/${id}/npcs`) || undefined;
+  const gearSource = (t: Token) =>
+    t.side === "player"
+      ? t.ownerId
+        ? characters?.[t.ownerId]
+        : undefined
+      : t.templateId && templates?.[t.templateId]
+        ? normalizeNpc(templates[t.templateId])
+        : undefined;
+
   return (
-    <main className="gm">
+    <main className="gm gm-table">
       {header}
 
-      <section className="gm-map">
+      <section className="gm-main">
         {table && (
-          <Grid
-            state={mapTable ?? table}
-            fx={fx}
-            selectedId={selectedId}
-            activeId={table.combat ? activeToken(table)?.id : undefined}
-            onTokenClick={(t) => {
-              // While a Page is being aimed, clicking a lit token targets it.
-              const aim = table.combat?.aim;
-              if (aim && aimTargets(table).targetable.has(t.id)) {
-                const page = table.combat!.pages[aim.pageId] ?? table.tokens[aim.tokenId]?.pages?.find((p) => p.id === aim.pageId);
-                act(page && isMassAttack(page.type) ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
-                return;
+          <div className="gm-toolbar">
+            <ToolbarMenu
+              label={
+                <>
+                  Maps <span className="muted small">· {table.map.name}</span>
+                </>
               }
-              setSelectedId(t.id === selectedId ? null : t.id);
-            }}
-            onCellClick={(x, y) => selectedId && act({ type: "move", tokenId: selectedId, x, y })}
-          />
+            >
+              {(close) => (
+                <>
+                  <p className="muted small">Pick a map to preview it before moving the players there.</p>
+                  <MapList
+                    table={table}
+                    onPick={(mapId) => {
+                      setPreviewId(mapId);
+                      close();
+                    }}
+                  />
+                  <button onClick={() => setTab("maps")}>Open the map editor</button>
+                </>
+              )}
+            </ToolbarMenu>
+            <ToolbarMenu label="Characters">{() => <TemplateList gameId={id} templates={templates} table={table} act={act} />}</ToolbarMenu>
+            {!table.combat && <ToolbarMenu label="Start combat">{(close) => <CombatStart table={table} act={act} onStarted={close} />}</ToolbarMenu>}
+            <span className="muted small gm-hint">Click a token to see it; with it open, click a tile to move it.</span>
+          </div>
         )}
-        <p className="muted">Click a token to select it, then click a tile to move it.</p>
-      </section>
-
-      <section className="gm-side">
-        {table && (
-          <details className="panel maps-panel">
-            <summary>
-              Maps <span className="muted small">· {table.map.name}</span>
-            </summary>
-            <p className="muted small">Pick a map to preview it before moving the players there.</p>
-            <MapList table={table} onPick={setPreviewId} />
-            <button onClick={() => setTab("maps")}>Open the map editor</button>
-          </details>
-        )}
-        {table && <CombatPanel table={table} act={act} />}
-        {table && <TemplatePanel gameId={id} table={table} act={act} />}
-        <AddEnemy onAdd={(name) => act({ type: "addToken", name, side: "enemy", x: 10, y: 5 })} />
-        {selected ? (
-          <Override
-            key={selected.id}
-            token={selected}
-            note={snapshot.notes[selected.id] ?? ""}
-            act={act}
-            onRemoved={() => setSelectedId(null)}
-          />
-        ) : (
-          <p className="muted">Select a token to override its stats.</p>
-        )}
-        <h3>Players</h3>
-        <ul className="plain">
+        <div className="gm-map-area" style={table ? ({ "--map-ratio": `${table.map.width / table.map.height}` } as React.CSSProperties) : undefined}>
+          {table && (
+            <Grid
+              state={mapTable ?? table}
+              fx={fx}
+              selectedId={selectedId}
+              activeId={table.combat ? activeToken(table)?.id : undefined}
+              onTokenClick={(t) => {
+                // While a Page is being aimed, clicking a lit token targets it.
+                const aim = table.combat?.aim;
+                if (aim && aimTargets(table).targetable.has(t.id)) {
+                  const page = table.combat!.pages[aim.pageId] ?? table.tokens[aim.tokenId]?.pages?.find((p) => p.id === aim.pageId);
+                  act(page && isMassAttack(page.type) ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
+                  return;
+                }
+                setSelectedId(t.id === selectedId ? null : t.id);
+              }}
+              onCellClick={(x, y) => selectedId && act({ type: "move", tokenId: selectedId, x, y })}
+            />
+          )}
+          {selected && (
+            <TokenPopup
+              key={selected.id}
+              token={selected}
+              gear={tokenGear(selected, gearSource(selected))}
+              gm={{ act, note: snapshot.notes[selected.id] ?? "", sheetHref: sheetHref(selected), onRemoved: () => setSelectedId(null) }}
+              onClose={() => setSelectedId(null)}
+            />
+          )}
+        </div>
+        <ul className="gm-players plain" aria-label="Players">
           {players.length === 0 && <li className="muted">No players yet.</li>}
-          {players.map(([uid, m]) => (
-            <li key={uid}>
-              {m.displayName} <span className={"dot " + (online.has(uid) ? "ok" : "bad")} />
+          {players.map((p) => (
+            <li key={p.uid} className="gm-player">
+              <span className="game-player-name">
+                <span className={"dot " + (online.has(p.uid) ? "ok" : "bad")} /> {p.username}
+              </span>
+              {p.character ? <PlayerPreview entry={p} newTab /> : <span className="muted small">No character yet</span>}
             </li>
           ))}
         </ul>
-        <h3>Log</h3>
-        <ol className="log">
-          {table?.log.slice(-15).reverse().map((line, i) => <li key={i}>{line}</li>)}
-        </ol>
+      </section>
+
+      <section className="gm-side">
+        {table?.combat && <CombatPanel table={table} act={act} />}
+        <div className="gm-log">
+          <h3>Log</h3>
+          <ol className="log">
+            {table?.log
+              .slice(-200)
+              .reverse()
+              .map((line, i) => (
+                <li key={`${table.log.length}-${i}`} className={line.startsWith(" ") ? "detail" : ""}>
+                  {line.trim()}
+                </li>
+              ))}
+          </ol>
+        </div>
       </section>
       {preview}
     </main>
   );
 }
 
-function AddEnemy({ onAdd }: { onAdd: (name: string) => boolean }) {
-  const [name, setName] = useState("");
+/** A button above the map that opens a dropdown; clicking outside closes it. */
+function ToolbarMenu({ label, children }: { label: React.ReactNode; children: (close: () => void) => React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && !(e.target as Element).closest?.(".overlay") && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
   return (
-    <form
-      className="row"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (onAdd(name || "Enemy")) setName("");
-      }}
-    >
-      <input placeholder="Enemy name" value={name} onChange={(e) => setName(e.target.value)} />
-      <button>Add enemy</button>
-    </form>
+    <div className="toolbar-menu" ref={ref}>
+      <button className={open ? "on" : ""} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {label} <span className="muted">▾</span>
+      </button>
+      {open && <div className="toolbar-dropdown">{children(() => setOpen(false))}</div>}
+    </div>
   );
 }
 
-/** GM override panel: set any resource on any token directly. */
-function Override({
-  token,
-  note,
-  act,
-  onRemoved,
-}: {
-  token: Token;
-  note: string;
-  act: (action: TableAction) => boolean;
-  onRemoved: () => void;
-}) {
-  const { id: gameIdParam = "" } = useParams();
-  const [notes, setNotes] = useState(note);
-  useEffect(() => setNotes(note), [note]);
-
-  const set = (key: keyof Resources, value: number) =>
-    act({ type: "setResources", tokenId: token.id, patch: { [key]: value } });
-
+/** Pick who's in the fight, roll Speed and start combat. */
+function CombatStart({ table, act, onStarted }: { table: TableState; act: (action: TableAction) => boolean; onStarted: () => void }) {
+  const tokens = Object.values(table.tokens);
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(tokens.map((t) => t.id)));
   return (
-    <div className="override">
-      <h3>
-        <span className="swatch" style={{ background: token.color }} /> {token.name}{" "}
-        <span className="muted">({token.side})</span>
-      </h3>
-      {RESOURCE_FIELDS.map(([cur, max, label]) => (
-        <div className="resource-row" key={cur}>
-          <label>{label}</label>
-          <button onClick={() => set(cur, token.resources[cur] - 1)}>−</button>
-          <NumberField value={token.resources[cur]} onCommit={(n) => set(cur, n)} />
-          <button onClick={() => set(cur, token.resources[cur] + 1)}>+</button>
-          <span className="muted">/</span>
-          <NumberField value={token.resources[max]} onCommit={(n) => set(max, n)} />
-        </div>
-      ))}
-      <div className="resource-row">
-        <label>Justice</label>
-        {token.side === "player" && token.ownerId ? (
-          <span className="muted small">{token.justice ?? 0}, from their character sheet</span>
-        ) : (
-          <NumberField value={token.justice ?? 0} onCommit={(n) => act({ type: "setJustice", tokenId: token.id, justice: n })} />
-        )}
-      </div>
-      {token.ownerId && (
-        <a href={`/games/${gameIdParam}/characters/${token.ownerId}?tab=inventory`} target="_blank" rel="noreferrer">
-          Open character sheet, inventory and decks ↗
-        </a>
-      )}
-      <h4>Resistances</h4>
-      {token.side === "player" && token.ownerId ? (
-        <p className="muted small">
-          {token.resistances
-            ? `Slash ×${token.resistances.slash}, Pierce ×${token.resistances.pierce}, Blunt ×${token.resistances.blunt}`
-            : "×1 (no Armor)"}
-          , from their Armor
-          {token.staggerResistances &&
-            `. Stagger: Slash ×${token.staggerResistances.slash}, Pierce ×${token.staggerResistances.pierce}, Blunt ×${token.staggerResistances.blunt}`}
-        </p>
-      ) : (
-        <>
-          {(["resistances", "staggerResistances"] as const).map((field) => (
-            <div className="row wrap" key={field}>
-              <span className="muted small">{field === "resistances" ? "Damage" : "Stagger"}</span>
-              {(["slash", "pierce", "blunt"] as const).map((k) => (
-                <label className="inline" key={k}>
-                  {k[0].toUpperCase() + k.slice(1)} ×
-                  <NumberField
-                    value={token[field]?.[k] ?? 1}
-                    onCommit={(n) => {
-                      const base = { slash: 1, pierce: 1, blunt: 1 };
-                      const res = { ...base, ...token.resistances };
-                      const stag = { ...base, ...token.staggerResistances };
-                      if (field === "resistances") res[k] = n;
-                      else stag[k] = n;
-                      act({ type: "setResistances", tokenId: token.id, resistances: res, staggerResistances: stag });
-                    }}
-                  />
-                </label>
-              ))}
-            </div>
-          ))}
-        </>
-      )}
-      {token.side !== "player" && <EnemyDeck token={token} act={act} />}
-      <EffectsEditor token={token} act={act} />
-      <label className="muted">GM notes (hidden from players)</label>
-      <textarea
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        onBlur={() => notes !== note && act({ type: "setNote", tokenId: token.id, note: notes })}
-      />
-      <button
-        className="danger"
-        onClick={() => act({ type: "removeToken", tokenId: token.id }) && onRemoved()}
-      >
-        Remove token
+    <div className="combat-start">
+      <h3>Who's in this fight?</h3>
+      <p className="muted small">Each rolls 1d6 + Justice for Speed.</p>
+      {tokens.length === 0 && <p className="muted small">Place some characters first.</p>}
+      <ul className="pick-list">
+        {tokens.map((t) => (
+          <li key={t.id}>
+            <label>
+              <input
+                type="checkbox"
+                checked={picked.has(t.id)}
+                onChange={(e) => {
+                  const next = new Set(picked);
+                  if (e.target.checked) next.add(t.id);
+                  else next.delete(t.id);
+                  setPicked(next);
+                }}
+              />
+              <span className="swatch" style={{ background: t.color }} /> {t.name}
+              <span className="muted small">
+                ({t.side}, Justice {t.justice ?? 0})
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <button className="big-button" disabled={picked.size === 0} onClick={() => act({ type: "startCombat", tokenIds: [...picked] }) && onStarted()}>
+        Roll Speed and start
       </button>
     </div>
   );
 }
 
-/** Start combat, run the turn order, and end combat. */
+/** Run the turn order and end combat. */
 function CombatPanel({ table, act }: { table: TableState; act: (action: TableAction) => boolean }) {
   const tokens = Object.values(table.tokens);
-  const [picking, setPicking] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState("");
-  const combat = table.combat;
-
-  if (!combat) {
-    if (!picking) {
-      return (
-        <div className="combat-panel">
-          <button
-            className="big-button"
-            onClick={() => {
-              setPicked(new Set(tokens.map((t) => t.id)));
-              setPicking(true);
-            }}
-          >
-            Start combat
-          </button>
-        </div>
-      );
-    }
-    return (
-      <div className="combat-panel">
-        <h3>Who's in this fight?</h3>
-        <p className="muted small">Each rolls 1d6 + Justice for Speed.</p>
-        <ul className="pick-list">
-          {tokens.map((t) => (
-            <li key={t.id}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={picked.has(t.id)}
-                  onChange={(e) => {
-                    const next = new Set(picked);
-                    if (e.target.checked) next.add(t.id);
-                    else next.delete(t.id);
-                    setPicked(next);
-                  }}
-                />
-                <span className="swatch" style={{ background: t.color }} /> {t.name}
-                <span className="muted small">({t.side}, Justice {t.justice ?? 0})</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-        <div className="row">
-          <button
-            className="big-button"
-            disabled={picked.size === 0}
-            onClick={() => act({ type: "startCombat", tokenIds: [...picked] }) && setPicking(false)}
-          >
-            Roll Speed and start
-          </button>
-          <button onClick={() => setPicking(false)}>Cancel</button>
-        </div>
-      </div>
-    );
-  }
+  const combat = table.combat!;
 
   const outside = tokens.filter((t) => !combat.order.some((c) => c.tokenId === t.id));
   const active = activeToken(table);
@@ -465,36 +392,31 @@ function CombatPanel({ table, act }: { table: TableState; act: (action: TableAct
   );
 }
 
-/** An enemy token's own Pages and deck (copied from its template, editable per token). */
-function EnemyDeck({ token, act }: { token: Token; act: (action: TableAction) => boolean }) {
-  return (
-    <details className="enemy-pages">
-      <summary>Pages and deck ({(token.pages ?? []).length} Pages)</summary>
-      <EnemyDeckEditor
-        pages={token.pages ?? []}
-        deck={token.deck ?? []}
-        onChange={(pages, deck) => act({ type: "setEnemyDeck", tokenId: token.id, pages, deck })}
-      />
-    </details>
-  );
-}
-
 /** The GM's characters (enemies, allies and others), ready to place on the map. */
-function TemplatePanel({ gameId, table, act }: { gameId: string; table: TableState; act: (action: TableAction) => boolean }) {
-  const templates = useCollection<NpcTemplate>(`games/${gameId}/enemies`);
+function TemplateList({
+  gameId,
+  templates,
+  table,
+  act,
+}: {
+  gameId: string;
+  templates: Record<string, NpcTemplate> | undefined;
+  table: TableState;
+  act: (action: TableAction) => boolean;
+}) {
   const list = Object.entries(templates ?? {})
     .map(([tid, raw]) => [tid, normalizeNpc(raw)] as const)
     .sort((a, b) => a[1].name.localeCompare(b[1].name));
   const place = (templateId: string, t: NpcTemplate) =>
     act({ type: "spawnEnemy", templateId, template: npcSpawnData(t), x: t.side === "enemy" ? table.map.width - 3 : 2, y: Math.floor(table.map.height / 2) });
   return (
-    <details className="combat-panel template-panel" open>
-      <summary>
-        <strong>Characters</strong>{" "}
+    <div className="template-panel">
+      <div className="row-between">
+        <strong>Characters</strong>
         <a href={`/games/${gameId}/npcs`} target="_blank" rel="noreferrer" className="small">
           Manage ↗
         </a>
-      </summary>
+      </div>
       {templates && list.length === 0 && <p className="muted small">None yet. Make some under Manage.</p>}
       <ul className="plain">
         {list.map(([tid, t]) => (
@@ -509,71 +431,6 @@ function TemplatePanel({ gameId, table, act }: { gameId: string; table: TableSta
           </li>
         ))}
       </ul>
-    </details>
-  );
-}
-
-/** Effects on a character: automated ones from the effect library (with stacks), or notes tracked by hand. */
-function EffectsEditor({ token, act }: { token: Token; act: (action: TableAction) => boolean }) {
-  const { id = "" } = useParams();
-  const library = useEffectLibrary(id);
-  const effects = token.effects ?? [];
-  const save = (next: typeof effects) => act({ type: "setEffects", tokenId: token.id, effects: next });
-  const statuses = Object.entries(library).filter(([, d]) => d.kind === "status" && isLive(d));
-  return (
-    <details className="enemy-pages effects-editor">
-      <summary>Effects ({effects.length})</summary>
-      {effects.map((e, i) =>
-        e.defId ? (
-          <div className="effect-edit automated" key={e.id}>
-            <div className="row">
-              <strong className="effect-edit-name">
-                {library[e.defId]?.name ?? e.name} <span className="chip static">Automated</span>
-              </strong>
-              <NumberField value={e.count} onCommit={(n) => save(effects.map((x, j) => (j === i ? { ...x, count: n } : x)).filter((x) => !x.defId || x.count > 0))} />
-              <button type="button" className="icon" aria-label="Remove effect" onClick={() => save(effects.filter((_, j) => j !== i))}>
-                ✕
-              </button>
-            </div>
-            <p className="muted small">{library[e.defId] ? effectText(library[e.defId], library) : `${e.description} (no longer in the effect library, so it does nothing)`}</p>
-          </div>
-        ) : (
-          <div className="effect-edit" key={e.id}>
-            <div className="row">
-              <input aria-label="Effect name" placeholder="Effect" value={e.name} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)))} />
-              <NumberField value={e.count} onCommit={(n) => save(effects.map((x, j) => (j === i ? { ...x, count: n } : x)))} />
-              <button type="button" className="icon" aria-label="Remove effect" onClick={() => save(effects.filter((_, j) => j !== i))}>
-                ✕
-              </button>
-            </div>
-            <input aria-label="Effect description" placeholder="What it does" value={e.description} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, description: ev.target.value } : x)))} />
-            <input aria-label="Effect duration" placeholder="Duration (optional)" value={e.duration ?? ""} onChange={(ev) => save(effects.map((x, j) => (j === i ? { ...x, duration: ev.target.value } : x)))} />
-          </div>
-        ),
-      )}
-      <div className="row wrap">
-        <select
-          aria-label="Give an automated effect"
-          value=""
-          onChange={(ev) => {
-            const defId = ev.target.value;
-            const def = library[defId];
-            if (!def) return;
-            const have = effects.find((x) => x.defId === defId);
-            save(have ? effects.map((x) => (x === have ? { ...x, count: x.count + 1 } : x)) : [...effects, { id: newId(), defId, name: def.name, count: 1, description: effectText(def, library) }]);
-          }}
-        >
-          <option value="">+ Give an automated effect…</option>
-          {statuses.map(([key, d]) => (
-            <option key={key} value={key}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-        <button type="button" onClick={() => save([...effects, { id: newId(), name: "", count: 1, description: "" }])}>
-          + Add a note
-        </button>
-      </div>
-    </details>
+    </div>
   );
 }

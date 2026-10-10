@@ -5,6 +5,7 @@ import { pendingCount } from "../../shared/permissions.ts";
 import { playerList } from "../../shared/players.ts";
 import { type GameDoc, type GmMeta, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
+import { PlayerPreview } from "../components/PlayerPreview.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 
 /** A game's home: what you can open from here depends on whether you're its GM or a player. */
@@ -38,7 +39,9 @@ export function GamePage() {
       <TopBar />
       <main className="game-page">
         <div className="game-page-main">
-          <Link to="/" className="muted">← Your games</Link>
+          <Link to="/" className="muted">
+            ← Your games
+          </Link>
           <h1>
             {game.data.name} <span className={`role-badge role-${isGm ? "gm" : "player"}`}>{isGm ? "GM" : "Player"}</span>
           </h1>
@@ -123,27 +126,21 @@ export function GamePage() {
           <ul className="plain">
             {players.map((p) => {
               const c = characters?.[p.uid];
-              const preview = p.character && (
-                <>
-                  <span className="npc-portrait">{p.character.portrait ? <img src={p.character.portrait} alt="" /> : <span>{p.character.name[0].toUpperCase()}</span>}</span>
-                  <span className="player-preview-text">
-                    <strong>{p.character.name}</strong>
-                    {isGm && c && <span className="muted small">{characterStatus(c)}</span>}
-                    {isGm && c && pendingCount(c) > 0 && <span className="chip static warn">Changes to approve</span>}
-                  </span>
-                </>
-              );
               return (
                 <li key={p.uid} className="game-player">
                   <span className="game-player-name">{p.username}</span>
-                  {preview &&
-                    (p.href ? (
-                      <Link className="player-preview clickable" to={p.href} aria-label={`Open ${p.character!.name}'s character page`}>
-                        {preview}
-                      </Link>
-                    ) : (
-                      <div className="player-preview">{preview}</div>
-                    ))}
+                  <PlayerPreview
+                    entry={p}
+                    extra={
+                      isGm &&
+                      c && (
+                        <>
+                          <span className="muted small">{characterStatus(c)}</span>
+                          {pendingCount(c) > 0 && <span className="chip static warn">Changes to approve</span>}
+                        </>
+                      )
+                    }
+                  />
                 </li>
               );
             })}
