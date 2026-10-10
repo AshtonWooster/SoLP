@@ -141,6 +141,52 @@ test("on sheet parts needing approval, players only propose changes; the GM appl
   await assertFails(updateDoc(ref("p1"), { ahn: 1 }));
 });
 
+test("a player's new sheet starts blank in the parts the GM approves, so deleting it can't skip approval", async () => {
+  const ref = (who: string) => doc(as(who), "games", GAME, "characters", "p1");
+  const blank = {
+    ownerId: "p1", name: "Roland", rank: 9,
+    primary: { fortitude: 0, prudence: 0, justice: 0, temperance: 0 }, secondary: { speed: 0 },
+    proficiencies: [], augment: { name: "", description: "", passives: [] }, weapons: [], armor: null,
+    ahn: 0, inventory: { slotCount: 9, items: [], trinket: null }, deck: [], ego: [],
+  };
+  const lock = (playerEdit: Record<string, boolean>) =>
+    env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { settings: { playerEdit } }));
+  // Default (all parts free): a new sheet can start with anything, as before.
+  await assertSucceeds(setDoc(ref("p1"), { ...blank, primary: { justice: 5 }, ahn: 900, deck: [{ pageId: "a", copies: 12 }] }));
+  await assertSucceeds(deleteDoc(ref("p1")));
+  await lock({ stats: false, inventory: false, augment: false, equipment: false });
+  await assertFails(setDoc(ref("p1"), { ...blank, primary: { ...blank.primary, justice: 5 } }));
+  await assertFails(setDoc(ref("p1"), { ...blank, secondary: { speed: 3 } }));
+  await assertFails(setDoc(ref("p1"), { ...blank, ahn: 900 }));
+  await assertFails(setDoc(ref("p1"), { ...blank, inventory: { slotCount: 40, items: [], trinket: null } }));
+  await assertFails(setDoc(ref("p1"), { ...blank, inventory: { slotCount: 9, items: [{ id: "x" }], trinket: null } }));
+  await assertFails(setDoc(ref("p1"), { ...blank, augment: { name: "Gloves", description: "", passives: [] } }));
+  await assertFails(setDoc(ref("p1"), { ...blank, proficiencies: [{ id: "p" }] }));
+  await assertFails(setDoc(ref("p1"), { ...blank, weapons: [{ id: "w" }] }));
+  await assertFails(setDoc(ref("p1"), { ...blank, armor: { id: "a" } }));
+  await assertFails(setDoc(ref("p1"), { ...blank, deck: [{ pageId: "a", copies: 12 }] }));
+  await assertFails(setDoc(ref("p1"), { ...blank, ego: [{ id: "e" }] }));
+  // A blank sheet (or one leaving those parts out) is fine, and the free parts can be filled in.
+  await assertSucceeds(setDoc(ref("p1"), { ...blank, name: "Roland", details: { age: "30" } }));
+  await assertSucceeds(deleteDoc(ref("p1")));
+  await assertSucceeds(setDoc(ref("p1"), { ownerId: "p1", name: "Roland", rank: 9 }));
+  await assertSucceeds(deleteDoc(ref("p1")));
+  // Only the locked parts must start blank.
+  await lock({ stats: false });
+  await assertFails(setDoc(ref("p1"), { ...blank, primary: { ...blank.primary, justice: 5 } }));
+  await assertSucceeds(setDoc(ref("p1"), { ...blank, ahn: 900, weapons: [{ id: "w" }] }));
+});
+
+test("a sheet made during combat starts with an empty Combat Deck", async () => {
+  const ref = (who: string) => doc(as(who), "games", GAME, "characters", "p1");
+  const sheet = { ownerId: "p1", name: "Roland", rank: 9 };
+  await env.withSecurityRulesDisabled((ctx) =>
+    setDoc(doc(ctx.firestore(), "games", GAME, "table", "state"), { map: {}, tokens: {}, log: [], combat: { round: 1, order: [], turn: 0, movementLeft: 3 } }),
+  );
+  await assertFails(setDoc(ref("p1"), { ...sheet, deck: [{ pageId: "a", copies: 12 }] }));
+  await assertSucceeds(setDoc(ref("p1"), { ...sheet, deck: [] }));
+});
+
 test("only the GM's hosting tab can save the table", async () => {
   const table = { map: { name: "m", width: 4, height: 4 }, tokens: {}, log: ["saved"] };
   await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "table", "state"), table));
