@@ -12,7 +12,9 @@ import {
   dash,
   dropCombatant,
   endTurn,
+  finishCombat,
   pinnedBy,
+  rollSpeed,
   slot,
   sortOrder,
   storyRoll,
@@ -36,8 +38,8 @@ import {
   updateMap,
   updateMapItem,
 } from "./maps.ts";
-import { newId, rollDie } from "./id.ts";
-import { moveCost, SPEED_DIE } from "./ruleset.ts";
+import { newId } from "./id.ts";
+import { moveCost } from "./ruleset.ts";
 import type { Resources, Side, TableAction, TableState, Token } from "./types.ts";
 
 export { activeToken, ActionError, newId, type Actor, type EngineContext };
@@ -363,7 +365,7 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
     case "endCombat": {
       gmOnly();
       if (!combat) return false;
-      delete table.combat;
+      finishCombat(table, ctx);
       say("Combat ended.");
       return true;
     }
@@ -403,11 +405,7 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
         table,
         c.order
           .filter((x) => table.tokens[x.tokenId])
-          .map((x) => {
-            const roll = rollDie(SPEED_DIE);
-            const bonus = table.tokens[x.tokenId].justice ?? 0;
-            return { ...x, roll, bonus, speed: roll + bonus };
-          }),
+          .map((x) => rollSpeed(table, table.tokens[x.tokenId], x.dice)),
       );
       c.turn = Math.max(0, c.order.findIndex((x) => x.tokenId === activeId));
       say(`Speed re-rolled: ${c.order.map((x) => speedText(table.tokens[x.tokenId], x)).join(", ")}.`);
@@ -441,6 +439,8 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
         description: String(e?.description ?? "").slice(0, 1000),
         ...(e?.duration ? { duration: String(e.duration).slice(0, 80) } : {}),
         ...(e?.defId ? { defId: String(e.defId).slice(0, 80) } : {}),
+        ...(e?.defId && Number(e.pending) > 0 ? { pending: Math.min(999, Math.round(Number(e.pending))) } : {}),
+        ...(e?.defId && e.sourceId ? { sourceId: String(e.sourceId).slice(0, 80) } : {}),
       }));
       return true;
     }

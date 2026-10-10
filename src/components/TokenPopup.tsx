@@ -147,6 +147,7 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
             {token.effects!.map((e) => (
               <span key={e.id} className="chip static" title={e.description}>
                 {e.name || "Effect"} {e.count}
+                {e.pending ? ` (+${e.pending} next round)` : ""}
               </span>
             ))}
           </div>
@@ -209,8 +210,9 @@ function EffectsEditor({ token, act }: { token: Token; act: (action: TableAction
               </strong>
               <NumberField
                 value={e.count}
-                onCommit={(n) => save(effects.map((x, j) => (j === i ? { ...x, count: n } : x)).filter((x) => !x.defId || x.count > 0))}
+                onCommit={(n) => save(effects.map((x, j) => (j === i ? { ...x, count: n } : x)).filter((x) => !x.defId || x.count > 0 || (x.pending ?? 0) > 0))}
               />
+              {e.pending ? <span className="muted small">+{e.pending} next round</span> : null}
               <button type="button" className="icon" aria-label="Remove effect" onClick={() => save(effects.filter((_, j) => j !== i))}>
                 ✕
               </button>

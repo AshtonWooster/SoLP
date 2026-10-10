@@ -27,6 +27,7 @@ import {
 } from "../../shared/engine.ts";
 import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
+import { effectsClearAfterCombat } from "../../shared/types.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
@@ -330,6 +331,7 @@ export class Host {
       };
     },
     effectDef: (id: string) => this.effects[id],
+    clearEffectsAfterCombat: () => effectsClearAfterCombat(this.game),
     // A consumable Tool used in combat counts down on the player's character sheet.
     onToolUsed: (tokenId: string, itemId: string) => {
       const ownerId = this.table?.tokens[tokenId]?.ownerId;

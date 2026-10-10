@@ -4,7 +4,16 @@ import { arrayRemove, deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
 import { blankCharacter, characterChecks, maxResources } from "../../shared/ruleset.ts";
 import { pendingCount } from "../../shared/permissions.ts";
-import { type GameDoc, type GmMeta, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playerCanEdit, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
+import {
+  effectsClearAfterCombat,
+  type GameDoc,
+  type GmMeta,
+  PLAYER_EDIT_OPTIONS,
+  type PlayerEditKey,
+  playerCanEdit,
+  playersCanCreateEffects,
+  playersCanCreateItems,
+} from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { TopBar } from "../components/TopBar.tsx";
@@ -175,6 +184,18 @@ export function Settings() {
             onChange={async (on) => {
               try {
                 await updateDoc(ref, { "settings.playersCreateEffects": on });
+              } catch (err) {
+                setMessage(friendlyError(err));
+              }
+            }}
+          />
+          <Toggle
+            label="Effects wear off when combat ends"
+            hint="On: when you end combat, every automated status Effect (Burn, Poise…) comes off the characters who fought. Effects you track by hand stay. Off: they stay until they wear off or you remove them."
+            on={effectsClearAfterCombat(g)}
+            onChange={async (on) => {
+              try {
+                await updateDoc(ref, { "settings.clearEffectsAfterCombat": on });
               } catch (err) {
                 setMessage(friendlyError(err));
               }

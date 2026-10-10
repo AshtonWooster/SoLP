@@ -1075,6 +1075,10 @@ button.pv-card:hover { filter: brightness(1.12); }
 .piece-row.action .piece-tag { background: #3a1716; color: #ff8a80; }
 .piece-sentence { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
 .piece-group { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.piece-adjust { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 0.85rem; }
+.piece-adjust > summary { cursor: pointer; list-style: none; padding: 0.15rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); }
+.piece-adjust > summary::-webkit-details-marker { display: none; }
+.piece-adjust[open] { padding: 2px 6px; border: 1px dashed var(--line); border-radius: 8px; }
 select.piece { padding: 0.3rem 0.45rem; border-color: #4a4038; }
 select.piece.add { color: #6fb4ff; }
 .piece-num input[type="number"] { width: 3.6rem; padding: 0.3rem 0.4rem; }

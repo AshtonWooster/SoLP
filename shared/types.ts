@@ -66,6 +66,11 @@ export interface GameSettings {
    * Off unless the GM turns it on: then each does nothing until the GM approves it.
    */
   playersCreateEffects?: boolean;
+  /**
+   * When the GM ends combat, every automated status Effect (Burn, Poise…) comes off the characters
+   * who fought. Off unless the GM turns it on: then Effects stay until they wear off or the GM removes them.
+   */
+  clearEffectsAfterCombat?: boolean;
 }
 
 export function playersCanCreateItems(game: GameDoc | undefined): boolean {
@@ -74,6 +79,10 @@ export function playersCanCreateItems(game: GameDoc | undefined): boolean {
 
 export function playersCanCreateEffects(game: GameDoc | undefined): boolean {
   return game?.settings?.playersCreateEffects === true;
+}
+
+export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {
+  return game?.settings?.clearEffectsAfterCombat === true;
 }
 
 export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: string; fields: string[] }[] = [
@@ -156,6 +165,8 @@ export interface Token {
   effects?: Effect[];
   /** An enemy's automated Passives (library effect ids); players' come from their character sheet. */
   passiveEffects?: string[];
+  /** Automated rules that fire once a round or once a combat: the round each last fired in. */
+  effectUses?: Record<string, number>;
   status?: TokenStatus;
   /** Only the GM sees it (map editor). Joining combat reveals it. */
   hidden?: boolean;
@@ -172,6 +183,10 @@ export interface Effect {
   duration?: string;
   /** The automated effect from the library this is (count is its stacks). Missing: a note the GM tracks by hand. */
   defId?: string;
+  /** Stacks given "next round": they arrive at the start of the next round. */
+  pending?: number;
+  /** Who gave the stacks, for automated effects that keep each character's apart (Marks). */
+  sourceId?: string;
 }
 
 export interface TokenStatus {
