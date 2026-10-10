@@ -3,7 +3,7 @@ import type { Dice, DiceKind, Page, PageType } from "../../../shared/character.t
 import { blankDice } from "../../../shared/ruleset.ts";
 import { friendlyError } from "../../firebase.ts";
 import { NumberInput } from "../Fields.tsx";
-import { uploadImage } from "../ImageUpload.tsx";
+import { IMAGE_ACCEPT, uploadImage } from "../ImageUpload.tsx";
 import { DiceIcon, DIE_NAMES, dieClass } from "./DiceIcon.tsx";
 import { DieEffectSlots } from "../effects/library.tsx";
 
@@ -140,7 +140,7 @@ export function ArtPicker({ folder, image, fallback, onChange }: { folder?: stri
         {busy && image && <span className="pv-art-hint over">Uploading…</span>}
         <input
           type="file"
-          accept="image/*"
+          accept={IMAGE_ACCEPT}
           hidden
           aria-label="Page art"
           disabled={busy}

@@ -3,7 +3,7 @@ import type { Character } from "../../../shared/character.ts";
 import { type Check, maxResources, PRIMARY_STATS, proficiencyCount, RANKS, rankTable, SECONDARY_STATS } from "../../../shared/ruleset.ts";
 import { friendlyError } from "../../firebase.ts";
 import { Stepper } from "../Fields.tsx";
-import { uploadImage } from "../ImageUpload.tsx";
+import { IMAGE_ACCEPT, uploadImage } from "../ImageUpload.tsx";
 import { SecondaryStatIcon, StatIcon } from "../LorIcons.tsx";
 
 export type CreatorStep = "intro" | "license" | "stats" | "story" | "summary";
@@ -55,7 +55,7 @@ function PortraitPicker({ folder, value, onChange, readOnly }: { folder: string;
         {photo}
         <input
           type="file"
-          accept="image/*"
+          accept={IMAGE_ACCEPT}
           hidden
           aria-label="Character photo"
           disabled={busy}

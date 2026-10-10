@@ -4,10 +4,13 @@ import { newId } from "../../shared/engine.ts";
 import { friendlyError, storage } from "../firebase.ts";
 
 const MAX_BYTES = 5 * 1024 * 1024;
+/** The image types storage.rules accepts: raster images, no SVG (it can carry scripts). */
+export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp"];
+export const IMAGE_ACCEPT = IMAGE_TYPES.join(",");
 
 /** Check and upload one image file under `folder`; resolves to its download URL. */
 export async function uploadImage(folder: string, file: File): Promise<string> {
-  if (!file.type.startsWith("image/")) throw new Error("Pick an image file.");
+  if (!IMAGE_TYPES.includes(file.type)) throw new Error("Pick a PNG, JPEG, GIF or WebP image.");
   if (file.size > MAX_BYTES) throw new Error("Images must be under 5 MB.");
   const ext = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
   const r = ref(storage, `${folder}/${newId()}.${ext}`);
@@ -40,7 +43,7 @@ export function ImageUpload({
           {busy ? "Uploading…" : value ? `Change ${label.toLowerCase()}` : `Upload ${label.toLowerCase()}`}
           <input
             type="file"
-            accept="image/*"
+            accept={IMAGE_ACCEPT}
             hidden
             disabled={busy}
             onChange={async (e) => {
