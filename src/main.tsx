@@ -2,9 +2,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
+import { doc, onSnapshot } from "firebase/firestore";
+import { themeOf } from "../shared/account.ts";
 import type { User } from "../shared/types.ts";
 import { AuthContext, useAuth } from "./api.ts";
-import { auth } from "./firebase.ts";
+import { auth, db } from "./firebase.ts";
+import { applyTheme, savedTheme } from "./theme.ts";
 import { Home } from "./screens/Home.tsx";
 import { Login, Signup } from "./screens/Auth.tsx";
 import { Join } from "./screens/Join.tsx";
@@ -17,8 +20,12 @@ import { Npcs } from "./screens/Npcs.tsx";
 import { Settings } from "./screens/Settings.tsx";
 import { Items } from "./screens/Items.tsx";
 import { Effects } from "./screens/Effects.tsx";
+import { Account } from "./screens/Account.tsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import "./styles.css";
+import "./themes.css";
+
+applyTheme(savedTheme());
 
 /** The enemy templates page became the Character editor. */
 function OldEnemiesLink() {
@@ -44,6 +51,16 @@ function App() {
       ),
     [],
   );
+  // Your theme follows your account onto every device you log in on.
+  const uid = user?.id;
+  useEffect(() => {
+    if (!uid) return;
+    return onSnapshot(
+      doc(db, "users", uid),
+      (snap) => snap.exists() && applyTheme(themeOf(snap.data().theme)),
+      () => {},
+    );
+  }, [uid]);
 
   const authed = (el: ReactNode) => <RequireAuth>{el}</RequireAuth>;
   return (
@@ -53,6 +70,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/settings" element={authed(<Account />)} />
           <Route path="/join/:code" element={authed(<Join />)} />
           <Route path="/games/:id" element={authed(<GamePage />)} />
           <Route path="/games/:id/gm" element={authed(<Gm />)} />

@@ -38,13 +38,17 @@ service cloud.firestore {
       return exists(table) && get(table).data.get("combat", null) != null;
     }
 
+    function validName(name) {
+      return name is string && name.size() > 0 && name.size() <= 32;
+    }
+
+    // Account settings (shared/account.ts): display name and theme.
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(["displayName", "email"])
-        && request.resource.data.displayName is string
-        && request.resource.data.displayName.size() > 0
-        && request.resource.data.displayName.size() <= 32;
+        && request.resource.data.keys().hasOnly(["displayName", "email", "theme"])
+        && validName(request.resource.data.displayName)
+        && request.resource.data.get("theme", "classic") in ["classic", "library", "reception"];
     }
 
     match /games/{gameId} {
@@ -58,6 +62,13 @@ service cloud.firestore {
         && request.resource.data.members.keys().hasOnly(resource.data.members.keys())
         && request.resource.data.members[request.auth.uid] == resource.data.members[request.auth.uid]
         && (request.resource.data.get("settings", null) == null || request.resource.data.settings is map);
+      // Anyone in the game can change their own display name there (from account settings), and nothing else.
+      allow update: if signedIn() && request.auth.uid in resource.data.memberIds
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["members"])
+        && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.members[request.auth.uid].keys().hasOnly(["displayName", "role"])
+        && request.resource.data.members[request.auth.uid].role == resource.data.members[request.auth.uid].role
+        && validName(request.resource.data.members[request.auth.uid].displayName);
 
       match /table/{doc} {
         allow read: if isMember(gameId);

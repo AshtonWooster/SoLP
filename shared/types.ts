@@ -5,7 +5,7 @@
 // saving the table between sessions, and helping devices find each other.
 //
 // Firestore layout:
-//   users/{uid}                     UserDoc            owner read/write
+//   users/{uid}                     UserDoc            owner read/write (display name, theme)
 //   inviteCodes/{code}              { gameId }         functions only
 //   games/{gameId}                  GameDoc            members read; functions write
 //   games/{gameId}/table/state      TableState         members read; GM write (host autosave)
@@ -16,6 +16,7 @@
 //   games/{gameId}/characters/{uid} Character          members read; owner or GM write (shared/character.ts)
 //   games/{gameId}/enemies/{id}     NpcTemplate        GM only (shared/character.ts)
 
+import type { ThemeId } from "./account.ts";
 import type { DeckEntry, Dice, NpcSide, Page, ResistanceSet } from "./character.ts";
 
 // ---- Accounts and games ----
@@ -29,6 +30,8 @@ export interface User {
 export interface UserDoc {
   displayName: string;
   email: string;
+  /** The look of the app on this person's devices (shared/account.ts). Missing means Classic. */
+  theme?: ThemeId;
 }
 
 /** Every account is the same; your role is per game. Creating a game makes you its GM. */

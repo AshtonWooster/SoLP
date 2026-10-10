@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import QRCode from "qrcode";
 import type { Character } from "../../shared/character.ts";
 import { tokenGear } from "../../shared/tokenPreview.ts";
-import type { GameDoc, GmMeta, TableAction } from "../../shared/types.ts";
+import type { GameDoc, TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { TokenPopup } from "../components/TokenPopup.tsx";
 import { activeToken, reachableTiles } from "../../shared/engine.ts";
@@ -53,14 +52,6 @@ export function Board() {
     setMoving(false);
     setError("");
   }, [active?.id, combat?.round]);
-  const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
-  const inviteCode = meta.data?.inviteCode;
-  const [qr, setQr] = useState("");
-
-  useEffect(() => {
-    if (!inviteCode) return;
-    QRCode.toDataURL(`${location.origin}/join/${inviteCode}`, { margin: 1, width: 240 }).then(setQr);
-  }, [inviteCode]);
 
   if (game.error) return <TableError error={game.error} gameId={id} />;
   if (game.loading) return <main className="center muted">Loading…</main>;
@@ -173,15 +164,6 @@ export function Board() {
           </aside>
         )}
       </div>
-      {inviteCode && (
-        <aside className="join-card">
-          {qr && <img src={qr} alt="Scan to join" />}
-          <div>
-            <div className="muted">Scan to join, or enter code</div>
-            <div className="room-code">{inviteCode}</div>
-          </div>
-        </aside>
-      )}
     </main>
   );
 }
