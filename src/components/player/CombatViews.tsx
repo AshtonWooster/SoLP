@@ -155,6 +155,7 @@ export function EffectsView({ effects, onClose }: { effects: Effect[]; onClose: 
               <td>
                 <strong>{e.name || "Effect"}</strong>
                 {e.duration && <div className="muted small">{e.duration}</div>}
+                {e.pending ? <div className="muted small">+{e.pending} next round</div> : null}
               </td>
               <td className="pre">{e.description}</td>
             </tr>
