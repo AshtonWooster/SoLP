@@ -6,7 +6,7 @@ import { normalizeNpc, npcSpawnData } from "../../../shared/ruleset.ts";
 import type { MapInfo, MapItem, SavedMap, TableAction, TableState, Token } from "../../../shared/types.ts";
 import { useCollection } from "../../api.ts";
 import { friendlyError } from "../../firebase.ts";
-import { ImageUpload, uploadImage } from "../ImageUpload.tsx";
+import { ImageUpload, IMAGE_ACCEPT, uploadImage } from "../ImageUpload.tsx";
 import { NumberField } from "../NumberField.tsx";
 import { PIN_COLORS, Pin } from "./MapLayers.tsx";
 
@@ -512,7 +512,7 @@ function UploadButton({ gameId, onUploaded, onError }: { gameId: string; onUploa
       {busy ? "Uploading…" : "🖼 Add image"}
       <input
         type="file"
-        accept="image/*"
+        accept={IMAGE_ACCEPT}
         hidden
         disabled={busy}
         onChange={async (e) => {

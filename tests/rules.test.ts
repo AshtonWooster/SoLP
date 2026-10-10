@@ -187,6 +187,12 @@ test("a sheet made during combat starts with an empty Combat Deck", async () => 
   await assertSucceeds(setDoc(ref("p1"), { ...sheet, deck: [] }));
 });
 
+test("invite-code attempt counts are for the Cloud Functions only", async () => {
+  await assertFails(getDoc(doc(as("p1"), "joinAttempts", "p1")));
+  await assertFails(setDoc(doc(as("p1"), "joinAttempts", "p1"), { since: 0, failures: 0 }));
+  await assertFails(setDoc(doc(as("p1"), "inviteCodes", "ZZZ999"), { gameId: GAME }));
+});
+
 test("only the GM's hosting tab can save the table", async () => {
   const table = { map: { name: "m", width: 4, height: 4 }, tokens: {}, log: ["saved"] };
   await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "table", "state"), table));
@@ -371,6 +377,11 @@ test("storage: GM uploads game images, members view, others can't", async () => 
   await assertFails(
     uploadBytes(ref(env.authenticatedContext("gm").storage(), `games/${GAME}/assets/x.html`), png, { contentType: "text/html" }),
   );
+  // SVGs can carry scripts, so only raster images go up.
+  await assertFails(
+    uploadBytes(ref(env.authenticatedContext("gm").storage(), `games/${GAME}/assets/map.svg`), png, { contentType: "image/svg+xml" }),
+  );
+  await assertSucceeds(uploadBytes(ref(env.authenticatedContext("gm").storage(), `games/${GAME}/assets/map.webp`), png, { contentType: "image/webp" }));
   await assertSucceeds(getBytes(ref(env.authenticatedContext("p1").storage(), path)));
   await assertFails(getBytes(ref(env.authenticatedContext("stranger").storage(), path)));
 });
@@ -382,6 +393,8 @@ test("storage: players (and the GM) upload a player's portrait and Page art; oth
   await assertSucceeds(uploadBytes(ref(env.authenticatedContext("gm").storage(), path), png, { contentType: "image/png" }));
   await assertFails(uploadBytes(ref(env.authenticatedContext("p1").storage(), `games/${GAME}/users/gm/portrait.png`), png, { contentType: "image/png" }));
   await assertFails(uploadBytes(ref(env.authenticatedContext("p1").storage(), `games/${GAME}/users/p1/x.js`), png, { contentType: "text/javascript" }));
+  await assertFails(uploadBytes(ref(env.authenticatedContext("p1").storage(), `games/${GAME}/users/p1/x.svg`), png, { contentType: "image/svg+xml" }));
+  await assertSucceeds(uploadBytes(ref(env.authenticatedContext("p1").storage(), `games/${GAME}/users/p1/art.jpg`), png, { contentType: "image/jpeg" }));
   await assertSucceeds(getBytes(ref(env.authenticatedContext("gm").storage(), path)));
   await assertFails(getBytes(ref(env.authenticatedContext("stranger").storage(), path)));
 });

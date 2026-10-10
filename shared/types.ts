@@ -7,6 +7,7 @@
 // Firestore layout:
 //   users/{uid}                     UserDoc            owner read/write (display name, theme)
 //   inviteCodes/{code}              { gameId }         functions only
+//   joinAttempts/{uid}              JoinAttempts       functions only (shared/invites.ts)
 //   games/{gameId}                  GameDoc            members read; functions write
 //   games/{gameId}/table/state      TableState         members read; GM write (host autosave)
 //   games/{gameId}/gm/meta          GmMeta             GM read; functions write

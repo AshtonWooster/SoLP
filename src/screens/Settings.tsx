@@ -17,7 +17,7 @@ import {
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { TopBar } from "../components/TopBar.tsx";
-import { db, friendlyError } from "../firebase.ts";
+import { db, friendlyError, newInviteCodeFn } from "../firebase.ts";
 
 /** One player: their character at a glance, a link to the sheet, and Kick. */
 function PlayerCard({ gameId, uid, displayName, character, onKick }: { gameId: string; uid: string; displayName: string; character?: Character; onKick: () => void }) {
@@ -102,6 +102,15 @@ export function Settings() {
       setMessage(friendlyError(err));
     }
   };
+  const newCode = async () => {
+    if (!confirm("Make a new invite code? The current code stops working, so only people you give the new one to can join.")) return;
+    try {
+      const { data } = await newInviteCodeFn({ gameId: id });
+      setMessage(`New invite code: ${data.code}. The old one no longer works.`);
+    } catch (err) {
+      setMessage(friendlyError(err));
+    }
+  };
   const setEdit = async (key: PlayerEditKey, on: boolean) => {
     try {
       await updateDoc(ref, { [`settings.playerEdit.${key}`]: on });
@@ -131,7 +140,10 @@ export function Settings() {
             <h2>Players ({players.length})</h2>
             {meta.data?.inviteCode && (
               <span className="muted small">
-                Invite code <strong className="invite-code">{meta.data.inviteCode}</strong>
+                Invite code <strong className="invite-code">{meta.data.inviteCode}</strong>{" "}
+                <button type="button" className="link small" onClick={newCode}>
+                  New code
+                </button>
               </span>
             )}
           </div>
@@ -145,7 +157,7 @@ export function Settings() {
             </ul>
           )}
           <p className="muted small">
-            Kicking removes a player from the game and disconnects them from the table. Their character is kept, so it comes back if they rejoin with the invite code.
+            Kicking removes a player from the game and disconnects them from the table. Their character is kept, so it comes back if they rejoin with the invite code. To keep them out, make a new code too.
           </p>
         </section>
 
