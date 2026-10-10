@@ -7,7 +7,7 @@ Tyler Ruf
 
 ## SoLP: a digital table for the LoR PMTTRPG
 
-Everyone has one kind of account. Creating a game makes you its GM; joining one with an invite code (or the QR code on the board) adds you to it as a player permanently, and it shows up on your front page whenever you log in.
+Everyone has one kind of account. Creating a game makes you its GM; joining one with an invite code adds you to it as a player permanently, and it shows up on your front page whenever you log in.
 
 | Screen | Who | Device | URL |
 |---|---|---|---|

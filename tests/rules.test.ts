@@ -87,6 +87,33 @@ test("game settings: only the GM changes them and kicks players; the GM can't be
   await assertFails(getDoc(doc(as("p1"), "games", GAME, "table", "state")));
 });
 
+test("account settings: you set your own display name and theme, within limits", async () => {
+  const me = doc(as("p1"), "users", "p1");
+  await assertSucceeds(setDoc(me, { displayName: "P1", email: "p1@x.test" }));
+  await assertSucceeds(updateDoc(me, { theme: "library" }));
+  await assertSucceeds(updateDoc(me, { theme: "reception", displayName: "Renamed" }));
+  await assertSucceeds(updateDoc(me, { theme: "classic" }));
+  await assertFails(updateDoc(me, { theme: "neon" }));
+  await assertFails(updateDoc(me, { displayName: "" }));
+  await assertFails(updateDoc(me, { displayName: "x".repeat(33) }));
+  await assertFails(updateDoc(me, { admin: true }));
+  await assertFails(setDoc(doc(as("p2"), "users", "p1"), { displayName: "Hijack", email: "p1@x.test", theme: "library" }));
+  await assertFails(getDoc(doc(as("gm"), "users", "p1")));
+});
+
+test("a member renames only themselves in a game, and can't change roles or anyone else", async () => {
+  const game = (who: string) => doc(as(who), "games", GAME);
+  await assertSucceeds(updateDoc(game("p1"), { "members.p1.displayName": "New name" }));
+  await assertSucceeds(updateDoc(game("gm"), { "members.gm.displayName": "Arbiter" }));
+  await assertFails(updateDoc(game("p1"), { "members.gm.displayName": "Pwned" }));
+  await assertFails(updateDoc(game("p1"), { "members.p1.role": "gm" }));
+  await assertFails(updateDoc(game("p1"), { "members.p1.displayName": "" }));
+  await assertFails(updateDoc(game("p1"), { "members.p1.displayName": "x".repeat(33) }));
+  await assertFails(updateDoc(game("p1"), { "members.p1": { displayName: "P1", role: "player", extra: 1 } }));
+  await assertFails(updateDoc(game("p1"), { "members.p1.displayName": "Ok", name: "hacked" }));
+  await assertFails(updateDoc(game("stranger"), { "members.stranger.displayName": "Hi" }));
+});
+
 test("on sheet parts needing approval, players only propose changes; the GM applies them", async () => {
   const sheet = { ownerId: "p1", name: "Roland", rank: 9, primary: { justice: 0 }, secondary: {}, inventory: { items: [] }, ahn: 0, augment: { name: "" }, proficiencies: [], weapons: [], armor: null, deck: [], ego: [] };
   const ref = (who: string) => doc(as(who), "games", GAME, "characters", "p1");
