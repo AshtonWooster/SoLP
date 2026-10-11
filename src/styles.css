@@ -1263,3 +1263,15 @@ select.piece.add { color: #6fb4ff; }
   .gm.gm-maps { grid-template-columns: 1fr; height: auto; }
 }
 .grid .cell { position: relative; }
+.formula-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.formula-fields input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.formula-fields input.invalid { border-color: var(--hp); }
+.formula-legacy { align-self: flex-start; white-space: normal; }
+.formula-preview { display: flex; flex-direction: column; gap: 6px; }
+.formula-stat input { width: 4rem; margin-left: 4px; }
+.formula-table-wrap { overflow-x: auto; }
+.formula-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.formula-table th, .formula-table td { padding: 4px 8px; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.formula-table th:first-child { text-align: left; }
+.formula-table thead th { border-top: none; color: var(--muted); font-weight: 600; }
+@media (max-width: 520px) { .formula-table .rank-note { display: none; } .formula-table th, .formula-table td { padding: 4px 6px; } }

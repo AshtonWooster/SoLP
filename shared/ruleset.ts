@@ -25,6 +25,7 @@ import type {
   Weapon,
 } from "./character.ts";
 import type { Resources, SpawnData } from "./types.ts";
+import { computeMaxResources, type StatFormulas } from "./formulas.ts";
 
 /** Act 5, Step 1: "For most campaigns, it is encouraged to start at Rank 9." */
 export const STARTING_RANK = 9;
@@ -48,10 +49,6 @@ export const SECONDARY_STATS: { key: string; label: string; effect: string }[] =
 export interface RankTable {
   primaryPoints: number;
   secondaryPoints: number;
-  baseHp: number;
-  baseStagger: number;
-  baseSanity: number;
-  baseLight: number;
   /** Max total Passive Cost on the Augment. */
   augmentMaxCost: number;
   /** Max total Passive Cost on each piece of Equipment. */
@@ -64,10 +61,6 @@ export function rankTable(rank: number): RankTable {
   return {
     primaryPoints: 4 + step * 2,
     secondaryPoints: 3 + step,
-    baseHp: 30 + step * 6,
-    baseStagger: 20 + step * 4,
-    baseSanity: 15,
-    baseLight: 3,
     augmentMaxCost: 3 + step,
     equipmentMaxCost: 3 + step,
   };
@@ -78,15 +71,12 @@ export function proficiencyCount(rank: number): number {
   return 2 + Math.max(0, STARTING_RANK - rank) * 2;
 }
 
-/** Act 2: Fortitude raises max Health, Prudence max Sanity, Temperance max Stagger Resist. */
-export function maxResources(c: Pick<Character, "rank" | "primary">): Pick<Resources, "maxHp" | "maxStagger" | "maxSanity" | "maxLight"> {
-  const t = rankTable(c.rank);
-  return {
-    maxHp: t.baseHp + c.primary.fortitude,
-    maxStagger: t.baseStagger + c.primary.temperance,
-    maxSanity: t.baseSanity + c.primary.prudence,
-    maxLight: t.baseLight,
-  };
+/**
+ * Act 2: Fortitude raises max Health, Prudence max Sanity, Temperance max Stagger Resist. How much
+ * is up to the game's stat formulas (shared/formulas.ts), which the GM edits in game settings.
+ */
+export function maxResources(c: Pick<Character, "rank" | "primary">, formulas: StatFormulas): Pick<Resources, "maxHp" | "maxStagger" | "maxSanity" | "maxLight"> {
+  return computeMaxResources(c, formulas);
 }
 
 // ---- Combat (Act 8) ----
@@ -447,8 +437,8 @@ export function npcPages(t: NpcTemplate): DeckSource[] {
 
 /** Resources and resistances: from Rank, Stats and Armor, unless the GM overrode them. */
 export type NpcNumbers = Required<NpcOverrides>;
-export function npcStats(t: NpcTemplate): NpcNumbers & { calculated: NpcNumbers } {
-  const base = maxResources(t);
+export function npcStats(t: NpcTemplate, formulas: StatFormulas): NpcNumbers & { calculated: NpcNumbers } {
+  const base = maxResources(t, formulas);
   const calculated = { ...base, resistances: t.armor?.resistances ?? ONES, staggerResistances: t.armor?.staggerResistances ?? ONES };
   const o = t.overrides;
   return {
@@ -463,8 +453,8 @@ export function npcStats(t: NpcTemplate): NpcNumbers & { calculated: NpcNumbers 
 }
 
 /** What a placed copy starts with. */
-export function npcSpawnData(t: NpcTemplate): SpawnData {
-  const s = npcStats(t);
+export function npcSpawnData(t: NpcTemplate, formulas: StatFormulas): SpawnData {
+  const s = npcStats(t, formulas);
   const data: SpawnData = {
     name: t.name,
     color: t.color,

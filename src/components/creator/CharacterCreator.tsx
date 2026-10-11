@@ -1,6 +1,7 @@
 import { type ReactNode, useRef, useState } from "react";
 import type { Character } from "../../../shared/character.ts";
 import { type Check, maxResources, PRIMARY_STATS, proficiencyCount, RANKS, rankTable, SECONDARY_STATS } from "../../../shared/ruleset.ts";
+import { useStatFormulas } from "../../api.ts";
 import { friendlyError } from "../../firebase.ts";
 import { Stepper } from "../Fields.tsx";
 import { uploadImage } from "../ImageUpload.tsx";
@@ -150,8 +151,8 @@ export function FixerLicense({ c, update, isGm, gameId, uid, readOnly }: Pick<Pr
 }
 
 /** Live Resources from the current Rank and Stats. */
-function ResourceBoard({ c }: { c: Character }) {
-  const max = maxResources(c);
+function ResourceBoard({ c, gameId }: { c: Character; gameId: string }) {
+  const max = maxResources(c, useStatFormulas(gameId));
   const rows: [string, string | number, string][] = [
     ["Health", max.maxHp, "rb-hp"],
     ["Stagger", max.maxStagger, "rb-stagger"],
@@ -171,14 +172,14 @@ function ResourceBoard({ c }: { c: Character }) {
   );
 }
 
-function StatsStep({ c, update, note }: Pick<Props, "c" | "update"> & { note?: ReactNode }) {
+function StatsStep({ c, update, note, gameId }: Pick<Props, "c" | "update" | "gameId"> & { note?: ReactNode }) {
   const t = rankTable(c.rank);
   const primaryLeft = t.primaryPoints - Object.values(c.primary).reduce((a, b) => a + b, 0);
   const secondaryLeft = t.secondaryPoints - Object.values(c.secondary).reduce((a, b) => a + b, 0);
   return (
     <fieldset className="stats-step plain-fieldset" id="stats">
       {note}
-      <ResourceBoard c={c} />
+      <ResourceBoard c={c} gameId={gameId} />
       <div className="stats-columns">
         <section className="stat-panel">
           <header>
@@ -279,7 +280,7 @@ function SummaryStep({ c, update, isGm, gameId, uid, checks, setStep, goTab }: P
       <div className="summary-grid">
         <FixerLicense c={c} update={update} isGm={isGm} gameId={gameId} uid={uid} readOnly />
         <div className="summary-col">
-          <ResourceBoard c={c} />
+          <ResourceBoard c={c} gameId={gameId} />
           <section className="summary-card">
             <h4>Stats</h4>
             <div className="summary-stats-grid">
@@ -415,7 +416,7 @@ export function CharacterCreator(props: Props) {
       <div key={step} className={`creator-page ${dir}`}>
         {step === "intro" && <Intro {...props} />}
         {step === "license" && <FixerLicense c={c} update={update} isGm={isGm} gameId={gameId} uid={uid} />}
-        {step === "stats" && <StatsStep c={c} update={update} note={props.statsNote} />}
+        {step === "stats" && <StatsStep c={c} update={update} gameId={props.gameId} note={props.statsNote} />}
         {step === "story" && <StoryStep c={c} update={update} />}
         {step === "summary" && <SummaryStep {...props} />}
       </div>

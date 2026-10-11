@@ -78,6 +78,8 @@ test("game settings: only the GM changes them and kicks players; the GM can't be
   await assertSucceeds(updateDoc(game("gm"), { "settings.playerEdit.stats": false }));
   await assertFails(updateDoc(game("p1"), { "settings.clearEffectsAfterCombat": true }));
   await assertSucceeds(updateDoc(game("gm"), { "settings.clearEffectsAfterCombat": true }));
+  await assertFails(updateDoc(game("p1"), { "settings.statFormulas": { health: "999" } }));
+  await assertSucceeds(updateDoc(game("gm"), { "settings.statFormulas": { health: "64 + Rank*16 + Fortitude*10", stagger: "20", sanity: "15", light: "3" } }));
   await assertFails(updateDoc(game("p1"), { memberIds: ["p1"], members: { p1: { displayName: "P1", role: "player" } } }));
   await assertFails(updateDoc(game("gm"), { memberIds: ["p1"] }));
   await assertFails(updateDoc(game("gm"), { "members.friend": { displayName: "F", role: "player" } }));
