@@ -28,7 +28,7 @@ import {
 import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
 import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
-import { effectsClearAfterCombat } from "../../shared/types.ts";
+import { effectsClearAfterCombat, emotionLevelsOn } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
@@ -339,6 +339,7 @@ export class Host {
     },
     effectDef: (id: string) => this.effects[id],
     clearEffectsAfterCombat: () => effectsClearAfterCombat(this.game),
+    emotionLevels: () => emotionLevelsOn(this.game),
     // A consumable Tool used in combat counts down on the player's character sheet.
     onToolUsed: (tokenId: string, itemId: string) => {
       const ownerId = this.table?.tokens[tokenId]?.ownerId;
