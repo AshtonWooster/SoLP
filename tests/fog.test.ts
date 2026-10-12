@@ -2,9 +2,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { applyAction, type Actor } from "../shared/engine.ts";
-import { fogAreas, fogMask, fogOfWarOn, isFogged, MAX_FOG_RECTS } from "../shared/fog.ts";
+import { fogAreas, fogMask, isFogged, MAX_FOG_RECTS } from "../shared/fog.ts";
 import { playerView, visibleMap } from "../shared/maps.ts";
-import type { GameDoc, MapItem, TableState, Token } from "../shared/types.ts";
+import type { MapItem, TableState, Token } from "../shared/types.ts";
 
 const gm: Actor = { uid: "gm", role: "gm", displayName: "GM" };
 const p1: Actor = { uid: "p1", role: "player", displayName: "P1" };
@@ -31,19 +31,11 @@ function table(): TableState {
 
 const act = (t: TableState, a: Parameters<typeof applyAction>[1], who: Actor = gm) => applyAction(t, a, who);
 const fogged = (t: TableState, x: number, y: number) => isFogged(t.map, fogMask(t.map), x, y);
-const game = (settings?: GameDoc["settings"]): GameDoc => ({ name: "G", gmId: "gm", memberIds: ["gm", "p1"], members: {}, createdAt: 1, settings });
 
-test("fog of war is off unless the GM turns it on in Game settings", () => {
-  assert.equal(fogOfWarOn(undefined), false);
-  assert.equal(fogOfWarOn(game()), false);
-  assert.equal(fogOfWarOn(game({ fogOfWar: false })), false);
-  assert.equal(fogOfWarOn(game({ fogOfWar: true })), true);
-});
-
-test("maps start fully revealed, so existing games look the same", () => {
+test("fog is always available, and maps start fully revealed so existing games look the same", () => {
   const t = table();
   assert.equal(fogMask(t.map), undefined);
-  assert.deepEqual(Object.keys(playerView(t, { fog: true }).tokens).sort(), ["guard", "rat", "roland"]);
+  assert.deepEqual(Object.keys(playerView(t).tokens).sort(), ["guard", "rat", "roland"]);
 });
 
 test("the GM draws boxes that hide, then reveal, parts of the map; later boxes win", () => {
@@ -123,27 +115,18 @@ test("players don't get tokens under the fog, but always get their own character
   const t = table();
   act(t, { type: "fogAll", mapId: "lib", hidden: true });
   act(t, { type: "drawFog", mapId: "lib", x: 8, y: 4, w: 1, h: 1, reveal: true });
-  const view = playerView(t, { fog: true });
+  const view = playerView(t);
   assert.deepEqual(Object.keys(view.tokens).sort(), ["guard", "roland"], "the rat is under the fog; Roland is a player");
   assert.deepEqual(view.map.fog, t.map.fog, "the fog comes along so screens can cover it");
   // The GM's own table keeps everything.
   assert.equal(Object.keys(t.tokens).length, 3);
 });
 
-test("with fog of war off in Game settings, players see everything and get no fog", () => {
-  const t = table();
-  act(t, { type: "fogAll", mapId: "lib", hidden: true });
-  const view = playerView(t);
-  assert.deepEqual(Object.keys(view.tokens).sort(), ["guard", "rat", "roland"]);
-  assert.equal(view.map.fog, undefined);
-  assert.ok(t.map.fog, "the GM's fog is kept for when it's turned back on");
-});
-
 test("anyone in the turn order stays in view, so combat still makes sense", () => {
   const t = table();
   act(t, { type: "startCombat", tokenIds: ["roland", "rat"] });
   act(t, { type: "fogAll", mapId: "lib", hidden: true });
-  const view = playerView(t, { fog: true });
+  const view = playerView(t);
   assert.deepEqual(Object.keys(view.tokens).sort(), ["rat", "roland"]);
 });
 
@@ -157,9 +140,8 @@ test("pins and assets under the fog aren't sent; an asset partly in the open sti
   ];
   t.map.items = items;
   act(t, { type: "drawFog", mapId: "lib", x: 5, y: 2, w: 5, h: 4 });
-  const ids = (visibleMap(t.map, { fog: true }).items ?? []).map((i) => i.id);
+  const ids = (visibleMap(t.map).items ?? []).map((i) => i.id);
   assert.deepEqual(ids, ["pin-open", "rug"], "the rug sits half in the open");
-  assert.deepEqual((visibleMap(t.map).items ?? []).map((i) => i.id), ["pin-dark", "pin-open", "chest", "rug"], "fog off: all of them");
 });
 
 test("only the GM can draw fog or hide and reveal the map", () => {

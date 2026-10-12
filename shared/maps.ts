@@ -369,39 +369,34 @@ export function arrivalSpot(map: SavedMap, tokenId: string, index: number) {
   return map.positions[tokenId] ?? { x: 1, y: 1 + index };
 }
 
-/** What players are shown of a map: whether fog of war is on in Game settings. */
-export interface ViewOptions {
-  fog?: boolean;
-}
-
 /**
- * A map as players see it: no hidden background, assets or pins. With fog of war on, assets and pins
- * under the fog are left out too and the fog comes along so screens can cover it; with it off, there's no fog.
+ * A map as players see it: no hidden background, assets or pins, and none of the assets and pins under
+ * the fog. The fog comes along so screens can cover it.
  */
-export function visibleMap<M extends MapInfo>(map: M, opts: ViewOptions = {}): M {
+export function visibleMap<M extends MapInfo>(map: M): M {
   const { background, backgroundHidden: _hidden, items, fog, ...rest } = map;
   const out = { ...rest } as M;
   if (background && !map.backgroundHidden) out.background = background;
-  const mask = opts.fog ? fogMask(map) : undefined;
+  const mask = fogMask(map);
   const shown = (items ?? []).filter((i) => !i.hidden && itemInView(map, mask, i));
   if (shown.length) out.items = shown;
   if (mask && fog) out.fog = structuredClone(fog);
   return out;
 }
 
-/** The tokens players see on a map: none the GM hid, and with fog of war on, none under the fog (but their own characters and anyone fighting). */
-export function visibleTokens(map: MapInfo, tokens: Token[], opts: ViewOptions & { fighting?: Set<string> } = {}): Token[] {
-  const mask = opts.fog ? fogMask(map) : undefined;
-  return tokens.filter((t) => !t.hidden && tokenInView(map, mask, t, opts.fighting));
+/** The tokens players see on a map: none the GM hid, and none under the fog (but their own characters and anyone fighting). */
+export function visibleTokens(map: MapInfo, tokens: Token[], fighting?: Set<string>): Token[] {
+  const mask = fogMask(map);
+  return tokens.filter((t) => !t.hidden && tokenInView(map, mask, t, fighting));
 }
 
 /** The table as players (and the shared board) see it: everything the GM hid, or the fog covers, is left out. */
-export function playerView(table: TableState, opts: ViewOptions = {}): TableState {
+export function playerView(table: TableState): TableState {
   const fighting = new Set(table.combat?.order.map((c) => c.tokenId));
-  const shown = new Set(visibleTokens(table.map, Object.values(table.tokens), { ...opts, fighting }).map((t) => t.id));
+  const shown = new Set(visibleTokens(table.map, Object.values(table.tokens), fighting).map((t) => t.id));
   return {
     ...table,
-    map: visibleMap(table.map, opts),
+    map: visibleMap(table.map),
     tokens: Object.fromEntries(Object.entries(table.tokens).filter(([id]) => shown.has(id))),
   };
 }

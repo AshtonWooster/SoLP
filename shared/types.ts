@@ -77,11 +77,6 @@ export interface GameSettings {
    */
   clearEffectsAfterCombat?: boolean;
   /**
-   * Fog of war: the GM draws boxes that hide or reveal parts of each map (shared/fog.ts). Off unless
-   * the GM turns it on: then the fog tools show on the GM screen and players can't see what's hidden.
-   */
-  fogOfWar?: boolean;
-  /**
    * How Rank and Stats set max Health, Stagger Resist, Sanity and Light (shared/formulas.ts). New
    * games start with the standard formulas; a game from before formulas has none saved and keeps
    * its old numbers until the GM changes them.
