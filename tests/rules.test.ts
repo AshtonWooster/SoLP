@@ -96,7 +96,7 @@ test("account settings: you set your own display name and theme, within limits",
   await assertSucceeds(setDoc(me, { displayName: "P1", email: "p1@x.test" }));
   await assertSucceeds(updateDoc(me, { theme: "library" }));
   await assertSucceeds(updateDoc(me, { theme: "reception", displayName: "Renamed" }));
-  await assertSucceeds(updateDoc(me, { theme: "classic" }));
+  for (const theme of ["facility", "limbus", "backstreets", "classic"]) await assertSucceeds(updateDoc(me, { theme }));
   await assertFails(updateDoc(me, { theme: "neon" }));
   await assertFails(updateDoc(me, { displayName: "" }));
   await assertFails(updateDoc(me, { displayName: "x".repeat(33) }));

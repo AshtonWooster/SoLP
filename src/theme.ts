@@ -4,8 +4,18 @@ const KEY = "solp-theme";
 const FONTS: Partial<Record<ThemeId, string>> = {
   library: "family=Alegreya+Sans:wght@400;500;700&family=Cormorant+SC:wght@500;600;700",
   reception: "family=Barlow:wght@400;500;600;700&family=Chakra+Petch:wght@500;600;700&family=Saira+Condensed:wght@500;600;700;800",
+  facility: "family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Rajdhani:wght@500;600;700",
+  limbus: "family=Bodoni+Moda:ital,wght@0,500;0,700;1,500;1,700&family=Libre+Franklin:wght@400;500;600",
+  backstreets: "family=Archivo:wght@400;500;600;700&family=Big+Shoulders+Stencil+Display:wght@600;700;800",
 };
-const THEME_COLOR: Record<ThemeId, string> = { classic: "#14110f", library: "#100c09", reception: "#07090c" };
+const THEME_COLOR: Record<ThemeId, string> = {
+  classic: "#14110f",
+  library: "#100c09",
+  reception: "#07090c",
+  facility: "#050807",
+  limbus: "#0a0708",
+  backstreets: "#121110",
+};
 
 /** The theme this device used last, so the page opens in it before the account loads. */
 export function savedTheme(): ThemeId {

@@ -9,10 +9,9 @@ test("accounts that never picked a theme keep the original Classic look", () => 
   assert.equal(themeOf(null), "classic");
 });
 
-test("both Library of Ruina themes can be picked; anything else falls back to Classic", () => {
-  assert.deepEqual([...THEMES], ["classic", "library", "reception"]);
-  assert.equal(themeOf("library"), "library");
-  assert.equal(themeOf("reception"), "reception");
+test("every Project Moon theme can be picked; anything else falls back to Classic", () => {
+  assert.deepEqual([...THEMES], ["classic", "library", "reception", "facility", "limbus", "backstreets"]);
+  for (const t of ["library", "reception", "facility", "limbus", "backstreets"]) assert.equal(themeOf(t), t);
   assert.equal(themeOf("neon"), "classic");
   assert.equal(themeOf(3), "classic");
   for (const t of THEMES) assert.ok(THEME_INFO[t].name && THEME_INFO[t].description);
