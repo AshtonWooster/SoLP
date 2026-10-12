@@ -76,6 +76,11 @@ export interface GameSettings {
    */
   clearEffectsAfterCombat?: boolean;
   /**
+   * Characters build Emotion in combat (Library of Ruina's Emotion Levels, 0 to 5), which automated
+   * effects can check and react to. Off unless the GM turns it on: then nobody gains Emotion.
+   */
+  emotionLevels?: boolean;
+  /**
    * How Rank and Stats set max Health, Stagger Resist, Sanity and Light (shared/formulas.ts). New
    * games start with the standard formulas; a game from before formulas has none saved and keeps
    * its old numbers until the GM changes them.
@@ -93,6 +98,10 @@ export function playersCanCreateEffects(game: GameDoc | undefined): boolean {
 
 export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {
   return game?.settings?.clearEffectsAfterCombat === true;
+}
+
+export function emotionLevelsOn(game: GameDoc | undefined): boolean {
+  return game?.settings?.emotionLevels === true;
 }
 
 export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: string; fields: string[] }[] = [
@@ -177,6 +186,10 @@ export interface Token {
   passiveEffects?: string[];
   /** Automated rules that fire once a round or once a combat: the round each last fired in. */
   effectUses?: Record<string, number>;
+  /** Resistances changed by automated effects for a while (cleared when combat ends). */
+  resistMods?: ResistMod[];
+  /** Emotion Level and the Emotion Points toward the next one, while the Game setting is on. */
+  emotion?: { level: number; points: number };
   status?: TokenStatus;
   /** Only the GM sees it (map editor). Joining combat reveals it. */
   hidden?: boolean;
@@ -186,6 +199,15 @@ export interface Token {
   concealed?: boolean;
   /** The GM's characters: the gear it was placed with, so players can see it if the GM shows it. */
   gear?: TokenGearInfo;
+}
+
+/** A Resistance changed by an automated effect: the multiplier for one damage type, until the round ends or combat ends. */
+export interface ResistMod {
+  kind: "slash" | "pierce" | "blunt";
+  stagger: boolean;
+  value: number;
+  /** The round it wears off at the end of; missing: when combat ends. */
+  round?: number;
 }
 
 /** Names of a character's Weapons, Armor and Augment, for the token popup. */
@@ -232,6 +254,8 @@ export interface Combatant {
   speed: number;
   /** How many Speed Dice (Page slots) they have. */
   dice: number;
+  /** Speed Dice before automated effects added or took any (missing: the same as dice). */
+  baseDice?: number;
 }
 
 /**
@@ -246,6 +270,8 @@ export interface Card {
   pageId: string;
   /** For Auxiliary Pages: the inventory Tool it comes from. */
   itemId?: string;
+  /** Costs this much less until the end of this round (an automated effect). */
+  discount?: { n: number; round: number };
 }
 
 /** A player's Pages during combat. The draw pile's order is hidden from other players. */
@@ -282,6 +308,8 @@ export interface SlottedPage {
   targets: TargetRef[];
   /** The page this one is clashing with, if any. */
   clashWith?: string;
+  /** Which of its owner's Pages this round it was (1: the first), for "the first Page I use" effects. */
+  nth?: number;
 }
 
 /** A Counter Die waiting on a character, used automatically against One-Sided attacks. */
@@ -328,6 +356,8 @@ export interface CombatState {
   fx?: ClashFx[];
   /** Id of the newest entry in fx. */
   fxSeq?: number;
+  /** Pages each character has used this round, by token id. */
+  used?: Record<string, number>;
 }
 
 /** One die as it was rolled, for the clash animation. */

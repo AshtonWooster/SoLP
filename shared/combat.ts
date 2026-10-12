@@ -4,11 +4,27 @@ import type { Dice, Page, ResistanceSet } from "./character.ts";
 import { ActionError, clamp, log, occupied, type Actor } from "./core.ts";
 import { secret } from "./secrets.ts";
 export type { Actor };
-import { arriveAtRoundStart, decayAtEnd, isLive, PRESET_EFFECTS, runTrigger, type DamageSource, type EffectDef, type EffectOps, type TriggerOptions, type When } from "./effects.ts";
+import {
+  arriveAtRoundStart,
+  decayAtEnd,
+  isLive,
+  noResult,
+  PRESET_EFFECTS,
+  runTrigger,
+  withPct,
+  type DamageSource,
+  type EffectDef,
+  type EffectOps,
+  type TriggerOptions,
+  type TriggerResult,
+  type When,
+} from "./effects.ts";
 import { newId, rollDie } from "./id.ts";
 import {
   DASH_LIGHT_COST,
+  EMOTION_POINTS,
   enemyDeck,
+  MAX_EMOTION,
   DASH_MOVEMENT,
   isMassAttack,
   isOffensive,
@@ -68,6 +84,8 @@ export interface EngineContext {
   effectDef?(id: string): EffectDef | undefined;
   /** The Game setting "Effects wear off when combat ends" (shared/types.ts). */
   clearEffectsAfterCombat?(): boolean;
+  /** The Game setting "Emotion Levels" (shared/types.ts). */
+  emotionLevels?(): boolean;
 }
 
 /**
@@ -105,9 +123,11 @@ export function activeToken(table: TableState): Token | undefined {
 /** Speed: 1d6 + Justice, plus anything the character's effects add ("When I roll Speed"). */
 export function rollSpeed(table: TableState, token: Token, dice = SPEED_DICE): Combatant {
   const fx = trigger(table, "speed", token);
-  const roll = rollWith(table, token, SPEED_DIE + fx.max, fx.advantage);
+  const roll = rollWith(table, token, SPEED_DIE + fx.max, fx);
   const bonus = (token.justice ?? 0) + fx.power;
-  return { tokenId: token.id, roll, bonus, speed: roll + bonus, dice };
+  // Effects can add Speed Dice (Speed, Speed II) or take one away.
+  const total = Math.max(0, Math.min(10, dice + fx.dice));
+  return { tokenId: token.id, roll, bonus, speed: roll + bonus, dice: total, ...(total !== dice ? { baseDice: dice } : {}) };
 }
 
 export function speedText(t: Token, c: Combatant) {
@@ -193,9 +213,12 @@ const SOURCE_NAMES: Record<PageSource, string> = { hand: "the hand", aux: "the A
 
 // ---- Resources and statuses ----
 
-function resistance(t: Token, set: ResistanceSet | undefined, kind: Dice["kind"]): number {
+function resistance(t: Token, set: ResistanceSet | undefined, kind: Dice["kind"], stagger: boolean): number {
   if (!isOffensive(kind)) return 1;
   if (staggered(t)) return STAGGERED_RESISTANCE;
+  // Changed for a while by an automated effect (the newest change wins).
+  const mod = [...(t.resistMods ?? [])].reverse().find((m) => m.kind === kind && m.stagger === stagger);
+  if (mod) return mod.value;
   return set?.[kind as keyof ResistanceSet] ?? 1;
 }
 
@@ -203,24 +226,35 @@ function resistance(t: Token, set: ResistanceSet | undefined, kind: Dice["kind"]
  * Offensive Dice deal (Final Power) × (target's Type Resistance) damage, and the same amount ×
  * their Stagger Resistance as Stagger damage. Both round down.
  */
-function dealDamage(table: TableState, target: Token, amount: number, kind: Dice["kind"], attacker?: Token, die?: Dice) {
+function dealDamage(table: TableState, target: Token, amount: number, kind: Dice["kind"], attacker?: Token, die?: Dice, play: PagePlay = {}) {
+  const page = { page: play.page, nth: play.nth, oneSided: play.oneSided };
   // Effects of the one hitting (e.g. Poise) can add damage before Resistances.
-  if (attacker && die) amount += trigger(table, "hit", attacker, { other: target, die }).damage;
+  const hit = attacker && die ? trigger(table, "hit", attacker, { other: target, die, ...page }) : noResult();
+  amount = withPct(Math.max(0, amount + hit.damage), hit.pct);
   // Effects of the one being hit ([Type] Protection, [Type] Fragile), also before Resistances.
   if (attacker && die) {
-    const fx = trigger(table, "takingHit", target, { other: attacker, die, dieIsMine: false, event: { amount, source: "attack" } });
-    amount = Math.max(0, amount + fx.damage - fx.reduce);
+    const fx = trigger(table, "takingHit", target, { other: attacker, die, dieIsMine: false, event: { amount, source: "attack" }, ...page });
+    amount = withPct(Math.max(0, amount + fx.damage - fx.reduce), fx.pct);
   }
   const source: DamageSource<Token> = { attack: true, by: attacker };
-  const dmg = incoming(table, target, Math.max(0, Math.floor(amount * resistance(target, target.resistances, kind))), "health", source, die);
-  const stagger = Math.max(0, Math.floor(amount * resistance(target, target.staggerResistances, kind)));
+  // Health-only and Stagger-only changes from the one hitting ("Slash damage +1", "Stagger damage +1") come after Resistances.
+  const health = withPct(Math.max(0, Math.floor(amount * resistance(target, target.resistances, kind, false)) + hit.health), hit.healthPct);
+  const dmg = incoming(table, target, health, "health", source, die);
+  const stagger = withPct(Math.max(0, Math.floor(amount * resistance(target, target.staggerResistances, kind, true)) + hit.stagger), hit.staggerPct);
   const r = target.resources;
   r.hp = Math.max(0, r.hp - dmg);
   log(table, `  ${target.name} takes ${secret(target, "hp", `${dmg} `)}${kind} damage${secret(target, "hp", ` (${r.hp}/${r.maxHp} Health)`)}.`);
   staggerDamage(table, target, stagger, source, die);
   checkKnockedOut(table, target, attacker);
   // Effects of the one hit (e.g. Rupture).
-  if (attacker && die) trigger(table, "wasHit", target, { other: attacker, die, dieIsMine: false });
+  if (attacker && die) trigger(table, "wasHit", target, { other: attacker, die, dieIsMine: false, ...page });
+}
+
+/** The Page a die comes from and how it lands, for effects that ask about "the Page". */
+interface PagePlay {
+  page?: Page;
+  nth?: number;
+  oneSided?: boolean;
 }
 
 /**
@@ -231,7 +265,7 @@ function incoming(table: TableState, target: Token, amount: number, type: "healt
   if (amount <= 0) return 0;
   const by = source.by && source.by !== target ? source.by : undefined;
   const fx = trigger(table, "takingDamage", target, { other: by, die, dieIsMine: false, event: { amount, type, source: source.attack ? "attack" : source.effectId } });
-  return Math.max(0, amount + fx.damage - fx.reduce);
+  return withPct(Math.max(0, amount + fx.damage - fx.reduce), fx.pct);
 }
 
 function checkKnockedOut(table: TableState, target: Token, by?: Token) {
@@ -240,6 +274,8 @@ function checkKnockedOut(table: TableState, target: Token, by?: Token) {
     log(table, `  ${target.name} is Knocked Out!`);
     onKnockedOut(table, target);
     if (by && by !== target) trigger(table, "knockOut", by, { other: target });
+    // Everyone else still fighting hears about it (Hook, Remembrance, Corpse Cleanup).
+    for (const t of fighters(table)) if (t !== target) trigger(table, "someoneDown", t, { other: target });
   }
 }
 
@@ -274,6 +310,7 @@ function staggerUpkeep(table: TableState, t: Token) {
     t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
     t.resources.stagger = t.resources.maxStagger;
     log(table, `  ${t.name} recovers from Stagger${secret(t, "stagger", ` (${t.resources.stagger}/${t.resources.maxStagger})`)}; Resistances are back to normal.`);
+    trigger(table, "recovered", t);
   } else {
     t.status = { ...t.status, staggerUpkeeps: passed };
     log(table, `  ${t.name} is Staggered and can't act (recovers in ${STAGGER_UPKEEPS - passed} more Upkeep${STAGGER_UPKEEPS - passed === 1 ? "" : "s"}).`);
@@ -284,8 +321,39 @@ function recoverStagger(table: TableState, t: Token, amount: number) {
   const r = t.resources;
   const before = r.stagger;
   r.stagger = Math.min(r.maxStagger, r.stagger + amount);
-  if (r.stagger > 0 && t.status?.staggered) t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
+  const wasStaggered = !!t.status?.staggered;
+  if (r.stagger > 0 && wasStaggered) t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
   if (r.stagger > before) log(table, secret(t, "stagger", `  ${t.name} recovers ${r.stagger - before} Stagger Resist.`));
+  if (wasStaggered && !t.status?.staggered) trigger(table, "recovered", t);
+}
+
+// ---- Emotion Levels (a Game setting) ----
+
+const emotionOn = () => !!engineCtx?.emotionLevels?.();
+
+/** Emotion Points: each die a character wins, loses, lands or is hit by earns them 1. */
+function emotionPoint(table: TableState, ...tokens: Token[]) {
+  if (!emotionOn() || !table.combat) return;
+  for (const t of tokens) addEmotion(t, 1);
+}
+
+function addEmotion(t: Token, n: number) {
+  if (!emotionOn() || n <= 0) return;
+  const e = (t.emotion ??= { level: 0, points: 0 });
+  if (e.level < MAX_EMOTION) e.points += n;
+}
+
+/** End of the round: anyone with enough Emotion Points goes up a level ("When my Emotion Level rises"). */
+function emotionLevelUp(table: TableState, t: Token) {
+  const e = t.emotion;
+  if (!emotionOn() || !e) return;
+  while (e.level < MAX_EMOTION && e.points >= EMOTION_POINTS[e.level]) {
+    e.points -= EMOTION_POINTS[e.level];
+    e.level += 1;
+    log(table, `  ${t.name} reaches Emotion Level ${e.level}.`);
+    trigger(table, "emotionUp", t, { event: { amount: e.level } });
+  }
+  if (e.level >= MAX_EMOTION) e.points = 0;
 }
 
 /** Clash Win heals 1 Sanity, Clash Lose costs 1. Sanity runs from -max to +max; the minimum means Panic. */
@@ -349,7 +417,10 @@ function effectOps(table: TableState): EffectOps<Token> {
       const r = t.resources;
       const before = r.hp;
       r.hp = Math.min(r.maxHp, r.hp + n);
-      if (r.hp > before) log(table, `  ${t.name} recovers${secret(t, "hp", ` ${r.hp - before}`)} Health${secret(t, "hp", ` (${r.hp}/${r.maxHp})`)}.`);
+      if (r.hp > before) {
+        log(table, `  ${t.name} recovers${secret(t, "hp", ` ${r.hp - before}`)} Health${secret(t, "hp", ` (${r.hp}/${r.maxHp})`)}.`);
+        trigger(table, "healed", t, { event: { amount: r.hp - before } });
+      }
     },
     recoverStagger: (t, n) => recoverStagger(table, t, n),
     light: (t, n) => {
@@ -393,6 +464,75 @@ function effectOps(table: TableState): EffectOps<Token> {
       if (moved) log(table, `  ${t.name} is ${n > 0 ? "pushed" : "pulled"} ${moved} ${moved === 1 ? "tile" : "tiles"}.`);
     },
     log: (line) => log(table, line),
+    speed: (t) => table.combat?.order.find((x) => x.tokenId === t.id)?.speed ?? 0,
+    resource: (t, key) => t.resources[key],
+    hand: (t) => table.combat?.decks[t.id]?.hand.length ?? 0,
+    used: (t) => table.combat?.used?.[t.id] ?? 0,
+    emotion: (t) => (emotionOn() ? (t.emotion?.level ?? 0) : 0),
+    addEmotion: (t, n) => {
+      if (!emotionOn() || n <= 0) return;
+      addEmotion(t, n);
+      log(table, `  ${t.name} gains ${n} Emotion ${n === 1 ? "Point" : "Points"}.`);
+    },
+    discard: (t, n) => {
+      const deck = table.combat?.decks[t.id];
+      if (!deck) return 0;
+      let gone = 0;
+      for (; gone < Math.min(n, 10) && deck.hand.length; gone++) {
+        const [card] = deck.hand.splice(rollDie(deck.hand.length) - 1, 1);
+        deck.discard.push(card);
+        log(table, `  ${t.name} discards ${secret(t, "deck", table.combat!.pages[card.pageId]?.name ?? "a Page")}.`);
+      }
+      return gone;
+    },
+    addPage: (t, names, n) => {
+      const c = table.combat;
+      const deck = c?.decks[t.id];
+      if (!c || !deck) return;
+      const own = t.side === "player" ? Object.values(engineCtx?.loadout(t.id)?.pages ?? {}) : (t.pages ?? []);
+      const wanted = names.map((x) => x.toLowerCase());
+      const matches = own.filter((p) => wanted.includes(p.name.trim().toLowerCase()));
+      if (!matches.length) return log(table, `  ${t.name} has no Page named ${names.join(" or ")} to add.`);
+      for (let i = 0; i < Math.min(n, 10); i++) {
+        const page = matches[rollDie(matches.length) - 1];
+        c.pages[page.id] ??= page;
+        deck.hand.push({ id: newId(), pageId: page.id });
+        log(table, `  ${t.name} adds ${secret(t, "deck", page.name)} to their hand.`);
+      }
+    },
+    costDown: (t, n) => {
+      const c = table.combat;
+      const deck = c?.decks[t.id];
+      const cards = (deck?.hand ?? []).filter((x) => (c!.pages[x.pageId]?.cost ?? 0) >= 1);
+      if (!c || !cards.length) return;
+      const card = cards[rollDie(cards.length) - 1];
+      card.discount = { n: (card.discount?.round === c.round ? card.discount.n : 0) + n, round: c.round };
+      log(table, `  ${t.name}'s ${secret(t, "deck", c.pages[card.pageId]?.name ?? "Page")} costs ${n} less this round.`);
+    },
+    counterDie: (t, die) => {
+      const c = table.combat;
+      if (!c) return;
+      storeCounter(c, t, die, "");
+      log(table, `  ${t.name} gains a Counter ${diceText(die)}.`);
+    },
+    resist: (t, kind, isStagger) => resistance(t, isStagger ? t.staggerResistances : t.resistances, kind, isStagger),
+    setResist: (t, kind, value, which, until) => {
+      const round = until === "combat" ? undefined : (table.combat?.round ?? 0) + (until === "nextRound" ? 1 : 0);
+      const sides = which === "both" ? [false, true] : [which === "stagger"];
+      for (const stagger of sides) {
+        t.resistMods = [...(t.resistMods ?? []).filter((m) => !(m.kind === kind && m.stagger === stagger)), { kind, stagger, value, ...(round !== undefined ? { round } : {}) }];
+      }
+      log(table, secret(t, "resistances", `  ${t.name}'s ${which === "stagger" ? "Stagger " : ""}Resistance${which === "both" ? "s" : ""} to ${kind} ${which === "both" ? "are" : "is"} now ${value}x${until === "round" ? " this round" : ""}.`));
+    },
+    enemies: (a, b) => opposed(a.side, b.side),
+    speedDice: (t, n) => {
+      const entry = table.combat?.order.find((x) => x.tokenId === t.id);
+      if (!entry || !n) return;
+      const dice = Math.max(0, Math.min(10, entry.dice + n));
+      entry.baseDice = Math.max(0, (entry.baseDice ?? entry.dice) + (dice - entry.dice));
+      entry.dice = dice;
+      log(table, `  ${t.name} now has ${dice} Speed ${dice === 1 ? "Die" : "Dice"}.`);
+    },
   };
 }
 
@@ -401,15 +541,32 @@ function trigger(table: TableState, when: When, holder: Token, opts: TriggerOpti
   return runTrigger(effectOps(table), when, holder, opts);
 }
 
-/** A die roll: advantage rolls twice and keeps the higher, disadvantage the lower. */
-function rollWith(table: TableState, owner: Token, sides: number, advantage: number): number {
-  const s = Math.max(1, sides);
-  const roll = rollDie(s);
-  if (!advantage) return roll;
-  const again = rollDie(s);
-  const kept = advantage > 0 ? Math.max(roll, again) : Math.min(roll, again);
-  log(table, `  ${owner.name} rolls with ${advantage > 0 ? "advantage" : "disadvantage"}: ${roll} and ${again}, keeps ${kept}.`);
-  return kept;
+type RollFx = Pick<TriggerResult, "advantage" | "min" | "rollMax" | "rerollMin">;
+
+/**
+ * A die roll from 1 (plus any raised Min) to its size: advantage rolls twice and keeps the higher,
+ * disadvantage the lower. Effects can also make it roll its Max, or roll again once on its Min.
+ */
+function rollWith(table: TableState, owner: Token, sides: number, fx: RollFx): number {
+  const max = Math.max(1, sides);
+  const min = Math.max(1, Math.min(max, 1 + fx.min));
+  if (fx.rollMax) {
+    log(table, `  ${owner.name}'s die rolls its Max (${max}).`);
+    return max;
+  }
+  const once = () => {
+    const roll = min + rollDie(max - min + 1) - 1;
+    if (!fx.advantage) return roll;
+    const again = min + rollDie(max - min + 1) - 1;
+    const kept = fx.advantage > 0 ? Math.max(roll, again) : Math.min(roll, again);
+    log(table, `  ${owner.name} rolls with ${fx.advantage > 0 ? "advantage" : "disadvantage"}: ${roll} and ${again}, keeps ${kept}.`);
+    return kept;
+  };
+  const roll = once();
+  if (!fx.rerollMin || roll !== min || min === max) return roll;
+  const again = once();
+  log(table, `  ${owner.name} rolled the Min (${roll}) and rolls again: ${again}.`);
+  return again;
 }
 
 // ---- Dice Clashes (Act 3, "Dice") ----
@@ -418,16 +575,25 @@ interface LiveDie {
   die: Dice;
   owner: Token;
   pageType: Page["type"];
+  /** The Page it's on, for effects that ask about it. */
+  play?: PagePlay;
 }
 
 /**
  * Final Power = roll + Base Power, plus anything the roller's effects add (e.g. Strength) and the
  * opponent's take away (Enemy Power Down). Effects can also change the die's Max or give advantage.
  */
-function rollPower(table: TableState, d: Dice, owner: Token, other?: Token): number {
-  const mine = trigger(table, "roll", owner, { other, die: d });
-  const theirs = other ? trigger(table, "theyRoll", other, { other: owner, die: d, dieIsMine: false }) : undefined;
-  const power = rollWith(table, owner, d.sides + mine.max + (theirs?.max ?? 0), mine.advantage + (theirs?.advantage ?? 0)) + d.basePower;
+function rollPower(table: TableState, d: Dice, owner: Token, other?: Token, play: PagePlay = {}): number {
+  const page = { page: play.page, nth: play.nth };
+  const mine = trigger(table, "roll", owner, { other, die: d, ...page });
+  const theirs = other ? trigger(table, "theyRoll", other, { other: owner, die: d, dieIsMine: false, ...page }) : undefined;
+  const fx: RollFx = {
+    advantage: mine.advantage + (theirs?.advantage ?? 0),
+    min: mine.min + (theirs?.min ?? 0),
+    rollMax: mine.rollMax || !!theirs?.rollMax,
+    rerollMin: mine.rerollMin || !!theirs?.rerollMin,
+  };
+  const power = rollWith(table, owner, d.sides + mine.max + (theirs?.max ?? 0), fx) + d.basePower;
   const bonus = mine.power + (theirs?.power ?? 0);
   return bonus ? Math.max(0, power + bonus) : power;
 }
@@ -446,7 +612,13 @@ interface ClashOutcome {
  * Two Dice clash: higher Final Power wins, equal is a Draw (both Negated), Evade vs Evade is
  * always a Draw. Applies damage, Stagger and Sanity as the ruleset describes.
  */
-function clashDice(table: TableState, a: LiveDie, b: LiveDie, fa = rollPower(table, a.die, a.owner, b.owner), fb = rollPower(table, b.die, b.owner, a.owner)): ClashOutcome {
+function clashDice(
+  table: TableState,
+  a: LiveDie,
+  b: LiveDie,
+  fa = rollPower(table, a.die, a.owner, b.owner, a.play),
+  fb = rollPower(table, b.die, b.owner, a.owner, b.play),
+): ClashOutcome {
   const desc = `${a.owner.name}'s ${diceText(a.die)} (${fa}) vs ${b.owner.name}'s ${diceText(b.die)} (${fb})`;
   if (fa === fb || (a.die.kind === "evade" && b.die.kind === "evade")) {
     log(table, ` ${desc}: Draw, both Negated.`);
@@ -455,6 +627,8 @@ function clashDice(table: TableState, a: LiveDie, b: LiveDie, fa = rollPower(tab
   const aWins = fa > fb;
   const [w, l, fw, fl] = aWins ? [a, b, fa, fb] : [b, a, fb, fa];
   log(table, ` ${desc}: ${w.owner.name} wins.`);
+  emotionPoint(table, w.owner, l.owner);
+  const wPlay: PagePlay = { ...w.play, oneSided: false };
   changeSanity(table, w.owner, 1);
   changeSanity(table, l.owner, -1);
   let wKeep: ClashOutcome["a"] = "gone";
@@ -465,11 +639,11 @@ function clashDice(table: TableState, a: LiveDie, b: LiveDie, fa = rollPower(tab
       if (w.pageType === "melee" && l.pageType === "ranged") {
         log(table, `  Melee beats Ranged: the die is recycled to the bottom of the Page.`);
         wKeep = "bottom";
-      } else dealDamage(table, l.owner, fw, w.die.kind, w.owner, w.die);
+      } else dealDamage(table, l.owner, fw, w.die.kind, w.owner, w.die, wPlay);
     } else if (l.die.kind === "block") {
       // A losing Block reduces the damage (before Type Resistance) by its Final Power.
-      dealDamage(table, l.owner, Math.max(0, fw - fl), w.die.kind, w.owner, w.die);
-    } else dealDamage(table, l.owner, fw, w.die.kind, w.owner, w.die);
+      dealDamage(table, l.owner, Math.max(0, fw - fl), w.die.kind, w.owner, w.die, wPlay);
+    } else dealDamage(table, l.owner, fw, w.die.kind, w.owner, w.die, wPlay);
   } else if (w.die.kind === "block") {
     if (isOffensive(l.die.kind)) {
       // A Ranged attacker outside the Melee target's range takes no Stagger damage from a winning Block.
@@ -481,8 +655,8 @@ function clashDice(table: TableState, a: LiveDie, b: LiveDie, fa = rollPower(tab
     recoverStagger(table, w.owner, fw);
     if (isOffensive(l.die.kind)) wKeep = "recycle";
   }
-  trigger(table, "clashWin", w.owner, { other: l.owner, die: w.die });
-  trigger(table, "clashLose", l.owner, { other: w.owner, die: l.die });
+  trigger(table, "clashWin", w.owner, { other: l.owner, die: w.die, page: w.play?.page, nth: w.play?.nth });
+  trigger(table, "clashLose", l.owner, { other: w.owner, die: l.die, page: l.play?.page, nth: l.play?.nth });
   return aWins ? { winner: "a", a: wKeep, b: "gone", fa, fb } : { winner: "b", a: "gone", b: wKeep, fa, fb };
 }
 
@@ -510,19 +684,26 @@ function storeCounter(c: CombatState, owner: Token, die: Dice, pageId: string) {
  * A One-Sided Attack: each die hits the target top to bottom. The target's Counter Dice answer
  * automatically, in the order they were made; any used are lost when the page finishes.
  */
-function oneSided(table: TableState, attacker: Token, target: Token, page: Page, dice: Dice[], powers?: number[], animate = true) {
+function oneSided(table: TableState, attacker: Token, target: Token, page: Page, dice: Dice[], powers?: number[], animate = true, nth?: number) {
   const c = table.combat!;
   const used = new Set<string>();
   const rounds: FxRound[] = [];
   const before = fxState(attacker, target);
   dice.forEach((die, i) => {
     if (knockedOut(target) || down(attacker)) return;
-    const fp = powers?.[i] ?? rollPower(table, die, attacker, target);
+    const play: PagePlay = { page, nth };
+    const fp = powers?.[i] ?? rollPower(table, die, attacker, target, play);
     // The oldest Counter Die answers; one that won stays first and answers the next die too.
     const counter = (c.counters[target.id] ?? [])[0];
     if (counter) {
       used.add(counter.id);
-      const out = clashDice(table, { die, owner: attacker, pageType: page.type }, { die: counter.die, owner: target, pageType: c.pages[counter.pageId]?.type ?? "melee" }, fp);
+      const counterPage = c.pages[counter.pageId];
+      const out = clashDice(
+        table,
+        { die, owner: attacker, pageType: page.type, play },
+        { die: counter.die, owner: target, pageType: counterPage?.type ?? "melee", play: { page: counterPage } },
+        fp,
+      );
       rounds.push({ a: fxDie(die, out.fa), b: fxDie(counter.die, out.fb), result: out.winner, after: fxState(attacker, target) });
       // "On Clash Win, Counter Dice are Recycled": it answers the next die too. Otherwise it's spent.
       if (out.winner !== "b") c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => x.id !== counter.id);
@@ -530,7 +711,8 @@ function oneSided(table: TableState, attacker: Token, target: Token, page: Page,
     }
     if (isOffensive(die.kind)) {
       log(table, ` ${attacker.name}'s ${diceText(die)} (${fp}) hits ${target.name}.`);
-      dealDamage(table, target, fp, die.kind, attacker, die);
+      emotionPoint(table, attacker, target);
+      dealDamage(table, target, fp, die.kind, attacker, die, { ...play, oneSided: true });
       rounds.push({ a: fxDie(die, fp), result: "hit", after: fxState(attacker, target) });
     } else storeCounter(c, attacker, die, page.id);
   });
@@ -548,8 +730,8 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
   const ta = owner(a);
   const tb = owner(b);
   log(table, `Clash: ${ta.name}'s ${pa.name} vs ${tb.name}'s ${pb.name}.`);
-  const qa = pa.dice.filter((d) => !d.counter).map((die) => ({ die, owner: ta, pageType: pa.type }));
-  const qb = pb.dice.filter((d) => !d.counter).map((die) => ({ die, owner: tb, pageType: pb.type }));
+  const qa: LiveDie[] = pa.dice.filter((d) => !d.counter).map((die) => ({ die, owner: ta, pageType: pa.type, play: { page: pa, nth: a.nth } }));
+  const qb: LiveDie[] = pb.dice.filter((d) => !d.counter).map((die) => ({ die, owner: tb, pageType: pb.type, play: { page: pb, nth: b.nth } }));
   const rounds: FxRound[] = [];
   const before = fxState(ta, tb);
 
@@ -592,9 +774,10 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
     for (const d of q) {
       if (down(me) || knockedOut(them)) break;
       if (isOffensive(d.die.kind)) {
-        const fp = rollPower(table, d.die, me, them);
+        const fp = rollPower(table, d.die, me, them, d.play);
         log(table, ` ${me.name}'s ${diceText(d.die)} (${fp}) hits ${them.name} unopposed.`);
-        dealDamage(table, them, fp, d.die.kind, me, d.die);
+        emotionPoint(table, me, them);
+        dealDamage(table, them, fp, d.die.kind, me, d.die, { ...d.play, oneSided: true });
         rounds.push({ [me === ta ? "a" : "b"]: fxDie(d.die, fp), result: "hit", after: fxState(ta, tb) });
       } else storeCounter(c, me, d.die, page.id);
     }
@@ -614,7 +797,8 @@ function resolveMass(table: TableState, slot: SlottedPage) {
   const dice = page.dice.filter((d) => !d.counter);
   const targets = slot.targets.map((t) => ({ ref: t, token: table.tokens[t.tokenId] })).filter((t) => t.token && !knockedOut(t.token));
   log(table, `${owner.name} unleashes ${page.name} (${page.type === "massSummation" ? "Summation" : "Individual"}) on ${targets.map((t) => t.token.name).join(", ")}.`);
-  const powers = dice.map((d) => rollPower(table, d, owner));
+  const play: PagePlay = { page, nth: slot.nth };
+  const powers = dice.map((d) => rollPower(table, d, owner, undefined, play));
 
   if (page.type === "massSummation") {
     const total = powers.reduce((x, y) => x + y, 0);
@@ -628,7 +812,7 @@ function resolveMass(table: TableState, slot: SlottedPage) {
       const dp = c.pages[defence.pageId];
       const theirs = dp.dice
         .filter((d) => !d.counter)
-        .map((d) => rollPower(table, d, token, owner))
+        .map((d) => rollPower(table, d, token, owner, { page: dp, nth: defence.nth }))
         .reduce((x, y) => x + y, 0);
       log(table, ` Summation: ${owner.name} ${total} vs ${token.name}'s ${dp.name} ${theirs}.`);
       if (theirs < total) {
@@ -645,7 +829,7 @@ function resolveMass(table: TableState, slot: SlottedPage) {
         hit.push(token);
       }
     }
-    for (const t of hit) oneSided(table, owner, t, page, dice, powers);
+    for (const t of hit) oneSided(table, owner, t, page, dice, powers, true, slot.nth);
   } else {
     // Individual: each Mass die meets each target's next die; a lower target die is Negated and the Mass die lands.
     const queues = new Map(
@@ -660,12 +844,12 @@ function resolveMass(table: TableState, slot: SlottedPage) {
         const q = queues.get(token.id)!;
         const theirs = q.dice.shift();
         if (theirs) {
-          const tf = rollPower(table, theirs, token, owner);
+          const tf = rollPower(table, theirs, token, owner, { page: q.defence ? c.pages[q.defence.pageId] : undefined, nth: q.defence?.nth });
           log(table, ` ${owner.name}'s ${diceText(die)} (${powers[i]}) vs ${token.name}'s ${diceText(theirs)} (${tf}).`);
           if (tf >= powers[i]) continue;
           log(table, `  ${token.name}'s die is Negated.`);
         }
-        oneSided(table, owner, token, page, [die], [powers[i]], false);
+        oneSided(table, owner, token, page, [die], [powers[i]], false, slot.nth);
       }
     });
     for (const q of queues.values()) if (q.defence) removeSlot(c, q.defence);
@@ -700,7 +884,7 @@ function resolveSlot(table: TableState, slot: SlottedPage): boolean {
     log(table, `${owner.name}'s ${page.name} has no target left.`);
   } else {
     log(table, `${owner.name} uses ${page.name} on ${target.name}.`);
-    oneSided(table, owner, target, page, page.dice.filter((d) => !d.counter));
+    oneSided(table, owner, target, page, page.dice.filter((d) => !d.counter), undefined, true, slot.nth);
   }
   removeSlot(c, slot);
   return true;
@@ -781,13 +965,27 @@ const fighters = (table: TableState) => (table.combat?.order ?? []).map((x) => t
 /** End of the round: "At the end of the round" rules, then stacks that wear off at round's end. */
 function endRound(table: TableState) {
   const ops = effectOps(table);
+  const round = table.combat?.round;
   for (const t of fighters(table)) trigger(table, "roundEnd", t);
   for (const t of fighters(table)) decayAtEnd(ops, t, "round");
+  for (const t of fighters(table)) emotionLevelUp(table, t);
+  // Resistances changed "until the end of the round" go back.
+  for (const t of Object.values(table.tokens)) {
+    if (!t.resistMods) continue;
+    t.resistMods = t.resistMods.filter((m) => m.round === undefined || m.round !== round);
+    if (!t.resistMods.length) delete t.resistMods;
+  }
 }
 
 /** Start of a round: stacks given "next round" arrive, then "At the start of the round" rules. */
 function startRound(table: TableState) {
   const ops = effectOps(table);
+  const c = table.combat;
+  if (c) {
+    delete c.used;
+    // "Costs less this round" wears off.
+    for (const deck of Object.values(c.decks)) for (const card of deck.hand) if (card.discount && card.discount.round !== c.round) delete card.discount;
+  }
   for (const t of fighters(table)) arriveAtRoundStart(ops, t);
   for (const t of fighters(table)) trigger(table, "roundStart", t);
 }
@@ -814,8 +1012,14 @@ function endstep(table: TableState, token: Token) {
 // ---- Starting, joining and leaving combat ----
 
 export function startCombat(table: TableState, ids: string[], ctx?: EngineContext) {
-  // "Once a combat" rules can fire again.
-  for (const id of ids) delete table.tokens[id].effectUses;
+  // "Once a combat" rules can fire again; Emotion starts from 0.
+  for (const id of ids) {
+    const t = table.tokens[id];
+    delete t.effectUses;
+    delete t.resistMods;
+    if (ctx?.emotionLevels?.()) t.emotion = { level: 0, points: 0 };
+    else delete t.emotion;
+  }
   const c: CombatState = { round: 1, order: [], turn: 0, phase: "resolve", movementLeft: 0, pages: {}, decks: {}, slots: [], counters: {} };
   table.combat = c;
   c.order = sortOrder(table, ids.map((id) => rollSpeed(table, table.tokens[id])));
@@ -838,6 +1042,8 @@ export function finishCombat(table: TableState, ctx?: EngineContext) {
   delete table.combat;
   for (const t of tokens) {
     delete t.effectUses;
+    delete t.resistMods;
+    delete t.emotion;
     if (!ctx?.clearEffectsAfterCombat?.() || !t.effects?.some((e) => e.defId)) continue;
     t.effects = t.effects.filter((e) => !e.defId);
     log(table, `  ${t.name}'s automated Effects wear off.`);
@@ -992,21 +1198,24 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   if (!mass && ids.length > 1) throw new ActionError("This Page takes one target.");
   const allowed = new Set(validTargets(table, token, page).map((t) => t.id));
   for (const id of ids) if (!allowed.has(id)) throw new ActionError(`${table.tokens[id]?.name ?? "That target"} is out of range.`);
-  if (token.resources.light < page.cost) throw new ActionError(`${page.name} costs ${page.cost} Light; ${token.name} has ${token.resources.light}.`);
+  const aimed = a.cardId ? pile(c.decks[token.id], a.source)?.find((x) => x.id === a.cardId) : undefined;
+  const cost = Math.max(0, page.cost - (aimed?.discount?.round === c.round ? aimed.discount.n : 0));
+  if (token.resources.light < cost) throw new ActionError(`${page.name} costs ${cost} Light; ${token.name} has ${token.resources.light}.`);
   const targetDie = !mass && opts.targetDie !== undefined ? opts.targetDie : 0;
   if (targetDie > 0) {
     const theirs = c.order.find((x) => x.tokenId === ids[0])?.dice ?? 0;
     if (targetDie >= theirs) throw new ActionError(`${table.tokens[ids[0]]?.name ?? "The target"} has no Speed Die ${targetDie + 1}.`);
   }
 
-  const card = a.cardId ? pile(c.decks[token.id], a.source)?.find((x) => x.id === a.cardId) : undefined;
+  const card = aimed;
   const free = freeDie(c, token, a.die);
   if (page.type !== "instant" && free === undefined) {
     throw new ActionError(a.die !== undefined ? `Speed Die ${a.die + 1} isn't free.` : "No free Speed Die to slot it on.");
   }
 
   // Pay, and take the card out of the hand (or Auxiliary Deck).
-  token.resources.light -= page.cost;
+  token.resources.light -= cost;
+  if (card?.discount) delete card.discount;
   const deck = c.decks[token.id];
   if (deck && card) {
     if (a.source === "aux") {
@@ -1016,10 +1225,13 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
     else deck.hand = deck.hand.filter((x) => x.id !== card.id);
   }
   delete c.aim;
+  // Count it, for "the first Page I use this round" and "if I haven't used a Page".
+  const nth = ((c.used ??= {})[token.id] ?? 0) + 1;
+  c.used[token.id] = nth;
   // "On Use": the character's effects, then each of the Page's dice's Dice effects.
   const usedOn = table.tokens[ids[0]];
-  trigger(table, "use", token, { other: usedOn });
-  for (const d of page.dice) trigger(table, "use", token, { other: usedOn, die: d, only: "die" });
+  trigger(table, "use", token, { other: usedOn, page, nth });
+  for (const d of page.dice) trigger(table, "use", token, { other: usedOn, die: d, only: "die", page, nth });
   const entry: SlottedPage = {
     id: newId(),
     ownerId: token.id,
@@ -1029,6 +1241,7 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
     fromAux: a.source === "aux",
     fromEgo: a.source === "ego",
     targets: ids.map((tokenId) => ({ tokenId, die: targetDie })),
+    nth,
   };
   const names = ids.map((id) => table.tokens[id].name).join(", ");
 
@@ -1044,7 +1257,7 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   c.slots.push(entry);
 
   if (!mass && opts.unopposed) {
-    log(table, `${token.name} slots ${page.name} against ${names}, unopposed (${page.cost} Light).`);
+    log(table, `${token.name} slots ${page.name} against ${names}, unopposed (${cost} Light).`);
     return;
   }
   if (!mass) {
@@ -1069,7 +1282,7 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
       return;
     }
   }
-  log(table, `${token.name} slots ${page.name} against ${names} (${page.cost} Light).`);
+  log(table, `${token.name} slots ${page.name} against ${names} (${cost} Light).`);
 }
 
 /**
