@@ -232,7 +232,8 @@ test("cleanEffect keeps only known pieces and sensible numbers", () => {
   assert.equal(d.rules[0].when, "turnEnd");
   assert.deepEqual(d.rules[0].checks[0], { kind: "roll", sides: 10, cmp: "atMost", amount: { kind: "number", n: 1 } });
   assert.equal(d.rules[0].actions[0].kind, "damage");
-  assert.equal(d.rules[0].actions[0].amount.n, 99);
+  // Up to 999, for "recover 100 HP" (Guts) and "100% less damage" (The Blue Reverberation).
+  assert.equal(d.rules[0].actions[0].amount.n, 999);
   assert.deepEqual(d.rules[0].actions[1].amount, { kind: "perStack", n: 1 });
   assert.deepEqual(cleanEffect(d), d, "cleaning twice changes nothing");
 });

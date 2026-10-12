@@ -10,6 +10,7 @@ import {
   blankRule,
   CHECK_OPTIONS,
   DECAY_OPTIONS,
+  DIE_SIZES,
   describeEffect,
   describeRule,
   EFFECT_KINDS,
@@ -17,6 +18,9 @@ import {
   effectWarnings,
   isAlwaysOn,
   LIMIT_OPTIONS,
+  PAGE_IS_OPTIONS,
+  PERCENT_ACTIONS,
+  RESIST_LEVELS,
   whenOptions,
   WHO_OPTIONS,
   type Action,
@@ -35,7 +39,6 @@ import { NumberInput } from "../Fields.tsx";
 
 const STATS = [...PRIMARY_STATS, ...SECONDARY_STATS].map((s) => ({ value: s.key, label: s.label }));
 const STAT_NAMES = Object.fromEntries(STATS.map((s) => [s.value, s.label]));
-const DIE_SIZES = [4, 6, 8, 10, 12, 20];
 
 /** The effect's card text, written from its pieces. */
 export function effectText(def: EffectDef, library: Record<string, EffectDef>) {
@@ -112,6 +115,8 @@ function AmountPicker({ amount, onChange, label, library }: { amount: Amount; on
     else if (kind === "rolls") onChange({ kind, sides: 10, ...keep });
     else if (kind === "stat") onChange({ kind, stat: "justice", ...keep });
     else if (kind === "effectStacks") onChange({ kind, n: 1, effectId: "preset:burn", whose: "me", ...keep });
+    else if (kind === "maxHealth" || kind === "maxStagger") onChange({ kind, n: 10, ...keep });
+    else if (kind === "speed") onChange({ kind, whose: "them", ...keep });
     else onChange({ kind, ...keep });
   };
   const statuses = statusOptions(library);
@@ -119,7 +124,7 @@ function AmountPicker({ amount, onChange, label, library }: { amount: Amount; on
     <span className="piece-group">
       {amount.kind === "number" && (
         <span className="piece-num">
-          <NumberInput label={`${label} number`} value={amount.n ?? 0} min={0} max={99} onChange={(n) => onChange({ ...amount, n: Math.max(0, Math.min(99, Math.round(n))) })} />
+          <NumberInput label={`${label} number`} value={amount.n ?? 0} min={0} max={999} onChange={(n) => onChange({ ...amount, n: Math.max(0, Math.min(999, Math.round(n))) })} />
         </span>
       )}
       {amount.kind === "perStack" && (
@@ -127,6 +132,12 @@ function AmountPicker({ amount, onChange, label, library }: { amount: Amount; on
           <NumberInput label={`${label} per stack`} value={amount.n ?? 1} min={1} max={20} onChange={(n) => onChange({ ...amount, n: Math.max(1, Math.min(20, Math.round(n))) })} />
         </span>
       )}
+      {(amount.kind === "maxHealth" || amount.kind === "maxStagger") && (
+        <span className="piece-num">
+          <NumberInput label={`${label} percent`} value={amount.n ?? 10} min={1} max={100} onChange={(n) => onChange({ ...amount, n: Math.max(1, Math.min(100, Math.round(n))) })} />
+        </span>
+      )}
+      {amount.kind === "speed" && <Select label={`${label} whose Speed`} value={amount.whose ?? "me"} options={WHOSE_OPTIONS} onChange={(whose) => onChange({ ...amount, whose })} />}
       <Select label={label} value={amount.kind} options={AMOUNT_OPTIONS} onChange={set} />
       {amount.kind === "roll" && <Select label={`${label} die`} value={amount.sides ?? 6} options={dice} onChange={(sides) => onChange({ ...amount, sides })} />}
       {amount.kind === "stat" && <Select label={`${label} Stat`} value={amount.stat ?? "justice"} options={STATS} onChange={(stat) => onChange({ ...amount, stat })} />}
@@ -299,6 +310,79 @@ function CheckPiece({ check, library, onChange, onRemove }: { check: Check; libr
         </>
       );
       break;
+    case "speed":
+      body = (
+        <>
+          {whose(WHOSE_OPTIONS)} Speed is {cmp} <AmountPicker label="Speed amount" library={library} amount={check.amount ?? { kind: "number", n: 5 }} onChange={(amount) => onChange({ ...check, amount })} />
+        </>
+      );
+      break;
+    case "hand":
+    case "used":
+    case "light":
+    case "emotion": {
+      const [before, after, max] = {
+        hand: ["I have", "Pages in my hand", 20],
+        used: ["I've used", "Pages this round", 20],
+        light: ["I have", "Light", 20],
+        emotion: ["my Emotion Level is", "", 5],
+      }[check.kind] as [string, string, number];
+      body = (
+        <>
+          {before} {cmp} <Num label={CHECK_OPTIONS.find((o) => o.value === check.kind)!.label} value={check.n ?? 0} min={0} max={max} onChange={(n) => onChange({ ...check, n })} /> {after}
+        </>
+      );
+      break;
+    }
+    case "page":
+      body = (
+        <>
+          the Page{" "}
+          <Select
+            label="Page check"
+            value={check.pageIs ?? "melee"}
+            options={PAGE_IS_OPTIONS}
+            onChange={(pageIs) => {
+              const { n: _n, cmp: _c, text: _t, effectId: _e, ...rest } = check;
+              onChange({ ...rest, pageIs, ...(pageIs === "cost" || pageIs === "dice" || pageIs === "kinds" ? { cmp: "atLeast" as const, n: pageIs === "cost" ? 3 : 1 } : {}), ...(pageIs === "named" ? { text: "" } : {}), ...(pageIs === "gives" ? { effectId: "preset:burn" } : {}) });
+            }}
+          />{" "}
+          {(check.pageIs === "cost" || check.pageIs === "dice" || check.pageIs === "kinds") && (
+            <>
+              {cmp} <Num label="Page number" value={check.n ?? 1} min={0} max={20} onChange={(n) => onChange({ ...check, n })} />
+            </>
+          )}
+          {check.pageIs === "named" && <input className="piece" aria-label="Page name has" placeholder="part of its name" value={check.text ?? ""} onChange={(e) => onChange({ ...check, text: e.target.value })} />}
+          {check.pageIs === "gives" && <Select label="Page mentions" value={check.effectId ?? ""} options={statuses} onChange={(effectId) => onChange({ ...check, effectId })} />}
+        </>
+      );
+      break;
+    case "lethal":
+      body = <>the damage would Knock me Out</>;
+      break;
+    case "resist":
+      body = (
+        <>
+          {whose(WHOSE_OPTIONS)} Resistance to the die is {cmp} <Select label="Resistance" value={check.n ?? 150} options={RESIST_LEVELS} onChange={(n) => onChange({ ...check, n })} />
+        </>
+      );
+      break;
+    case "side":
+      body = (
+        <>
+          they're{" "}
+          <Select label="Check side" value={check.side ?? "allies"} options={[{ value: "allies" as const, label: "my ally" }, { value: "enemies" as const, label: "my enemy" }]} onChange={(side) => onChange({ ...check, side })} />
+        </>
+      );
+      break;
+    case "oneSided":
+      body = (
+        <>
+          it's{" "}
+          <Select label="Check attack" value={check.is === false ? "clash" : "one"} options={[{ value: "one", label: "a One-Sided attack" }, { value: "clash", label: "a Clash" }]} onChange={(v) => onChange({ ...check, is: v === "clash" ? false : undefined })} />
+        </>
+      );
+      break;
   }
   return (
     <div className="piece-row check">
@@ -308,6 +392,28 @@ function CheckPiece({ check, library, onChange, onRemove }: { check: Check; libr
         ✕
       </button>
     </div>
+  );
+}
+
+/** A few Effects picked from the library, for "one at random". */
+function EffectList({ label, ids, options, onChange }: { label: string; ids: string[]; options: { value: string; label: string }[]; onChange: (ids: string[]) => void }) {
+  return (
+    <span className="piece-group" aria-label={label}>
+      {ids.map((id, i) => (
+        <span key={i} className="piece-group">
+          {i > 0 && " or "}
+          <Select label={`${label} ${i + 1}`} value={id} options={options} onChange={(v) => onChange(ids.map((x, j) => (j === i ? v : x)))} />
+          <button type="button" className="icon" aria-label={`Remove ${label} ${i + 1}`} onClick={() => onChange(ids.filter((_, j) => j !== i))}>
+            ✕
+          </button>
+        </span>
+      ))}
+      {ids.length < 6 && (
+        <button type="button" className="chip" onClick={() => onChange([...ids, options[0]?.value ?? "preset:burn"])}>
+          + or
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -338,14 +444,36 @@ function ActionPiece({
       <span className="piece-sentence">
         {opt.targets && (
           <>
-            <Select label="Who" value={action.target?.who ?? "me"} options={WHO_OPTIONS} onChange={(who) => onChange({ ...action, target: { who, ...(who === "alliesNear" || who === "enemiesNear" ? { range: action.target?.range ?? 2 } : {}) } })} />
+            <Select
+              label="Who"
+              value={action.target?.who ?? "me"}
+              options={WHO_OPTIONS}
+              onChange={(who) =>
+                onChange({
+                  ...action,
+                  target: {
+                    who,
+                    ...(who === "alliesNear" || who === "enemiesNear" ? { range: action.target?.range ?? 2 } : {}),
+                    ...(who === "randomAllies" || who === "randomEnemies" ? { count: action.target?.count ?? 1 } : {}),
+                  },
+                })
+              }
+            />
             {(action.target?.who === "alliesNear" || action.target?.who === "enemiesNear") && (
               <>
                 {" "}within{" "}
                 <span className="piece-num">
-                  <NumberInput label="Tiles" value={action.target.range ?? 2} min={1} max={20} onChange={(n) => onChange({ ...action, target: { ...action.target!, range: Math.max(1, Math.min(20, Math.round(n))) } })} />
+                  <NumberInput label="Tiles" value={action.target.range ?? 2} min={1} max={99} onChange={(n) => onChange({ ...action, target: { ...action.target!, range: Math.max(1, Math.min(99, Math.round(n))) } })} />
                 </span>{" "}
                 tiles{" "}
+              </>
+            )}
+            {(action.target?.who === "randomAllies" || action.target?.who === "randomEnemies") && (
+              <>
+                {" "}×{" "}
+                <span className="piece-num">
+                  <NumberInput label="How many at random" value={action.target.count ?? 1} min={1} max={10} onChange={(n) => onChange({ ...action, target: { ...action.target!, count: Math.max(1, Math.min(10, Math.round(n))) } })} />
+                </span>{" "}
               </>
             )}
           </>
@@ -353,10 +481,42 @@ function ActionPiece({
         <Select label="Action" value={action.kind} options={options.map((o) => ({ value: o.value, label: o.label }))} onChange={(kind: ActionKind) => onChange({ ...blankAction(kind), ...(ACTION_OPTIONS.find((o) => o.value === kind)!.targets ? { target: action.target ?? { who: "me" } } : {}) })} />{" "}
         {opt.effect && <Select label="Effect given" value={action.effectId ?? ""} options={statuses} onChange={(effectId) => onChange({ ...action, effectId })} />}{" "}
         {!opt.noAmount && <AmountPicker label="Amount" library={library} amount={action.amount} onChange={(amount) => onChange({ ...action, amount })} />}
-        {action.kind === "give" && (
+        {PERCENT_ACTIONS.includes(action.kind) && (
+          <>
+            {" "}
+            <Select label="Points or percent" value={action.percent ? "pct" : "pts"} options={[{ value: "pts", label: "points" }, { value: "pct", label: "% of the damage" }]} onChange={(v) => onChange({ ...action, percent: v === "pct" || undefined })} />
+          </>
+        )}
+        {(action.kind === "giveRandom" || action.kind === "cancelNext") && <EffectList label="Effects to pick from" ids={action.effectIds ?? []} options={statuses} onChange={(effectIds) => onChange({ ...action, effectIds })} />}
+        {(action.kind === "give" || action.kind === "giveRandom") && (
           <>
             {" "}
             <Select label="When it arrives" value={action.later ? "later" : "now"} options={[{ value: "now", label: "now" }, { value: "later", label: "next round" }]} onChange={(v) => onChange({ ...action, later: v === "later" || undefined })} />
+          </>
+        )}
+        {action.kind === "addPage" && (
+          <input className="piece" aria-label="Page name" placeholder="Page name (several: split with commas)" value={action.text ?? ""} onChange={(e) => onChange({ ...action, text: e.target.value })} />
+        )}
+        {action.kind === "counterDie" && (
+          <>
+            {" "}sided,{" "}
+            <Select label="Counter die kind" value={action.dieKind ?? "block"} options={DIE_KINDS.filter((k) => k.value !== "offensive" && k.value !== "defensive") as { value: "slash" | "pierce" | "blunt" | "block" | "evade"; label: string }[]} onChange={(dieKind) => onChange({ ...action, dieKind })} />{" "}
+            Base Power <Num label="Counter die base" value={action.base ?? 0} min={-20} max={20} onChange={(base) => onChange({ ...action, base })} />
+          </>
+        )}
+        {action.kind === "resist" && (
+          <>
+            {" "}
+            <Select label="Resistance which" value={action.which ?? "both"} options={[{ value: "both" as const, label: "Resistance and Stagger Resistance" }, { value: "health" as const, label: "Resistance" }, { value: "stagger" as const, label: "Stagger Resistance" }]} onChange={(which) => onChange({ ...action, which })} />{" "}
+            to{" "}
+            <Select
+              label="Resistance type"
+              value={action.dmgType ?? "die"}
+              options={[{ value: "die" as const, label: "the die's type" }, { value: "random" as const, label: "a random type" }, { value: "slash" as const, label: "Slash" }, { value: "pierce" as const, label: "Pierce" }, { value: "blunt" as const, label: "Blunt" }]}
+              onChange={(dmgType) => onChange({ ...action, dmgType })}
+            />{" "}
+            becomes <Select label="Resistance level" value={action.level ?? 100} options={RESIST_LEVELS} onChange={(level) => onChange({ ...action, level })} />{" "}
+            <Select label="Resistance for" value={action.until ?? "round"} options={[{ value: "round" as const, label: "this round" }, { value: "nextRound" as const, label: "until the end of next round" }, { value: "combat" as const, label: "for the rest of combat" }]} onChange={(until) => onChange({ ...action, until })} />
           </>
         )}
       </span>
@@ -417,6 +577,23 @@ function RuleCard({
             onChange(limit === "always" ? rest : { ...rest, limit });
           }}
         />
+        <label className="inline small">
+          every{" "}
+          <span className="piece-num">
+            <NumberInput
+              label="Every Nth time"
+              value={rule.every ?? 1}
+              min={1}
+              max={20}
+              onChange={(n) => {
+                const { every: _e, ...rest } = rule;
+                const every = Math.max(1, Math.min(20, Math.round(n)));
+                onChange(every > 1 ? { ...rest, every } : rest);
+              }}
+            />
+          </span>{" "}
+          {(rule.every ?? 1) === 1 ? "time" : "times"}
+        </label>
         <span className="muted small">{whens.find((o) => o.value === rule.when)?.hint}</span>
         <button type="button" className="icon" aria-label="Remove rule" onClick={onRemove}>
           ✕
@@ -449,6 +626,17 @@ function RuleCard({
           + Do something else
         </button>
       </div>
+      <label className="inline small rule-stop">
+        <input
+          type="checkbox"
+          checked={!!rule.stop}
+          onChange={(e) => {
+            const { stop: _s, ...rest } = rule;
+            onChange(e.target.checked ? { ...rest, stop: true } : rest);
+          }}
+        />{" "}
+        When this fires, skip the rules below ("one of the following")
+      </label>
       <p className="rule-read">{describeRule(rule, library, STAT_NAMES, kind)}</p>
     </section>
   );
@@ -554,6 +742,30 @@ export function EffectBuilder({
           <span>What it does</span>
           <textarea placeholder="In words. Add a rule below to automate it." value={def.note ?? ""} onChange={(e) => onChange({ ...def, note: e.target.value })} />
         </label>
+      )}
+
+      {optionalRules && (
+        <div className="piece-row">
+          <span className="piece-tag">holds</span>
+          <Select
+            label="Raises the stacks of"
+            value={def.cap?.effectId ?? ""}
+            options={[{ value: "", label: "Nothing special" }, ...statusOptions(library).map((o) => ({ value: o.value, label: `Lets me hold more or fewer ${o.label}` }))]}
+            onChange={(effectId) => {
+              const { cap: _c, ...rest } = def;
+              onChange(effectId ? { ...rest, cap: { effectId, max: def.cap?.max ?? 20 } } : rest);
+            }}
+          />
+          {def.cap && (
+            <label className="inline small">
+              up to{" "}
+              <span className="piece-num">
+                <NumberInput label="Hold up to" value={def.cap.max} min={1} max={99} onChange={(n) => onChange({ ...def, cap: { ...def.cap!, max: Math.max(1, Math.min(99, Math.round(n))) } })} />
+              </span>{" "}
+              stacks
+            </label>
+          )}
+        </div>
       )}
 
       {optionalRules && <h4 className="rules-head">Automate it {def.rules.length ? "" : <span className="muted small">(optional)</span>}</h4>}

@@ -428,7 +428,7 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
         table,
         c.order
           .filter((x) => table.tokens[x.tokenId])
-          .map((x) => rollSpeed(table, table.tokens[x.tokenId], x.dice)),
+          .map((x) => rollSpeed(table, table.tokens[x.tokenId], x.baseDice ?? x.dice)),
       );
       c.turn = Math.max(0, c.order.findIndex((x) => x.tokenId === activeId));
       say(`Speed re-rolled: ${c.order.map((x) => speedText(table.tokens[x.tokenId], x)).join(", ")}.`);

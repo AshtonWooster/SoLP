@@ -80,14 +80,11 @@ export function MapEditor({
   mapId,
   act,
   onEditToken,
-  fog,
 }: {
   gameId: string;
   table: TableState;
   mapId: string;
   act: Act;
-  /** Fog of war is on in Game settings: show its tools and the fog. */
-  fog?: boolean;
   /** Open a token's stats on the table screen (tokens on the players' map only). */
   onEditToken?: (tokenId: string) => void;
 }) {
@@ -274,7 +271,7 @@ export function MapEditor({
   const live = (i: MapItem) => (drag && drag.id === i.id && drag.kind !== "token" ? { ...i, ...drag.to } : i);
   const shown = (hidden?: boolean) => !(asPlayers && hidden);
   // Viewing as players, what's under the fog is left out too, as it is on their screens.
-  const mask = fog && asPlayers ? fogMask(map) : undefined;
+  const mask = asPlayers ? fogMask(map) : undefined;
   const images = items.filter((i) => i.kind === "image" && shown(i.hidden) && itemInView(map, mask, i)).map(live);
   const pins = items.filter((i) => i.kind === "pin" && shown(i.hidden) && itemInView(map, mask, i)).map(live);
   const tokens = scope.tokens.filter((t) => shown(t.hidden) && tokenInView(map, mask, t));
@@ -301,16 +298,14 @@ export function MapEditor({
           </button>
         </div>
         <UploadButton gameId={gameId} onUploaded={addImage} onError={setError} />
-        {fog && (
-          <FogTools
-            mode={fogMode}
-            setMode={(m) => {
-              setFogMode(m);
-              if (m) setTool("select");
-            }}
-            onAll={(hidden) => act({ type: "fogAll", mapId, hidden })}
-          />
-        )}
+        <FogTools
+          mode={fogMode}
+          setMode={(m) => {
+            setFogMode(m);
+            if (m) setTool("select");
+          }}
+          onAll={(hidden) => act({ type: "fogAll", mapId, hidden })}
+        />
         <label className="me-check">
           <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Snap to grid
         </label>
@@ -399,7 +394,7 @@ export function MapEditor({
               </div>
             )}
             {!map.hideGrid && <div className="me-gridlines" style={{ backgroundSize: `${cell}px ${cell}px` }} />}
-            {fog && <FogLayer map={map} gm={!asPlayers} />}
+            <FogLayer map={map} gm={!asPlayers} />
             {layers.tokens.show && (
               <div className={"me-layer" + (layers.tokens.lock ? " locked" : "")}>
                 {tokens.map((t) => {
@@ -447,7 +442,7 @@ export function MapEditor({
                 ))}
               </div>
             )}
-            {fog && fogMode && <FogDraw map={map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId, ...r })} />}
+            {fogMode && <FogDraw map={map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId, ...r })} />}
           </div>
         </div>
 
