@@ -1272,6 +1272,24 @@ select.piece.add { color: #6fb4ff; }
   .gm.gm-maps { grid-template-columns: 1fr; height: auto; }
 }
 .grid .cell { position: relative; }
+
+/* Fog of war: a solid cover for players and the board, a hatched tint the GM sees through. */
+.map-layer.fog { z-index: 0; width: 100%; height: 100%; overflow: visible; }
+.map-layer.fog.fog-gm rect:not(.fog-hatch) { fill: #05040399; }
+.map-layer.fog.fog-gm line { stroke: #c9b8a033; stroke-width: 0.06; }
+.fog-draw { position: absolute; inset: 0; z-index: 6; cursor: crosshair; touch-action: none; }
+.fog-draw-box {
+  position: absolute; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; pointer-events: none;
+  border: 2px dashed var(--accent); text-shadow: 0 1px 2px #000;
+}
+.fog-draw.hide .fog-draw-box { background: #000a; color: var(--text); }
+.fog-draw.reveal .fog-draw-box { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text); }
+.fog-tools { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fog-tools .seg { display: inline-flex; }
+.fog-tools .seg > button { border-radius: 0; }
+.fog-tools .seg > button:first-child { border-radius: 8px 0 0 8px; }
+.fog-tools .seg > button:last-child { border-radius: 0 8px 8px 0; }
+.fog-tools .seg > button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
 .formula-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .formula-fields input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .formula-fields input.invalid { border-color: var(--hp); }

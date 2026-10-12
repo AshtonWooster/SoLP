@@ -16,6 +16,7 @@ import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { MapEditor } from "../components/maps/MapEditor.tsx";
 import { MapList, MapPreview, NewMapForm } from "../components/maps/MapsList.tsx";
+import { FogDraw, FogTools, type FogMode } from "../components/maps/Fog.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
 import { useHost } from "../net/hooks.ts";
@@ -39,6 +40,8 @@ export function Gm() {
   const tab = params.get("tab") === "maps" ? "maps" : "table";
   const [editingId, setEditingId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  // Drawing fog of war over the table's map, when it's on in Game settings.
+  const [fogMode, setFogMode] = useState<FogMode>(null);
   // Player characters (for the player list and their tokens' gear) and the GM's own characters.
   const characters = useCollection<Character>(isGm ? `games/${id}/characters` : null);
   const templates = useCollection<NpcTemplate>(isGm ? `games/${id}/enemies` : null);
@@ -194,7 +197,10 @@ export function Gm() {
             </ToolbarMenu>
             <ToolbarMenu label="Characters">{() => <TemplateList gameId={id} templates={templates} table={table} act={act} />}</ToolbarMenu>
             {!table.combat && <ToolbarMenu label="Start combat">{(close) => <CombatStart table={table} act={act} onStarted={close} />}</ToolbarMenu>}
-            <span className="muted small gm-hint">Click a token to see it; with it open, click a tile to move it.</span>
+            <FogTools mode={fogMode} setMode={setFogMode} onAll={(hidden) => act({ type: "fogAll", mapId: table.map.id!, hidden })} />
+            <span className="muted small gm-hint">
+              {fogMode ? `Drag across the map to ${fogMode} an area. Esc to stop.` : "Click a token to see it; with it open, click a tile to move it."}
+            </span>
           </div>
         )}
         <div className="gm-map-area" style={table ? ({ "--map-ratio": `${table.map.width / table.map.height}` } as React.CSSProperties) : undefined}>
@@ -215,7 +221,10 @@ export function Gm() {
                 setSelectedId(t.id === selectedId ? null : t.id);
               }}
               onCellClick={(x, y) => selectedId && act({ type: "move", tokenId: selectedId, x, y })}
-            />
+              fog="gm"
+            >
+              {fogMode && <FogDraw map={table.map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId: table.map.id!, ...r })} />}
+            </Grid>
           )}
           {selected && (
             <TokenPopup

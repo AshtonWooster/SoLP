@@ -20,6 +20,7 @@
 
 import type { ThemeId } from "./account.ts";
 import type { DeckEntry, Dice, NpcSide, Page, ResistanceSet } from "./character.ts";
+import type { Fog } from "./fog.ts";
 import type { StatFormulas } from "./formulas.ts";
 import type { SheetSecrets } from "./secrets.ts";
 
@@ -414,6 +415,8 @@ export interface MapInfo {
    * drawing order: later ones are on top.
    */
   items?: MapItem[];
+  /** Fog of war over this map (shared/fog.ts). Missing: nothing is hidden. */
+  fog?: Fog;
 }
 
 /** An image on a map's asset layer, or a pin with a note. Positions and sizes are in tiles. */
@@ -533,6 +536,10 @@ export type TableAction =
   /** Move a token on any map. On a map that isn't on the table, a player's token sets where they arrive. */
   | { type: "placeToken"; mapId: string; tokenId: string; x: number; y: number }
   | { type: "setTokenHidden"; mapId?: string; tokenId: string; hidden: boolean }
+  /** Fog of war (shared/fog.ts): draw a box of whole tiles that hides, or reveals, that part of a map. */
+  | { type: "drawFog"; mapId?: string; x: number; y: number; w: number; h: number; reveal?: boolean }
+  /** Hide or reveal the whole map. */
+  | { type: "fogAll"; mapId?: string; hidden: boolean }
   /** Move the players to another map. */
   | { type: "switchMap"; mapId: string }
   | { type: "deleteMap"; mapId: string }

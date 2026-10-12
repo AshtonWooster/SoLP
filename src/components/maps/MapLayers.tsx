@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { MapInfo, MapItem, Token } from "../../../shared/types.ts";
-import { visibleMap } from "../../../shared/maps.ts";
+import { visibleMap, visibleTokens } from "../../../shared/maps.ts";
+import { FogLayer } from "./Fog.tsx";
 
 export const PIN_COLORS = ["#e0b04f", "#d9534f", "#5c8fe0", "#6cc070", "#9b7ede", "#f1e9df"];
 
@@ -62,15 +63,26 @@ export function Pin({ map, pin, open, onClick, selected }: { map: MapInfo; pin: 
  * A still picture of a map: background, assets, tokens and pins. `asPlayers` leaves out what the GM
  * hid, the way players will see it.
  */
-export function MapPicture({ map: full, tokens, asPlayers, className = "" }: { map: MapInfo; tokens: Token[]; asPlayers?: boolean; className?: string }) {
+export function MapPicture({
+  map: full,
+  tokens,
+  asPlayers,
+  className = "",
+}: {
+  map: MapInfo;
+  tokens: Token[];
+  asPlayers?: boolean;
+  className?: string;
+}) {
   const map = asPlayers ? visibleMap(full) : full;
-  const shown = asPlayers ? tokens.filter((t) => !t.hidden) : tokens;
+  const shown = asPlayers ? visibleTokens(full, tokens) : tokens;
   return (
     <div className={"map-picture " + className} style={{ aspectRatio: `${map.width} / ${map.height}` }} role="img" aria-label={`${full.name}, ${full.width} by ${full.height} tiles`}>
       {map.background && <img className={"picture-bg" + (map.backgroundHidden ? " is-hidden" : "")} src={map.background} alt="" />}
       {!map.hideGrid && <span className="picture-lines" style={{ backgroundSize: `${100 / map.width}% ${100 / map.height}%` }} />}
       {map.background && map.backgroundHidden && !asPlayers && <span className="hidden-tag">Background hidden</span>}
       <AssetLayer map={map} />
+      <FogLayer map={full} gm={!asPlayers} />
       {shown.map((t) => (
         <span
           key={t.id}

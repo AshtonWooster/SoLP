@@ -7,6 +7,7 @@
 // other assets in the middle (`items`), and the tokens on top, with pins and notes drawn over them.
 // Anything can be hidden: then only the GM sees it (`playerView` is what everyone else gets).
 import { ActionError, clamp, log } from "./core.ts";
+import { cleanFog, cleanFogRect, drawFog, fogMask, itemInView, setFogAll, tokenInView } from "./fog.ts";
 import { newId } from "./id.ts";
 import type { MapInfo, MapItem, SavedMap, TableState, Token } from "./types.ts";
 
@@ -94,6 +95,10 @@ export function createMap(
     if (source.backgroundHidden) map.backgroundHidden = true;
     if (source.hideGrid) map.hideGrid = true;
     if (source.items?.length) map.items = source.items.map((i) => ({ ...structuredClone(i), id: newId() }));
+    if (source.fog) {
+      map.fog = structuredClone(source.fog);
+      cleanFog(map);
+    }
   }
   (table.maps ??= {})[id] = map;
   log(table, `GM created the map ${map.name} (${map.width}×${map.height}).`);
@@ -126,6 +131,8 @@ export function updateMap(
   }
   if (a.backgroundHidden !== undefined) setFlag(map, "backgroundHidden", a.backgroundHidden === true);
   if (a.hideGrid !== undefined) setFlag(map, "hideGrid", a.hideGrid === true);
+  // Fog boxes that ran off a smaller map are cut to it.
+  if (map.fog) cleanFog(map);
   if (current) {
     // Tokens still on the map keep their tiles; the rest move in next to them.
     const all = Object.values(table.tokens);
@@ -345,27 +352,52 @@ export function setTokenHidden(table: TableState, a: { mapId?: unknown; tokenId?
   return true;
 }
 
+/** The GM draws a box of fog over any map, or a box that reveals what's under it. Returns false if nothing changed. */
+export function drawFogOn(table: TableState, a: { mapId?: unknown; x?: unknown; y?: unknown; w?: unknown; h?: unknown; reveal?: unknown }): boolean {
+  const { map } = findMap(table, a.mapId ?? currentMapId(table));
+  return drawFog(map, cleanFogRect(map, a));
+}
+
+/** Hide or reveal a whole map. Returns false if it already was. */
+export function fogAllOn(table: TableState, a: { mapId?: unknown; hidden?: unknown }): boolean {
+  const { map } = findMap(table, a.mapId ?? currentMapId(table));
+  return setFogAll(map, a.hidden === true);
+}
+
 /** Where a player character arrives on a map the first time: lined up from the top-left. */
 export function arrivalSpot(map: SavedMap, tokenId: string, index: number) {
   return map.positions[tokenId] ?? { x: 1, y: 1 + index };
 }
 
-/** A map as players see it: no hidden background, assets, pins or tokens. */
+/**
+ * A map as players see it: no hidden background, assets or pins, and none of the assets and pins under
+ * the fog. The fog comes along so screens can cover it.
+ */
 export function visibleMap<M extends MapInfo>(map: M): M {
-  const { background, backgroundHidden: _hidden, items, ...rest } = map;
+  const { background, backgroundHidden: _hidden, items, fog, ...rest } = map;
   const out = { ...rest } as M;
   if (background && !map.backgroundHidden) out.background = background;
-  const shown = (items ?? []).filter((i) => !i.hidden);
+  const mask = fogMask(map);
+  const shown = (items ?? []).filter((i) => !i.hidden && itemInView(map, mask, i));
   if (shown.length) out.items = shown;
+  if (mask && fog) out.fog = structuredClone(fog);
   return out;
 }
 
-/** The table as players (and the shared board) see it: everything the GM hid is left out. */
+/** The tokens players see on a map: none the GM hid, and none under the fog (but their own characters and anyone fighting). */
+export function visibleTokens(map: MapInfo, tokens: Token[], fighting?: Set<string>): Token[] {
+  const mask = fogMask(map);
+  return tokens.filter((t) => !t.hidden && tokenInView(map, mask, t, fighting));
+}
+
+/** The table as players (and the shared board) see it: everything the GM hid, or the fog covers, is left out. */
 export function playerView(table: TableState): TableState {
+  const fighting = new Set(table.combat?.order.map((c) => c.tokenId));
+  const shown = new Set(visibleTokens(table.map, Object.values(table.tokens), fighting).map((t) => t.id));
   return {
     ...table,
     map: visibleMap(table.map),
-    tokens: Object.fromEntries(Object.entries(table.tokens).filter(([, t]) => !t.hidden)),
+    tokens: Object.fromEntries(Object.entries(table.tokens).filter(([id]) => shown.has(id))),
   };
 }
 
