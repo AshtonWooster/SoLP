@@ -4,6 +4,7 @@ import { MAP_MAX, MAP_MIN } from "../../../shared/maps.ts";
 import type { TableAction, TableState } from "../../../shared/types.ts";
 import { MapPicture } from "./MapLayers.tsx";
 import { editedMap } from "./MapEditor.tsx";
+import { ConfirmButton } from "../ConfirmButton.tsx";
 
 type Act = (a: TableAction) => boolean;
 
@@ -108,9 +109,9 @@ export function MapPreview({
             {!current && (
               <>
                 <button onClick={() => act({ type: "createMap", id: newId(), name: "", width: map.width, height: map.height, copyFrom: mapId }) && onClose()}>Duplicate</button>
-                <button className="danger" onClick={() => confirm(`Delete ${map.name} and the tokens waiting on it?`) && act({ type: "deleteMap", mapId }) && onClose()}>
+                <ConfirmButton className="danger" confirmLabel={`Delete ${map.name} and its waiting tokens?`} ms={3000} onConfirm={() => act({ type: "deleteMap", mapId }) && onClose()}>
                   Delete
-                </button>
+                </ConfirmButton>
               </>
             )}
           </div>

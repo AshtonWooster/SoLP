@@ -9,6 +9,7 @@ import { ItemKindIcon } from "./items/ItemCard.tsx";
 import { PEEK_WIDTH, peekPosition } from "./peek.ts";
 import { DiceIcon, DIE_NAMES, dieClass, dieRange } from "./player/DiceIcon.tsx";
 import { PvCard } from "./player/LorCard.tsx";
+import { ConfirmButton } from "./ConfirmButton.tsx";
 
 export type Peek = { page: Page; top: number; left: number } | null;
 
@@ -170,9 +171,9 @@ export function DeckTab({
           </div>
         )}
         {size > 0 && !decksLocked && (
-          <button type="button" className="link small" onClick={() => update((d) => void (d.deck = []))}>
+          <ConfirmButton className="link small" confirmLabel="Confirm: empty the whole deck" ms={3000} onConfirm={() => update((d) => void (d.deck = []))}>
             Clear the deck
-          </button>
+          </ConfirmButton>
         )}
 
         <div className="inv-section">Auxiliary Deck</div>

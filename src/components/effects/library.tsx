@@ -1,11 +1,13 @@
 // The game's effect library as character sheets and Page editors use it: Passives, Proficiencies and
 // Dice effects are picked from menus of the shared library instead of typed on each sheet.
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, useRef, useState } from "react";
 import { collection, doc, setDoc } from "firebase/firestore";
 import type { Dice, Passive, Proficiency } from "../../../shared/character.ts";
-import { cleanEffect, effectLibrary, EFFECT_KINDS, isLive, slotPassive, slotProficiency, type EffectDef, type EffectKind } from "../../../shared/effects.ts";
+import { blankEffect, cleanEffect, effectLibrary, EFFECT_KINDS, isLive, slotPassive, slotProficiency, type EffectDef, type EffectKind } from "../../../shared/effects.ts";
 import { useCollection } from "../../api.ts";
-import { db } from "../../firebase.ts";
+import { db, friendlyError } from "../../firebase.ts";
+import { Overlay } from "../player/Overlay.tsx";
+import { EffectBuilder } from "./EffectBuilder.tsx";
 
 export interface LibraryValue {
   gameId: string;
@@ -55,13 +57,86 @@ export function entriesOf(library: Record<string, EffectDef>, kind: EffectKind) 
     .sort((a, b) => a[1].name.localeCompare(b[1].name));
 }
 
-/** A menu of the library's entries of one kind, plus a way to make a new one. */
-function LibrarySelect({ kind, label, onPick, disabled, exclude = [] }: { kind: EffectKind; label: string; onPick: (id: string) => void; disabled?: boolean; exclude?: string[] }) {
+const NEW = "__new__";
+
+/** Makes a new library entry in a popup, right where it's being slotted, then slots it. */
+function NewEffectPopup({ kind, onCreated, onClose }: { kind: EffectKind; onCreated: (id: string, library: Record<string, EffectDef>) => void; onClose: () => void }) {
   const lib = useLibrary()!;
+  const [def, setDef] = useState<EffectDef>(() => blankEffect(kind));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const info = kindInfo(kind);
+  return (
+    <Overlay title={`New ${info.label}`} onClose={onClose}>
+      <EffectBuilder
+        def={def}
+        library={lib.library}
+        onChange={(d) => setDef({ ...d, kind })}
+        footer={
+          <>
+            {error && <span className="error small">{error}</span>}
+            <button type="button" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="chip go"
+              disabled={busy || !def.name.trim()}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const id = await addToLibrary(lib, def);
+                  onCreated(id, { ...lib.library, [id]: def });
+                  onClose();
+                } catch (err) {
+                  setError(friendlyError(err));
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? "Adding…" : `Add ${info.label}`}
+            </button>
+          </>
+        }
+      />
+      <p className="muted small">It goes in the game's effect library too, so everyone can use it.{lib.autoApprove ? "" : " An automated one works at the table once your GM approves it."}</p>
+    </Overlay>
+  );
+}
+
+/** A menu of the library's entries of one kind; its last option makes a new one right here. */
+function LibrarySelect({
+  kind,
+  label,
+  onPick,
+  disabled,
+  exclude = [],
+  selectRef,
+}: {
+  kind: EffectKind;
+  label: string;
+  selectRef?: React.Ref<HTMLSelectElement>;
+  /** With the library as it is now, including an entry just made here. */
+  onPick: (id: string, library: Record<string, EffectDef>) => void;
+  disabled?: boolean;
+  exclude?: string[];
+}) {
+  const lib = useLibrary()!;
+  const [making, setMaking] = useState(false);
   const list = entriesOf(lib.library, kind).filter(([id]) => !exclude.includes(id));
   return (
     <div className="library-pick row wrap">
-      <select aria-label={label} className="piece add" value="" disabled={disabled} onChange={(e) => e.target.value && onPick(e.target.value)}>
+      <select
+        ref={selectRef}
+        aria-label={label}
+        className="piece add"
+        value=""
+        disabled={disabled}
+        onChange={(e) => {
+          if (e.target.value === NEW) setMaking(true);
+          else if (e.target.value) onPick(e.target.value, lib.library);
+        }}
+      >
         <option value="">{label}</option>
         {list.map(([id, d]) => (
           <option key={id} value={id}>
@@ -70,10 +145,9 @@ function LibrarySelect({ kind, label, onPick, disabled, exclude = [] }: { kind: 
             {automated(d) ? (isLive(d) ? " · automated" : " · waiting for approval") : ""}
           </option>
         ))}
+        <option value={NEW}>+ New {kindInfo(kind).label}…</option>
       </select>
-      <a className="small" href={`/games/${lib.gameId}/effects?kind=${kind}`} target="_blank" rel="noreferrer">
-        Make a new {kindInfo(kind).label} ↗
-      </a>
+      {making && <NewEffectPopup kind={kind} onCreated={onPick} onClose={() => setMaking(false)} />}
     </div>
   );
 }
@@ -155,7 +229,7 @@ export function PassiveSlots({ passives, max, onChange, disabled }: { passives: 
         />
       ))}
       {lib ? (
-        <LibrarySelect kind="passive" label="+ Slot a Passive…" disabled={disabled} onPick={(id) => onChange([...passives, slotPassive(id, lib.library)])} />
+        <LibrarySelect kind="passive" label="+ Slot a Passive…" disabled={disabled} onPick={(id, library) => onChange([...passives, slotPassive(id, library)])} />
       ) : null}
       <p className="muted small">Passives are shared by everyone in the game. A negative cost makes a Negative Passive.</p>
     </div>
@@ -165,6 +239,7 @@ export function PassiveSlots({ passives, max, onChange, disabled }: { passives: 
 /** A character's Proficiencies, picked from the shared library. */
 export function ProficiencySlots({ proficiencies, max, onChange, disabled }: { proficiencies: Proficiency[]; max?: number; onChange: (p: Proficiency[]) => void; disabled?: boolean }) {
   const lib = useLibrary();
+  const pick = useRef<HTMLSelectElement>(null);
   const full = max != null && proficiencies.length >= max;
   return (
     <div className="proficiency-slots">
@@ -188,17 +263,33 @@ export function ProficiencySlots({ proficiencies, max, onChange, disabled }: { p
       ))}
       {max != null &&
         Array.from({ length: Math.max(0, max - proficiencies.length) }, (_, i) => (
-          <div className="inv-row empty" key={`empty-${i}`}>
-            Open Proficiency
-          </div>
+          <button
+            type="button"
+            className="inv-row empty open-slot"
+            key={`empty-${i}`}
+            disabled={disabled}
+            onClick={() => {
+              const el = pick.current;
+              if (!el) return;
+              el.focus();
+              try {
+                el.showPicker();
+              } catch {
+                // Older browsers: focusing the menu is the best we can do.
+              }
+            }}
+          >
+            Open Proficiency: tap to pick one
+          </button>
         ))}
       {lib && (
         <LibrarySelect
           kind="proficiency"
+          selectRef={pick}
           label="+ Pick a Proficiency…"
           disabled={disabled || full}
           exclude={proficiencies.map((p) => p.effectId ?? "")}
-          onPick={(id) => onChange([...proficiencies, slotProficiency(id, lib.library)])}
+          onPick={(id, library) => onChange([...proficiencies, slotProficiency(id, library)])}
         />
       )}
     </div>

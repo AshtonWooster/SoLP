@@ -45,6 +45,15 @@ export function Gm() {
   // Player characters (for the player list and their tokens' gear) and the GM's own characters.
   const characters = useCollection<Character>(isGm ? `games/${id}/characters` : null);
   const templates = useCollection<NpcTemplate>(isGm ? `games/${id}/enemies` : null);
+  const formulas = useStatFormulas(id);
+  // A GM character picked from the Characters menu, waiting for the GM to click a tile for it.
+  const [placing, setPlacing] = useState<{ templateId: string; template: NpcTemplate } | null>(null);
+  useEffect(() => {
+    if (!placing) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPlacing(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [placing]);
 
   if (game.error) return <TableError error={game.error} gameId={id} />;
   if (game.loading) return <main className="center muted">Loading…</main>;
@@ -195,7 +204,20 @@ export function Gm() {
                 </>
               )}
             </ToolbarMenu>
-            <ToolbarMenu label="Characters">{() => <TemplateList gameId={id} templates={templates} table={table} act={act} />}</ToolbarMenu>
+            <ToolbarMenu label="Characters">
+              {(close) => (
+                <TemplateList
+                  gameId={id}
+                  templates={templates}
+                  table={table}
+                  onPlace={(templateId, template) => {
+                    setPlacing({ templateId, template });
+                    setSelectedId(null);
+                    close();
+                  }}
+                />
+              )}
+            </ToolbarMenu>
             {!table.combat && <ToolbarMenu label="Start combat">{(close) => <CombatStart table={table} act={act} onStarted={close} />}</ToolbarMenu>}
             <FogTools mode={fogMode} setMode={setFogMode} onAll={(hidden) => act({ type: "fogAll", mapId: table.map.id!, hidden })} />
             <span className="muted small gm-hint">
@@ -203,7 +225,7 @@ export function Gm() {
             </span>
           </div>
         )}
-        <div className="gm-map-area" style={table ? ({ "--map-ratio": `${table.map.width / table.map.height}` } as React.CSSProperties) : undefined}>
+        <div className={"gm-map-area" + (placing ? " placing" : "")} style={table ? ({ "--map-ratio": `${table.map.width / table.map.height}` } as React.CSSProperties) : undefined}>
           {table && (
             <Grid
               state={mapTable ?? table}
@@ -220,7 +242,12 @@ export function Gm() {
                 }
                 setSelectedId(t.id === selectedId ? null : t.id);
               }}
-              onCellClick={(x, y) => selectedId && act({ type: "move", tokenId: selectedId, x, y })}
+              onCellClick={(x, y) => {
+                if (placing) {
+                  act({ type: "spawnEnemy", templateId: placing.templateId, template: npcSpawnData(placing.template, formulas), x, y });
+                  setPlacing(null);
+                } else if (selectedId) act({ type: "move", tokenId: selectedId, x, y });
+              }}
               fog="gm"
             >
               {fogMode && <FogDraw map={table.map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId: table.map.id!, ...r })} />}
@@ -336,7 +363,6 @@ function CombatStart({ table, act, onStarted }: { table: TableState; act: (actio
 /** Run the turn order and end combat. */
 function CombatPanel({ table, act }: { table: TableState; act: (action: TableAction) => boolean }) {
   const tokens = Object.values(table.tokens);
-  const [adding, setAdding] = useState("");
   const combat = table.combat!;
 
   const outside = tokens.filter((t) => !combat.order.some((c) => c.tokenId === t.id));
@@ -362,6 +388,7 @@ function CombatPanel({ table, act }: { table: TableState; act: (action: TableAct
       )}
       <TurnOrder
         table={table}
+        onMove={(tokenId, to) => act({ type: "reorderCombatant", tokenId, to })}
         controls={(tokenId, i) => (
           <>
             <button aria-label="Move up" disabled={i === 0} onClick={() => act({ type: "reorderCombatant", tokenId, dir: -1 })}>
@@ -383,19 +410,14 @@ function CombatPanel({ table, act }: { table: TableState; act: (action: TableAct
         <button onClick={() => act({ type: "rerollSpeed" })}>Re-roll Speed</button>
       </div>
       {outside.length > 0 && (
-        <div className="row">
-          <select aria-label="Add to turn order" value={adding} onChange={(e) => setAdding(e.target.value)}>
-            <option value="">Add to turn order…</option>
-            {outside.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <button disabled={!adding} onClick={() => act({ type: "addCombatant", tokenId: adding }) && setAdding("")}>
-            Add
-          </button>
-        </div>
+        <select aria-label="Add to turn order" value="" onChange={(e) => e.target.value && act({ type: "addCombatant", tokenId: e.target.value })}>
+          <option value="">+ Add to turn order…</option>
+          {outside.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
       )}
     </div>
   );
@@ -406,19 +428,17 @@ function TemplateList({
   gameId,
   templates,
   table,
-  act,
+  onPlace,
 }: {
   gameId: string;
   templates: Record<string, NpcTemplate> | undefined;
   table: TableState;
-  act: (action: TableAction) => boolean;
+  /** Picked: the GM then clicks a tile to put it there. */
+  onPlace: (templateId: string, t: NpcTemplate) => void;
 }) {
-  const formulas = useStatFormulas(gameId);
   const list = Object.entries(templates ?? {})
     .map(([tid, raw]) => [tid, normalizeNpc(raw)] as const)
     .sort((a, b) => a[1].name.localeCompare(b[1].name));
-  const place = (templateId: string, t: NpcTemplate) =>
-    act({ type: "spawnEnemy", templateId, template: npcSpawnData(t, formulas), x: t.side === "enemy" ? table.map.width - 3 : 2, y: Math.floor(table.map.height / 2) });
   return (
     <div className="template-panel">
       <div className="row-between">
@@ -437,7 +457,7 @@ function TemplateList({
                 {NPC_SIDES.find((s) => s.value === t.side)?.label} · ×{Object.values(table.tokens).filter((x) => x.templateId === tid).length} on map
               </span>
             </span>
-            <button onClick={() => place(tid, t)}>Place</button>
+            <button onClick={() => onPlace(tid, t)}>Place…</button>
           </li>
         ))}
       </ul>

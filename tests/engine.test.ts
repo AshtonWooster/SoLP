@@ -143,6 +143,34 @@ test("GM can swap neighbours to settle ties, re-roll, and end combat", () => {
   assert.equal(t.combat, undefined);
 });
 
+test("GM can drag someone straight to any place in the turn order", () => {
+  const t = table();
+  applyAction(t, { type: "startCombat", tokenIds: ["roland", "angela", "rat"] }, gm);
+  const [a, b, c] = order(t);
+  const active = activeToken(t)!.id;
+  applyAction(t, { type: "reorderCombatant", tokenId: c, to: 0 }, gm);
+  assert.deepEqual(order(t), [c, a, b]);
+  assert.equal(activeToken(t)!.id, active, "the active character keeps their turn");
+  applyAction(t, { type: "reorderCombatant", tokenId: c, to: 2 }, gm);
+  assert.deepEqual(order(t), [a, b, c]);
+  assert.equal(applyAction(t, { type: "reorderCombatant", tokenId: a, to: 5 }, gm), false, "out of range does nothing");
+  assert.equal(applyAction(t, { type: "reorderCombatant", tokenId: a, to: 0 }, gm), false, "already there");
+  assert.throws(() => applyAction(t, { type: "reorderCombatant", tokenId: a, to: 2 }, p1), /GM only/);
+});
+
+test("the GM renames a copy of a GM character; players' tokens keep their sheet's name", () => {
+  const t = table();
+  const enemy = Object.values(t.tokens).find((x) => x.side !== "player")!;
+  const player = Object.values(t.tokens).find((x) => x.side === "player")!;
+  assert.equal(applyAction(t, { type: "renameToken", tokenId: enemy.id, name: "  Thug 2  " }, gm), true);
+  assert.equal(t.tokens[enemy.id].name, "Thug 2");
+  assert.equal(applyAction(t, { type: "renameToken", tokenId: enemy.id, name: "   " }, gm), false, "a blank name changes nothing");
+  assert.equal(applyAction(t, { type: "renameToken", tokenId: enemy.id, name: "x".repeat(40) }, gm), true);
+  assert.equal(t.tokens[enemy.id].name.length, 24);
+  assert.throws(() => applyAction(t, { type: "renameToken", tokenId: player.id, name: "Nope" }, gm), /character sheet/);
+  assert.throws(() => applyAction(t, { type: "renameToken", tokenId: enemy.id, name: "Mine" }, p1), /GM only/);
+});
+
 test("players can't run combat", () => {
   const t = table();
   for (const action of [

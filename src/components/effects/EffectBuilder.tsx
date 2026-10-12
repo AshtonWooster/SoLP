@@ -689,10 +689,13 @@ export function EffectBuilder({
   def,
   library,
   onChange,
+  footer,
 }: {
   def: EffectDef;
   library: Record<string, EffectDef>;
   onChange: (d: EffectDef) => void;
+  /** Buttons for the bottom of the card, like Make a variant and Delete. */
+  footer?: React.ReactNode;
 }) {
   const warnings = effectWarnings(def);
   const info = EFFECT_KINDS.find((k) => k.value === def.kind)!;
@@ -704,68 +707,41 @@ export function EffectBuilder({
     if (kind === "die") next.rules = def.rules.map((r) => (whenOptions("die").some((o) => o.value === r.when) ? r : { ...r, when: "hit" }));
     onChange(next);
   };
+  // The rules' words show on the card; the note is typed right below them.
+  const ruleText = effectText({ ...def, note: undefined }, library);
   return (
     <div className="effect-builder">
-      <div className="row wrap">
-        <input className="effect-name" aria-label="Effect name" placeholder={`Name your ${info.label}`} value={def.name} onChange={(e) => onChange({ ...def, name: e.target.value })} />
-        <Select label="Kind" value={def.kind} options={EFFECT_KINDS.map((k) => ({ value: k.value, label: k.label }))} onChange={setKind} />
-        {def.kind === "passive" && (
-          <label className="inline">
-            Cost{" "}
-            <span className="piece-num">
-              <NumberInput label="Passive cost" value={def.cost ?? 1} min={-20} max={20} onChange={(n) => onChange({ ...def, cost: Math.max(-20, Math.min(20, Math.round(n))) })} />
-            </span>
-          </label>
-        )}
-      </div>
-      <p className="muted small">{info.hint}.</p>
-
-      <div className={`effect-card kind-${def.kind}`} aria-label="Card text">
-        <strong>{def.name || "Unnamed"}</strong>
-        <span className="muted small">
-          {info.label}
-          {def.kind === "passive" ? ` · Cost ${def.cost ?? 0}` : ""}
+      <div className={`effect-card edit kind-${def.kind}`} aria-label="Card text">
+        <input className="effect-card-name" aria-label="Effect name" placeholder={`Name your ${info.label}`} value={def.name} onChange={(e) => onChange({ ...def, name: e.target.value })} />
+        <span className="effect-card-meta muted small">
+          <Select label="Kind" value={def.kind} options={EFFECT_KINDS.map((k) => ({ value: k.value, label: k.label }))} onChange={setKind} />
+          {def.kind === "passive" && (
+            <label className="inline">
+              · Cost{" "}
+              <span className="piece-num">
+                <NumberInput label="Passive cost" value={def.cost ?? 1} min={-20} max={20} onChange={(n) => onChange({ ...def, cost: Math.max(-20, Math.min(20, Math.round(n))) })} />
+              </span>
+            </label>
+          )}
           {optionalRules ? (def.rules.length ? " · Automated" : " · The GM handles it") : ""}
         </span>
-        <p>{effectText(def, library) || <span className="muted">Say what it does below.</span>}</p>
+        {ruleText && <p>{ruleText}</p>}
+        <textarea
+          className="effect-card-text"
+          aria-label={optionalRules ? "What it does" : "Note"}
+          placeholder={optionalRules ? "Say what it does, in words. Add a rule below to automate it." : "Add a note to the card text (optional)"}
+          value={def.note ?? ""}
+          onChange={(e) => onChange({ ...def, note: e.target.value })}
+        />
+        {footer && <div className="effect-card-foot">{footer}</div>}
       </div>
+      <p className="muted small">{info.hint}.</p>
       {warnings.length > 0 && (
         <ul className="effect-warnings">
           {warnings.map((w) => (
             <li key={w}>{w}</li>
           ))}
         </ul>
-      )}
-
-      {optionalRules && (
-        <label className="field">
-          <span>What it does</span>
-          <textarea placeholder="In words. Add a rule below to automate it." value={def.note ?? ""} onChange={(e) => onChange({ ...def, note: e.target.value })} />
-        </label>
-      )}
-
-      {optionalRules && (
-        <div className="piece-row">
-          <span className="piece-tag">holds</span>
-          <Select
-            label="Raises the stacks of"
-            value={def.cap?.effectId ?? ""}
-            options={[{ value: "", label: "Nothing special" }, ...statusOptions(library).map((o) => ({ value: o.value, label: `Lets me hold more or fewer ${o.label}` }))]}
-            onChange={(effectId) => {
-              const { cap: _c, ...rest } = def;
-              onChange(effectId ? { ...rest, cap: { effectId, max: def.cap?.max ?? 20 } } : rest);
-            }}
-          />
-          {def.cap && (
-            <label className="inline small">
-              up to{" "}
-              <span className="piece-num">
-                <NumberInput label="Hold up to" value={def.cap.max} min={1} max={99} onChange={(n) => onChange({ ...def, cap: { ...def.cap!, max: Math.max(1, Math.min(99, Math.round(n))) } })} />
-              </span>{" "}
-              stacks
-            </label>
-          )}
-        </div>
       )}
 
       {optionalRules && <h4 className="rules-head">Automate it {def.rules.length ? "" : <span className="muted small">(optional)</span>}</h4>}
@@ -813,12 +789,6 @@ export function EffectBuilder({
             </label>
           </div>
         </section>
-      )}
-      {!optionalRules && (
-        <label className="field">
-          <span>Note (optional, added to the card text)</span>
-          <textarea value={def.note ?? ""} onChange={(e) => onChange({ ...def, note: e.target.value })} />
-        </label>
       )}
       {def.rules.length > 0 && <TryIt def={def} library={library} />}
     </div>

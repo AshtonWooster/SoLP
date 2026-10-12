@@ -250,7 +250,7 @@ function StoryStep({ c, update }: Pick<Props, "c" | "update">) {
 }
 
 /** Everything about the character on one page, with what's left and where to finish it. */
-function SummaryStep({ c, update, isGm, gameId, uid, checks, setStep, goTab }: Props) {
+function SummaryStep({ c, update, isGm, canEdit, gameId, uid, checks, setStep, goTab }: Props) {
   const todo = checks.filter((ch) => !ch.ok);
   const t = rankTable(c.rank);
   return (
@@ -278,7 +278,7 @@ function SummaryStep({ c, update, isGm, gameId, uid, checks, setStep, goTab }: P
         </div>
       )}
       <div className="summary-grid">
-        <FixerLicense c={c} update={update} isGm={isGm} gameId={gameId} uid={uid} readOnly />
+        <FixerLicense c={c} update={update} isGm={isGm} gameId={gameId} uid={uid} readOnly={!canEdit} />
         <div className="summary-col">
           <ResourceBoard c={c} gameId={gameId} />
           <section className="summary-card">
@@ -327,14 +327,22 @@ function SummaryStep({ c, update, isGm, gameId, uid, checks, setStep, goTab }: P
         </div>
       </div>
       <div className="summary-story">
-        <section className="summary-card">
-          <h4>Personality</h4>
-          <p className="pre">{c.details.personality || <span className="muted">Not written yet.</span>}</p>
-        </section>
-        <section className="summary-card">
-          <h4>Relationships</h4>
-          <p className="pre">{c.details.relationships || <span className="muted">Not written yet.</span>}</p>
-        </section>
+        {(["personality", "relationships"] as const).map((key) => (
+          <section className="summary-card" key={key}>
+            <h4>{key === "personality" ? "Personality" : "Relationships"}</h4>
+            {canEdit ? (
+              <textarea
+                className="summary-text-in"
+                aria-label={key === "personality" ? "Personality" : "Relationships"}
+                placeholder="Not written yet."
+                value={c.details[key]}
+                onChange={(e) => update((d) => void (d.details[key] = e.target.value))}
+              />
+            ) : (
+              <p className="pre">{c.details[key] || <span className="muted">Not written yet.</span>}</p>
+            )}
+          </section>
+        ))}
       </div>
     </div>
   );

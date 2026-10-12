@@ -241,12 +241,10 @@ export function Play() {
     <main className="player-screen">
       {/* ---- Top: who you are, resources, actions ---- */}
       <section className="player-top">
-        <div className="pt-who">
+        <button type="button" className="pt-who" aria-label="Character information" onClick={() => setOverlay("info")}>
           <Portrait token={mine} size={64} />
-          <Link to={sheetUrl} className="pt-name">
-            {mine?.name ?? c?.name ?? "…"}
-          </Link>
-        </div>
+          <span className="pt-name">{mine?.name ?? c?.name ?? "…"}</span>
+        </button>
         <div className="pt-res">
           {resources.map((x) => (
             <div key={x.label} className={`res-box ${x.cls}`} aria-label={`${x.label} ${x.v ?? "?"} of ${x.max ?? "?"}`}>
@@ -258,12 +256,6 @@ export function Play() {
           ))}
         </div>
         <div className="pt-actions">
-          <button type="button" onClick={() => setOverlay("info")}>
-            Character information
-          </button>
-          <button type="button" disabled={!canAct} onClick={endTurn}>
-            End turn
-          </button>
           <button type="button" disabled={!canAct || (r?.light ?? 0) < DASH_LIGHT_COST} onClick={() => void act({ type: "dash" })}>
             Dash
           </button>
@@ -316,6 +308,11 @@ export function Play() {
 
       {/* ---- Bottom: Pages you can use ---- */}
       <section className="player-bottom">
+        {canAct && (
+          <button type="button" className="big-button end-turn" onClick={endTurn}>
+            End turn
+          </button>
+        )}
         {combat && mine && deck && (
           <div className="select-strip">
             {problem && !PICK_PROMPTS.includes(problem) && (
@@ -386,6 +383,10 @@ export function Play() {
       {overlay === "info" && (
         <Overlay title="Character information" onClose={() => setOverlay(null)}>
           {c ? (
+            <>
+            <Link className="small" to={sheetUrl}>
+              Open my full character sheet ›
+            </Link>
             <div className="info-grid">
               {INFO_BUTTONS.map((b) => (
                 <button type="button" key={b.key} className="info-tile" onClick={() => (setPanel(b.key), setOverlay(null))}>
@@ -394,6 +395,7 @@ export function Play() {
                 </button>
               ))}
             </div>
+            </>
           ) : (
             <Link className="big-button" to={sheetUrl}>
               Create my character

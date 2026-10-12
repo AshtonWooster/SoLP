@@ -6,6 +6,7 @@ import { NumberInput } from "../Fields.tsx";
 import { IMAGE_ACCEPT, uploadImage } from "../ImageUpload.tsx";
 import { DiceIcon, DIE_NAMES, dieClass } from "./DiceIcon.tsx";
 import { DieEffectSlots } from "../effects/library.tsx";
+import { ConfirmButton } from "../ConfirmButton.tsx";
 
 export const TYPE_ICONS: Record<PageType, string> = {
   melee: "⚔",
@@ -113,9 +114,9 @@ export function DieEditor({ dice, onChange, onRemove }: { dice: Dice; onChange: 
       >
         Counter
       </button>
-      <button type="button" className="icon die-remove" aria-label="Remove dice" onClick={onRemove}>
+      <ConfirmButton className="icon die-remove" aria-label="Remove dice" confirmLabel="Remove?" onConfirm={onRemove}>
         ✕
-      </button>
+      </ConfirmButton>
       <input
         className="die-effect-in"
         aria-label="Dice effect text"
@@ -223,9 +224,9 @@ export function PageCardEditor({
           <option value="special">Special Page</option>
         </select>
         {onRemove && (
-          <button type="button" className="danger" aria-label="Remove page" onClick={onRemove}>
+          <ConfirmButton className="danger" aria-label="Remove page" confirmLabel="Confirm remove" ms={3000} onConfirm={onRemove}>
             Remove Page
-          </button>
+          </ConfirmButton>
         )}
       </div>
     </div>

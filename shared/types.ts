@@ -506,6 +506,8 @@ export type TableAction =
   | { type: "setResources"; tokenId: string; patch: ResourcePatch }
   | { type: "setNote"; tokenId: string; note: string }
   | { type: "setJustice"; tokenId: string; justice: number }
+  /** Rename one copy of a GM character on the map (players' tokens follow their sheets). */
+  | { type: "renameToken"; tokenId: string; name: string }
   /** Which parts of a GM character's sheet players can't see (shared/secrets.ts). */
   | { type: "setSecret"; tokenId: string; secret: SheetSecrets }
   | { type: "setResistances"; tokenId: string; resistances: ResistanceSet; staggerResistances?: ResistanceSet }
@@ -549,7 +551,8 @@ export type TableAction =
   | { type: "addCombatant"; tokenId: string }
   | { type: "removeCombatant"; tokenId: string }
   /** Swap a combatant with its neighbour, for breaking Speed ties. */
-  | { type: "reorderCombatant"; tokenId: string; dir: -1 | 1 }
+  /** dir: one place up or down; to: straight to that place in the order (dragging). */
+  | { type: "reorderCombatant"; tokenId: string; dir?: -1 | 1; to?: number }
   | { type: "rerollSpeed" }
   | { type: "endTurn" }
   /** Move the active character to a tile, spending Movement Points. Used from the board and phones. */

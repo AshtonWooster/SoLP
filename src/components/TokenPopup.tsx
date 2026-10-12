@@ -10,6 +10,7 @@ import type { Resources, TableAction, Token } from "../../shared/types.ts";
 import { effectText } from "./effects/EffectBuilder.tsx";
 import { useEffectLibrary } from "./effects/library.tsx";
 import { RESOURCES, ResourceIcon } from "./LorIcons.tsx";
+import { ConfirmButton } from "./ConfirmButton.tsx";
 import { NumberField } from "./NumberField.tsx";
 import { Portrait } from "./player/CombatViews.tsx";
 import { PageCard } from "./player/PageCard.tsx";
@@ -52,7 +53,7 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
       <header className="tp-head">
         <Portrait token={token} size={52} />
         <div className="tp-title">
-          <h3>{token.name}</h3>
+          {gm && token.side !== "player" ? <TokenName token={token} act={gm.act} /> : <h3>{token.name}</h3>}
           <span className="muted small">
             {side}
             {shown("justice") && ` · Justice ${token.justice ?? 0}`}
@@ -65,6 +66,11 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
             </span>
           )}
         </div>
+        {gm && (
+          <ConfirmButton className="danger small tp-remove" confirmLabel="Remove?" ms={3000} aria-label="Remove token" onConfirm={() => gm.act({ type: "removeToken", tokenId: token.id }) && gm.onRemoved()}>
+            Remove
+          </ConfirmButton>
+        )}
         <button type="button" className="icon" aria-label="Close" onClick={onClose}>
           ✕
         </button>
@@ -195,6 +201,31 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
   );
 }
 
+/** A GM character's name on its token: type over it to rename just this copy. */
+function TokenName({ token, act }: { token: Token; act: (action: TableAction) => boolean }) {
+  const [name, setName] = useState(token.name);
+  useEffect(() => setName(token.name), [token.name]);
+  const commit = () => (name.trim() && name.trim() !== token.name ? act({ type: "renameToken", tokenId: token.id, name }) : setName(token.name));
+  return (
+    <input
+      className="tp-name-input"
+      aria-label="Token name"
+      title="Rename this copy"
+      value={name}
+      maxLength={24}
+      onChange={(e) => setName(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          setName(token.name);
+        }
+      }}
+    />
+  );
+}
+
 /** Which parts of a GM character's sheet players can't see. Each copy on the map has its own. */
 function SecretsEditor({ token, act }: { token: Token; act: (action: TableAction) => boolean }) {
   const count = SHEET_PARTS.filter((p) => isSecret(token, p.key)).length;
@@ -238,9 +269,6 @@ function GmFooter({ token, gm }: { token: Token; gm: GmControls }) {
         ) : (
           <span />
         )}
-        <button className="danger" onClick={() => gm.act({ type: "removeToken", tokenId: token.id }) && gm.onRemoved()}>
-          Remove token
-        </button>
       </div>
     </>
   );
