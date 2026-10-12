@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { doc, setDoc } from "firebase/firestore";
 import type { Character, ItemTemplate, NpcTemplate, ResistanceSet } from "../../../shared/character.ts";
 import { linkLibrary } from "../../../shared/effects.ts";
+import type { StatFormulas } from "../../../shared/formulas.ts";
+import { useStatFormulas } from "../../api.ts";
 import {
   blankPage,
   cloneAugment,
@@ -107,8 +109,8 @@ function ResourceOverride({ label, cls, calculated, override, onChange }: { labe
 }
 
 /** Damage and Stagger resistances: the Armor's, unless the GM typed over them. */
-function ResistanceOverride({ t, update }: { t: NpcTemplate; update: Update }) {
-  const s = npcStats(t);
+function ResistanceOverride({ t, update, formulas }: { t: NpcTemplate; update: Update; formulas: StatFormulas }) {
+  const s = npcStats(t, formulas);
   const overridden = !!(t.overrides.resistances || t.overrides.staggerResistances);
   return (
     <div className="npc-resist">
@@ -133,7 +135,8 @@ function ResistanceOverride({ t, update }: { t: NpcTemplate; update: Update }) {
 }
 
 function ProfileTab({ t, update, gameId }: { t: NpcTemplate; update: Update; gameId: string }) {
-  const s = npcStats(t);
+  const formulas = useStatFormulas(gameId);
+  const s = npcStats(t, formulas);
   return (
     <div className="npc-profile">
       <section className="npc-id panel">
@@ -236,7 +239,7 @@ function ProfileTab({ t, update, gameId }: { t: NpcTemplate; update: Update; gam
               <span className="rb-val">1d6+{t.primary.justice}</span>
             </div>
           </div>
-          <ResistanceOverride t={t} update={update} />
+          <ResistanceOverride t={t} update={update} formulas={formulas} />
         </section>
       </div>
     </div>

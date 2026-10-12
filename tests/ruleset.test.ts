@@ -1,6 +1,7 @@
 // Deck and inventory rules tests. Run with `npm run test:engine`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { DEFAULT_STAT_FORMULAS } from "../shared/formulas.ts";
 import {
   auxiliaryDeck,
   blankArmor,
@@ -135,7 +136,7 @@ test("GM characters: an old enemy template keeps its numbers as overrides", () =
   assert.equal(t.primary.justice, 2);
   assert.deepEqual(t.overrides, { maxHp: 12, maxStagger: 9, maxLight: 4, maxSanity: 15, resistances: { slash: 0.5, pierce: 1, blunt: 1 } });
   assert.equal("maxHp" in t, false);
-  const spawn = npcSpawnData(t);
+  const spawn = npcSpawnData(t, DEFAULT_STAT_FORMULAS);
   assert.equal(spawn.maxHp, 12);
   assert.equal(spawn.justice, 2);
   assert.deepEqual(spawn.staggerResistances, { slash: 1, pierce: 1, blunt: 1 });
@@ -148,14 +149,14 @@ test("GM characters: Resources come from Rank and Stats unless overridden; resis
   t.primary.fortitude = 3;
   const armor = { ...blankArmor(), name: "Coat", resistances: { slash: 0.5, pierce: 2, blunt: 1 } };
   t.armor = armor;
-  const s = npcStats(t);
-  assert.equal(s.maxHp, maxResources(t).maxHp);
+  const s = npcStats(t, DEFAULT_STAT_FORMULAS);
+  assert.equal(s.maxHp, maxResources(t, DEFAULT_STAT_FORMULAS).maxHp);
   assert.deepEqual(s.resistances, armor.resistances);
   t.overrides.maxHp = 99;
-  assert.equal(npcStats(t).maxHp, 99);
-  assert.equal(npcStats(t).calculated.maxHp, maxResources(t).maxHp);
+  assert.equal(npcStats(t, DEFAULT_STAT_FORMULAS).maxHp, 99);
+  assert.equal(npcStats(t, DEFAULT_STAT_FORMULAS).calculated.maxHp, maxResources(t, DEFAULT_STAT_FORMULAS).maxHp);
   // The Armor's Pages come along when the character is placed.
-  assert.equal(npcSpawnData(t).pages.length, t.pages.length + armor.pages.length);
+  assert.equal(npcSpawnData(t, DEFAULT_STAT_FORMULAS).pages.length, t.pages.length + armor.pages.length);
 });
 
 test("copied gear gets fresh ids", () => {

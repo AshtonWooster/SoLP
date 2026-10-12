@@ -18,6 +18,7 @@
 
 import type { ThemeId } from "./account.ts";
 import type { DeckEntry, Dice, NpcSide, Page, ResistanceSet } from "./character.ts";
+import type { StatFormulas } from "./formulas.ts";
 
 // ---- Accounts and games ----
 
@@ -71,6 +72,12 @@ export interface GameSettings {
    * who fought. Off unless the GM turns it on: then Effects stay until they wear off or the GM removes them.
    */
   clearEffectsAfterCombat?: boolean;
+  /**
+   * How Rank and Stats set max Health, Stagger Resist, Sanity and Light (shared/formulas.ts). New
+   * games start with the standard formulas; a game from before formulas has none saved and keeps
+   * its old numbers until the GM changes them.
+   */
+  statFormulas?: Partial<StatFormulas>;
 }
 
 export function playersCanCreateItems(game: GameDoc | undefined): boolean {

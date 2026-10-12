@@ -5,6 +5,7 @@ import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { newTable } from "../../shared/engine.ts";
+import { DEFAULT_STAT_FORMULAS } from "../../shared/formulas.ts";
 import type { GameDoc, GameRole, GmMeta, UserDoc } from "../../shared/types.ts";
 
 initializeApp();
@@ -47,6 +48,8 @@ export const createGame = onCall(async (req) => {
       memberIds: [uid],
       members: { [uid]: { displayName, role: "gm" } },
       createdAt: Date.now(),
+      // New games use the standard stat formulas; older games keep their numbers (shared/formulas.ts).
+      settings: { statFormulas: { ...DEFAULT_STAT_FORMULAS } },
     };
     tx.set(gameRef, game);
     tx.set(gameRef.collection("gm").doc("meta"), { inviteCode: code } satisfies GmMeta);

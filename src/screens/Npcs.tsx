@@ -4,6 +4,7 @@ import { collection, deleteDoc, doc, getDocs, query, setDoc, where, writeBatch }
 import type { Character, ItemTemplate, NpcTemplate } from "../../shared/character.ts";
 import { blankNpc, normalizeNpc, NPC_SIDES, npcStats } from "../../shared/ruleset.ts";
 import type { GameDoc } from "../../shared/types.ts";
+import { gameStatFormulas, type StatFormulas } from "../../shared/formulas.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { gearLibrary } from "../components/npc/GearLibrary.tsx";
 import { NpcEditor } from "../components/npc/NpcEditor.tsx";
@@ -38,7 +39,7 @@ async function addAll(gameId: string, list: NpcTemplate[]) {
 }
 
 /** A character in the list on the left: portrait, name, side and Health. */
-function NpcPreview({ t, active, onClick }: { t: NpcTemplate; active: boolean; onClick: () => void }) {
+function NpcPreview({ t, formulas, active, onClick }: { t: NpcTemplate; formulas: StatFormulas; active: boolean; onClick: () => void }) {
   const side = NPC_SIDES.find((s) => s.value === t.side)!;
   return (
     <button type="button" className={"npc-preview" + (active ? " active" : "")} onClick={onClick} style={{ "--npc-color": t.color } as React.CSSProperties}>
@@ -46,7 +47,7 @@ function NpcPreview({ t, active, onClick }: { t: NpcTemplate; active: boolean; o
       <span className="npc-preview-text">
         <strong>{t.name || "Unnamed"}</strong>
         <span className="muted small">
-          <span className={`side-badge ${t.side}`}>{side.label}</span> Rank {t.rank} · {npcStats(t).maxHp} HP
+          <span className={`side-badge ${t.side}`}>{side.label}</span> Rank {t.rank} · {npcStats(t, formulas).maxHp} HP
         </span>
       </span>
     </button>
@@ -187,7 +188,7 @@ export function Npcs() {
           {raw === undefined && <p className="muted">Loading…</p>}
           {raw && Object.keys(raw).length === 0 && <p className="muted small">No characters yet. Make one, or import some.</p>}
           {list.map(([tid, t]) => (
-            <NpcPreview key={tid} t={t} active={tid === current} onClick={() => setSelected(tid)} />
+            <NpcPreview key={tid} t={t} formulas={gameStatFormulas(game.data)} active={tid === current} onClick={() => setSelected(tid)} />
           ))}
         </aside>
 
