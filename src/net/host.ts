@@ -27,6 +27,7 @@ import {
 } from "../../shared/engine.ts";
 import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
+import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
 import { effectsClearAfterCombat } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
@@ -405,14 +406,15 @@ export class Host {
     if (!this.table || this.stopped) return;
     const online = [this.me.uid, ...[...this.peers].filter((p) => p.view).map((p) => p.actor.uid)];
     const unique = [...new Set(online)];
-    // Players see how many Pages are left in each draw pile, but not their order, and nothing the GM hid.
-    const forPlayers = hideDrawPiles(playerView(this.table));
-    // The board is a shared screen, so it never shows what the GM hid, even on the GM's account.
-    let forGmBoard: TableState | undefined;
+    // Players see how many Pages are left in each draw pile, but not their order, and nothing the GM
+    // hid: on the map, or on their characters' sheets (shared/secrets.ts). The board is a shared
+    // screen, so it gets the same, even on the GM's account.
+    let forPlayers: TableState | undefined;
+    let forGm: TableState | undefined;
     for (const peer of this.peers) {
       if (!peer.view) continue;
       const gm = peer.actor.role === "gm";
-      const table = !gm ? forPlayers : peer.view === "board" ? (forGmBoard ??= playerView(this.table)) : this.table;
+      const table = gm && peer.view !== "board" ? (forGm ??= tableForGm(this.table)) : (forPlayers ??= tableForPlayers(playerView(this.table)));
       this.send(peer, {
         t: "state",
         table,
@@ -421,7 +423,7 @@ export class Host {
       });
     }
     // Hand the GM screen a fresh copy so React sees the change.
-    this.update({ table: structuredClone(this.table), notes: this.notes, online: unique });
+    this.update({ table: structuredClone(tableForGm(this.table)), notes: this.notes, online: unique });
   }
 
   private send(peer: Peer, msg: HostMessage) {
@@ -455,22 +457,4 @@ function upgradeTable(t: TableState): TableState {
     }
   }
   return t;
-}
-
-/**
- * What players may see: draw piles keep their size but not their order, enemies' hands are hidden,
- * and the GM's other maps (with the enemies waiting on them) aren't sent at all.
- */
-function hideDrawPiles(full: TableState): TableState {
-  const { maps: _maps, ...table } = full;
-  const c = table.combat;
-  if (!c) return table;
-  const hidden = () => ({ id: "hidden", pageId: "hidden" });
-  const decks = Object.fromEntries(
-    Object.entries(c.decks).map(([id, d]) => {
-      const enemy = !!table.tokens[id] && table.tokens[id].side !== "player";
-      return [id, { ...d, draw: d.draw.map(hidden), hand: enemy ? d.hand.map(hidden) : d.hand }];
-    }),
-  );
-  return { ...table, combat: { ...c, decks } };
 }

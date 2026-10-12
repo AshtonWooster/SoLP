@@ -1275,3 +1275,7 @@ select.piece.add { color: #6fb4ff; }
 .formula-table th:first-child { text-align: left; }
 .formula-table thead th { border-top: none; color: var(--muted); font-weight: 600; }
 @media (max-width: 520px) { .formula-table .rank-note { display: none; } .formula-table th, .formula-table td { padding: 4px 6px; } }
+.secrets-editor .secret-row { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; cursor: pointer; }
+.secrets-editor .secret-row input { flex: none; width: auto; margin-top: 3px; }
+.npc-secrets { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; margin: 0; }
+.npc-secrets legend { padding: 0 4px; font-size: 0.9rem; }

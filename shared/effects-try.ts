@@ -3,6 +3,7 @@
 import type { Page } from "./character.ts";
 import { applyAction, type Actor } from "./engine.ts";
 import type { EffectDef } from "./effects.ts";
+import { revealLog } from "./secrets.ts";
 import type { Resources, TableState, Token } from "./types.ts";
 
 const gm: Actor = { uid: "try", role: "gm", displayName: "Try it" };
@@ -71,5 +72,5 @@ export function tryEffect(def: EffectDef, library: Record<string, EffectDef>, st
     }
     act({ type: "endTurn" });
   }
-  return { log: table.log, you: table.tokens.you, dummy: table.tokens.dummy };
+  return { log: table.log.map(revealLog), you: table.tokens.you, dummy: table.tokens.dummy };
 }

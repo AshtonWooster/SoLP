@@ -113,8 +113,8 @@ export function Board() {
             <TokenPopup
               key={peek.id}
               token={peek}
-              // Players see their party's gear; a GM character's deck stays the GM's secret.
-              gear={peek.side === "player" ? tokenGear(peek, peek.ownerId ? characters?.[peek.ownerId] : undefined) : undefined}
+              // Players see their party's gear; a GM character's only what the GM shows (shared/secrets.ts).
+              gear={tokenGear(peek, peek.side === "player" && peek.ownerId ? characters?.[peek.ownerId] : undefined)}
               onClose={() => setPeekId(null)}
             />
           )}

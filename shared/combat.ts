@@ -2,6 +2,7 @@
 // including Dice Clashes, Counter Dice and Mass Attacks. Runs on the host (the GM's browser).
 import type { Dice, Page, ResistanceSet } from "./character.ts";
 import { ActionError, clamp, log, occupied, type Actor } from "./core.ts";
+import { secret } from "./secrets.ts";
 export type { Actor };
 import { arriveAtRoundStart, decayAtEnd, isLive, PRESET_EFFECTS, runTrigger, type DamageSource, type EffectDef, type EffectOps, type TriggerOptions, type When } from "./effects.ts";
 import { newId, rollDie } from "./id.ts";
@@ -110,7 +111,7 @@ export function rollSpeed(table: TableState, token: Token, dice = SPEED_DICE): C
 }
 
 export function speedText(t: Token, c: Combatant) {
-  return `${t.name} ${c.speed} (${c.roll}${c.bonus >= 0 ? "+" : ""}${c.bonus})`;
+  return `${t.name} ${c.speed}${secret(t, "justice", ` (${c.roll}${c.bonus >= 0 ? "+" : ""}${c.bonus})`)}`;
 }
 
 /** Enemies oppose the party (players and allies); neutral characters oppose everyone. */
@@ -215,7 +216,7 @@ function dealDamage(table: TableState, target: Token, amount: number, kind: Dice
   const stagger = Math.max(0, Math.floor(amount * resistance(target, target.staggerResistances, kind)));
   const r = target.resources;
   r.hp = Math.max(0, r.hp - dmg);
-  log(table, `  ${target.name} takes ${dmg} ${kind} damage (${r.hp}/${r.maxHp} Health).`);
+  log(table, `  ${target.name} takes ${secret(target, "hp", `${dmg} `)}${kind} damage${secret(target, "hp", ` (${r.hp}/${r.maxHp} Health)`)}.`);
   staggerDamage(table, target, stagger, source, die);
   checkKnockedOut(table, target, attacker);
   // Effects of the one hit (e.g. Rupture).
@@ -248,7 +249,7 @@ function staggerDamage(table: TableState, target: Token, amount: number, source?
   if (amount <= 0) return;
   const r = target.resources;
   r.stagger = Math.max(0, r.stagger - amount);
-  log(table, `  ${target.name} takes ${amount} Stagger damage (${r.stagger}/${r.maxStagger}).`);
+  log(table, `  ${target.name} takes ${secret(target, "stagger", `${amount} `)}Stagger damage${secret(target, "stagger", ` (${r.stagger}/${r.maxStagger})`)}.`);
   if (r.stagger === 0 && !target.status?.staggered) {
     target.status = { ...target.status, staggered: true, staggerUpkeeps: 0 };
     log(table, `  ${target.name} is Staggered! Their Pages are discarded and their Resistances are ${STAGGERED_RESISTANCE}x until they recover.`);
@@ -272,7 +273,7 @@ function staggerUpkeep(table: TableState, t: Token) {
   if (passed >= STAGGER_UPKEEPS) {
     t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
     t.resources.stagger = t.resources.maxStagger;
-    log(table, `  ${t.name} recovers from Stagger (${t.resources.stagger}/${t.resources.maxStagger}); Resistances are back to normal.`);
+    log(table, `  ${t.name} recovers from Stagger${secret(t, "stagger", ` (${t.resources.stagger}/${t.resources.maxStagger})`)}; Resistances are back to normal.`);
   } else {
     t.status = { ...t.status, staggerUpkeeps: passed };
     log(table, `  ${t.name} is Staggered and can't act (recovers in ${STAGGER_UPKEEPS - passed} more Upkeep${STAGGER_UPKEEPS - passed === 1 ? "" : "s"}).`);
@@ -284,7 +285,7 @@ function recoverStagger(table: TableState, t: Token, amount: number) {
   const before = r.stagger;
   r.stagger = Math.min(r.maxStagger, r.stagger + amount);
   if (r.stagger > 0 && t.status?.staggered) t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
-  if (r.stagger > before) log(table, `  ${t.name} recovers ${r.stagger - before} Stagger Resist.`);
+  if (r.stagger > before) log(table, secret(t, "stagger", `  ${t.name} recovers ${r.stagger - before} Stagger Resist.`));
 }
 
 /** Clash Win heals 1 Sanity, Clash Lose costs 1. Sanity runs from -max to +max; the minimum means Panic. */
@@ -340,7 +341,7 @@ function effectOps(table: TableState): EffectOps<Token> {
       if (n <= 0) return;
       const r = t.resources;
       r.hp = Math.max(0, r.hp - n);
-      log(table, `  ${t.name} takes ${n} damage (${r.hp}/${r.maxHp} Health).`);
+      log(table, `  ${t.name} takes ${secret(t, "hp", `${n} `)}damage${secret(t, "hp", ` (${r.hp}/${r.maxHp} Health)`)}.`);
       checkKnockedOut(table, t, source.by);
     },
     staggerDamage: (t, n, source) => staggerDamage(table, t, n, source),
@@ -348,18 +349,18 @@ function effectOps(table: TableState): EffectOps<Token> {
       const r = t.resources;
       const before = r.hp;
       r.hp = Math.min(r.maxHp, r.hp + n);
-      if (r.hp > before) log(table, `  ${t.name} recovers ${r.hp - before} Health (${r.hp}/${r.maxHp}).`);
+      if (r.hp > before) log(table, `  ${t.name} recovers${secret(t, "hp", ` ${r.hp - before}`)} Health${secret(t, "hp", ` (${r.hp}/${r.maxHp})`)}.`);
     },
     recoverStagger: (t, n) => recoverStagger(table, t, n),
     light: (t, n) => {
       const r = t.resources;
       const before = r.light;
       r.light = clamp(r.light + n, 0, r.maxLight);
-      if (r.light !== before) log(table, `  ${t.name} ${r.light > before ? "gains" : "loses"} ${Math.abs(r.light - before)} Light.`);
+      if (r.light !== before) log(table, secret(t, "light", `  ${t.name} ${r.light > before ? "gains" : "loses"} ${Math.abs(r.light - before)} Light.`));
     },
     sanity: (t, n) => {
       if (!n) return;
-      log(table, `  ${t.name} ${n > 0 ? "gains" : "loses"} ${Math.abs(n)} Sanity (${clamp(t.resources.sanity + n, -t.resources.maxSanity, t.resources.maxSanity)}).`);
+      log(table, secret(t, "sanity", `  ${t.name} ${n > 0 ? "gains" : "loses"} ${Math.abs(n)} Sanity (${clamp(t.resources.sanity + n, -t.resources.maxSanity, t.resources.maxSanity)}).`));
       changeSanity(table, t, n);
     },
     draw: (t, n) => {
@@ -739,7 +740,7 @@ function runPhases(table: TableState) {
     const r = token.resources;
     const light = Math.min(UPKEEP_LIGHT, Math.max(0, r.maxLight - r.light));
     r.light += light;
-    if (c.decks[token.id] || light) log(table, `  Upkeep: ${c.decks[token.id] ? `draws ${drawn}` : ""}${c.decks[token.id] && light ? ", " : ""}${light ? `+${light} Light` : ""}.`);
+    if (c.decks[token.id] || light) log(table, `  Upkeep: ${c.decks[token.id] ? `draws ${drawn}` : ""}${secret(token, "light", `${c.decks[token.id] && light ? ", " : ""}${light ? `+${light} Light` : ""}`)}.`);
     c.counters[token.id] = [];
     staggerUpkeep(table, token);
     if (staggered(token)) {
@@ -910,7 +911,7 @@ export function storyRoll(table: TableState, actor: Actor, token: Token, stat: s
   const value = Math.round(Number(stats[key] ?? 0));
   const roll = rollDie(STORY_DIE);
   const label = key.charAt(0).toUpperCase() + key.slice(1);
-  log(table, `${token.name} makes a ${label} Story Roll: ${roll}${value >= 0 ? "+" : ""}${value} = ${roll + value}.`);
+  log(table, `${token.name} makes a ${label} Story Roll: ${roll}${secret(token, "justice", `${value >= 0 ? "+" : ""}${value} = ${roll + value}`)}.`);
   return roll + value;
 }
 
@@ -919,7 +920,7 @@ export function dash(table: TableState, actor: Actor) {
   if (token.resources.light < DASH_LIGHT_COST) throw new ActionError(`Dashing costs ${DASH_LIGHT_COST} Light.`);
   token.resources.light -= DASH_LIGHT_COST;
   table.combat!.movementLeft += DASH_MOVEMENT;
-  log(table, `${token.name} Dashes: -${DASH_LIGHT_COST} Light, +${DASH_MOVEMENT} Movement.`);
+  log(table, `${token.name} Dashes: ${secret(token, "light", `-${DASH_LIGHT_COST} Light, `)}+${DASH_MOVEMENT} Movement.`);
 }
 
 /** The card being used from the hand, Auxiliary Deck or E.G.O. Pages. */

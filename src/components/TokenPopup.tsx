@@ -4,6 +4,7 @@ import type { Page } from "../../shared/character.ts";
 import { newId } from "../../shared/engine.ts";
 import { isLive } from "../../shared/effects.ts";
 import { NPC_SIDES } from "../../shared/ruleset.ts";
+import { isSecret, SHEET_PARTS, withheld, type SheetPart } from "../../shared/secrets.ts";
 import type { TokenGear } from "../../shared/tokenPreview.ts";
 import type { Resources, TableAction, Token } from "../../shared/types.ts";
 import { effectText } from "./effects/EffectBuilder.tsx";
@@ -40,6 +41,11 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
   const set = (key: keyof Resources, value: number) => gm?.act({ type: "setResources", tokenId: token.id, patch: { [key]: value } });
   const side = token.side === "player" ? "Player" : NPC_SIDES.find((s) => s.value === token.side)?.label;
   const st = token.status ?? {};
+  // What players can't see about the GM's characters isn't sent to them; the GM sees everything.
+  const shown = (part: SheetPart) => !withheld(token, part);
+  const showGear = !!gear && shown("gear");
+  const showDeck = !!gear && shown("deck");
+  const resists = !gm && token.side !== "player" && shown("resistances") && (token.resistances || token.staggerResistances);
 
   return (
     <aside className="token-popup" aria-label={`${token.name} preview`}>
@@ -48,7 +54,8 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
         <div className="tp-title">
           <h3>{token.name}</h3>
           <span className="muted small">
-            {side} · Justice {token.justice ?? 0}
+            {side}
+            {shown("justice") && ` · Justice ${token.justice ?? 0}`}
           </span>
           {(st.knockedOut || st.staggered || st.panic) && (
             <span className="row wrap tp-status">
@@ -80,10 +87,12 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
                 <span className="muted">/</span>
                 <NumberField label={`Max ${label}`} value={r[max]} onCommit={(n) => set(max, n)} />
               </span>
-            ) : (
+            ) : shown(key) ? (
               <strong>
                 {r[key]} <span className="muted">/ {r[max]}</span>
               </strong>
+            ) : (
+              <span className="muted small">Hidden</span>
             )}
           </div>
         ))}
@@ -98,43 +107,67 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
         )}
       </div>
 
-      {gear && (
+      {resists && (
         <section className="tp-gear">
-          <div className="tp-gear-row">
-            <span className="tp-gear-kind">Weapon</span>
-            <span>
-              {gear.weapons.length ? gear.weapons.map((w) => w.name + (w.hands === 2 ? " (two-handed)" : "")).join(", ") : <span className="muted">None</span>}
-            </span>
-          </div>
-          <div className="tp-gear-row">
-            <span className="tp-gear-kind">Armor</span>
-            <span>{gear.armor ? gear.armor.name : <span className="muted">None</span>}</span>
-          </div>
-          <div className="tp-gear-row">
-            <span className="tp-gear-kind">Augment</span>
-            <span>
-              {gear.augment ? (
-                <>
-                  {gear.augment.name}
-                  {gear.augment.passives.length > 0 && <span className="muted small"> · {gear.augment.passives.join(", ")}</span>}
-                </>
-              ) : (
-                <span className="muted">None</span>
-              )}
-            </span>
-          </div>
-          <div className="tp-gear-kind">Deck ({gear.deck.reduce((a, e) => a + e.copies, 0)} Pages)</div>
-          {gear.deck.length ? (
-            <div className="tp-deck">
-              {gear.deck.map(({ page, copies }) => (
-                <span className="tp-deck-card" key={page.id}>
-                  <PageCard page={page} size="small" onClick={() => setViewing(page)} />
-                  {copies > 1 && <span className="tp-copies">×{copies}</span>}
+          {(["resistances", "staggerResistances"] as const).map(
+            (k) =>
+              token[k] && (
+                <div className="tp-gear-row" key={k}>
+                  <span className="tp-gear-kind">{k === "resistances" ? "Resist" : "Stagger"}</span>
+                  <span>
+                    Slash ×{token[k]!.slash}, Pierce ×{token[k]!.pierce}, Blunt ×{token[k]!.blunt}
+                  </span>
+                </div>
+              ),
+          )}
+        </section>
+      )}
+
+      {gear && (showGear || showDeck) && (
+        <section className="tp-gear">
+          {showGear && (
+            <>
+              <div className="tp-gear-row">
+                <span className="tp-gear-kind">Weapon</span>
+                <span>
+                  {gear.weapons.length ? gear.weapons.map((w) => w.name + (w.hands === 2 ? " (two-handed)" : "")).join(", ") : <span className="muted">None</span>}
                 </span>
-              ))}
-            </div>
-          ) : (
-            <span className="muted small">No Pages in the deck.</span>
+              </div>
+              <div className="tp-gear-row">
+                <span className="tp-gear-kind">Armor</span>
+                <span>{gear.armor ? gear.armor.name : <span className="muted">None</span>}</span>
+              </div>
+              <div className="tp-gear-row">
+                <span className="tp-gear-kind">Augment</span>
+                <span>
+                  {gear.augment ? (
+                    <>
+                      {gear.augment.name}
+                      {gear.augment.passives.length > 0 && <span className="muted small"> · {gear.augment.passives.join(", ")}</span>}
+                    </>
+                  ) : (
+                    <span className="muted">None</span>
+                  )}
+                </span>
+              </div>
+            </>
+          )}
+          {showDeck && (
+            <>
+              <div className="tp-gear-kind">Deck ({gear.deck.reduce((a, e) => a + e.copies, 0)} Pages)</div>
+              {gear.deck.length ? (
+                <div className="tp-deck">
+                  {gear.deck.map(({ page, copies }) => (
+                    <span className="tp-deck-card" key={page.id}>
+                      <PageCard page={page} size="small" onClick={() => setViewing(page)} />
+                      {copies > 1 && <span className="tp-copies">×{copies}</span>}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="muted small">No Pages in the deck.</span>
+              )}
+            </>
           )}
         </section>
       )}
@@ -142,6 +175,7 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
       {gm ? (
         <EffectsEditor token={token} act={gm.act} />
       ) : (
+        shown("effects") &&
         (token.effects ?? []).length > 0 && (
           <div className="row wrap">
             {token.effects!.map((e) => (
@@ -154,9 +188,30 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
         )
       )}
 
+      {gm && token.side !== "player" && <SecretsEditor token={token} act={gm.act} />}
       {gm && <GmFooter token={token} gm={gm} />}
       {viewing && <PageView page={viewing} onClose={() => setViewing(null)} />}
     </aside>
+  );
+}
+
+/** Which parts of a GM character's sheet players can't see. Each copy on the map has its own. */
+function SecretsEditor({ token, act }: { token: Token; act: (action: TableAction) => boolean }) {
+  const count = SHEET_PARTS.filter((p) => isSecret(token, p.key)).length;
+  const set = (part: SheetPart, hidden: boolean) => act({ type: "setSecret", tokenId: token.id, secret: { ...token.secret, [part]: hidden } });
+  return (
+    <details className="enemy-pages secrets-editor">
+      <summary>Hidden from players ({count})</summary>
+      <p className="muted small">Players' phones and the board never receive what's ticked here, including in the log.</p>
+      {SHEET_PARTS.map((p) => (
+        <label className="secret-row" key={p.key} title={p.hint}>
+          <input type="checkbox" checked={isSecret(token, p.key)} onChange={(e) => set(p.key, e.target.checked)} />
+          <span>
+            {p.label} <span className="muted small">{p.hint}</span>
+          </span>
+        </label>
+      ))}
+    </details>
   );
 }
 

@@ -8,7 +8,7 @@
 //   users/{uid}                     UserDoc            owner read/write (display name, theme)
 //   inviteCodes/{code}              { gameId }         functions only
 //   games/{gameId}                  GameDoc            members read; functions write
-//   games/{gameId}/table/state      TableState         members read; GM write (host autosave)
+//   games/{gameId}/table/state      TableState         GM read/write (host autosave)
 //   games/{gameId}/gm/meta          GmMeta             GM read; functions write
 //   games/{gameId}/gm/notes         GmNotes            GM read/write
 //   games/{gameId}/session/host     SessionDoc         members read; GM write
@@ -19,6 +19,7 @@
 import type { ThemeId } from "./account.ts";
 import type { DeckEntry, Dice, NpcSide, Page, ResistanceSet } from "./character.ts";
 import type { StatFormulas } from "./formulas.ts";
+import type { SheetSecrets } from "./secrets.ts";
 
 // ---- Accounts and games ----
 
@@ -177,6 +178,19 @@ export interface Token {
   status?: TokenStatus;
   /** Only the GM sees it (map editor). Joining combat reveals it. */
   hidden?: boolean;
+  /** The GM's characters: parts of the sheet players can't see (shared/secrets.ts). */
+  secret?: SheetSecrets;
+  /** Set on the copy players get, which leaves out what `secret` hides. */
+  concealed?: boolean;
+  /** The GM's characters: the gear it was placed with, so players can see it if the GM shows it. */
+  gear?: TokenGearInfo;
+}
+
+/** Names of a character's Weapons, Armor and Augment, for the token popup. */
+export interface TokenGearInfo {
+  weapons: { id: string; name: string; hands: 1 | 2 }[];
+  armor?: { name: string };
+  augment?: { name: string; passives: string[] };
 }
 
 /** A temporary ailment, buff or environmental effect (Act 7, "Effects"). */
@@ -431,6 +445,9 @@ export interface SpawnData {
   portrait?: string;
   /** Library ids of the automated effects its Passives and Proficiencies link to. */
   passiveEffects?: string[];
+  /** Parts of its sheet players can't see. */
+  secret?: SheetSecrets;
+  gear?: TokenGearInfo;
 }
 
 /** Partial resource edits the GM can apply to any token. */
@@ -449,6 +466,8 @@ export type TableAction =
   | { type: "setResources"; tokenId: string; patch: ResourcePatch }
   | { type: "setNote"; tokenId: string; note: string }
   | { type: "setJustice"; tokenId: string; justice: number }
+  /** Which parts of a GM character's sheet players can't see (shared/secrets.ts). */
+  | { type: "setSecret"; tokenId: string; secret: SheetSecrets }
   | { type: "setResistances"; tokenId: string; resistances: ResistanceSet; staggerResistances?: ResistanceSet }
   /** Replace an enemy token's Pages and deck. */
   | { type: "setEnemyDeck"; tokenId: string; pages: Page[]; deck: DeckEntry[] }

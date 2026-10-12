@@ -70,8 +70,10 @@ service cloud.firestore {
         && request.resource.data.members[request.auth.uid].role == resource.data.members[request.auth.uid].role
         && validName(request.resource.data.members[request.auth.uid].displayName);
 
+      // The saved table holds everything the GM hid (hidden tokens, the other maps, enemies' secrets),
+      // so only the GM's hosting tab reads it; players get their copy from the host (shared/secrets.ts).
       match /table/{doc} {
-        allow read: if isMember(gameId);
+        allow read: if isGm(gameId);
         // Autosave from the GM's hosting tab.
         allow write: if doc == "state" && isGm(gameId)
           && request.resource.data.keys().hasOnly(["map", "maps", "tokens", "log", "combat"]);

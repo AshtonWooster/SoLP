@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { validTargets } from "../../shared/engine.ts";
+import { withheld } from "../../shared/secrets.ts";
 import type { TableState, Token } from "../../shared/types.ts";
 import { arrowHitSegment, boardArrows } from "./arrows.ts";
 import { FxBubble, type FxStep } from "./ClashFx.tsx";
@@ -131,8 +132,8 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
             title={t.hidden ? `${t.name} (hidden from players)` : t.name}
           >
             <span className="token-name">{t.name}</span>
-            <span className="bar hp" style={{ width: `${pct(t.resources.hp, t.resources.maxHp)}%` }} />
-            <span className="bar stagger" style={{ width: `${pct(t.resources.stagger, t.resources.maxStagger)}%` }} />
+            {!withheld(t, "hp") && <span className="bar hp" style={{ width: `${pct(t.resources.hp, t.resources.maxHp)}%` }} />}
+            {!withheld(t, "stagger") && <span className="bar stagger" style={{ width: `${pct(t.resources.stagger, t.resources.maxStagger)}%` }} />}
             {(st.knockedOut || st.staggered || st.panic) && (
               <span className="token-status">{st.knockedOut ? "KO" : st.staggered ? "Staggered" : "Panic"}</span>
             )}
