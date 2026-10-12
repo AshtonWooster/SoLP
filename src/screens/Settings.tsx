@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { arrayRemove, deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
+import { deleteNameMatches } from "../../shared/deleteGame.ts";
 import { blankCharacter, characterChecks, maxResources, RANKS } from "../../shared/ruleset.ts";
 import {
   DEFAULT_STAT_FORMULAS,
@@ -27,7 +28,7 @@ import {
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { TopBar } from "../components/TopBar.tsx";
-import { db, friendlyError, newInviteCodeFn } from "../firebase.ts";
+import { db, deleteGameFn, friendlyError, newInviteCodeFn } from "../firebase.ts";
 
 /** One player: their character at a glance, a link to the sheet, and Kick. */
 function PlayerCard({ gameId, uid, displayName, character, formulas, onKick }: { gameId: string; uid: string; displayName: string; character?: Character; formulas: StatFormulas; onKick: () => void }) {
@@ -178,6 +179,87 @@ function StatFormulasSection({ game, onSave }: { game: GameDoc; onSave: (f: Stat
           </button>
         )}
       </div>
+    </section>
+  );
+}
+
+/** Deleting the game: the GM says they're sure, then types the game's name. */
+function DeleteGameSection({ gameId, name }: { gameId: string; name: string }) {
+  const navigate = useNavigate();
+  const [step, setStep] = useState<"idle" | "sure" | "name">("idle");
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const cancel = () => {
+    setStep("idle");
+    setTyped("");
+    setError("");
+  };
+  const remove = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await deleteGameFn({ gameId, name: typed });
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(friendlyError(err));
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="panel settings-section delete-game" aria-label="Delete game">
+      <h2>Delete game</h2>
+      <p className="muted small">
+        Deletes the game for everyone: every character sheet, the maps and the table, the item and effect libraries, your enemies and notes, the invite code, and uploaded images.
+        This can't be undone.
+      </p>
+      {step === "idle" && (
+        <div className="row wrap">
+          <button type="button" className="danger" onClick={() => setStep("sure")}>
+            Delete game…
+          </button>
+        </div>
+      )}
+      {step === "sure" && (
+        <div className="delete-game-step" role="alertdialog" aria-label="Are you sure?">
+          <p>
+            <strong>Are you sure you want to delete {name}?</strong> Your players lose their characters in it too.
+          </p>
+          <div className="row wrap">
+            <button type="button" className="danger" onClick={() => setStep("name")}>
+              Yes, I'm sure
+            </button>
+            <button type="button" onClick={cancel}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {step === "name" && (
+        <form
+          className="delete-game-step"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (deleteNameMatches(typed, name) && !busy) remove();
+          }}
+        >
+          <label className="field">
+            <span>
+              Type <strong className="delete-game-name">{name}</strong> to delete it
+            </span>
+            <input aria-label="Game name" value={typed} autoFocus autoComplete="off" spellCheck={false} onChange={(e) => setTyped(e.target.value)} />
+          </label>
+          {error && <p className="error small">{error}</p>}
+          <div className="row wrap">
+            <button type="submit" className="danger" disabled={!deleteNameMatches(typed, name) || busy}>
+              {busy ? "Deleting…" : "Delete this game forever"}
+            </button>
+            <button type="button" onClick={cancel} disabled={busy}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
     </section>
   );
 }
@@ -354,6 +436,8 @@ export function Settings() {
             }
           }}
         />
+
+        <DeleteGameSection gameId={id} name={g.name} />
       </main>
     </>
   );

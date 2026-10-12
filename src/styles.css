@@ -1307,6 +1307,13 @@ select.piece.add { color: #6fb4ff; }
 .npc-secrets { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; margin: 0; }
 .npc-secrets legend { padding: 0 4px; font-size: 0.9rem; }
 
+/* Game settings: deleting the game */
+.delete-game { border-color: var(--hp); }
+.delete-game h2 { color: var(--hp); }
+.delete-game-step { display: flex; flex-direction: column; gap: 10px; }
+.delete-game-step .field { flex: none; }
+.delete-game-name { color: var(--text); user-select: all; }
+
 /* Legal pages, footer links and the cookie banner */
 .site-footer { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px 16px 32px; margin-top: 24px; border-top: 1px solid var(--line); text-align: center; }
 .site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: 0.9rem; }

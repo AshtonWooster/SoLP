@@ -34,6 +34,7 @@ if (useEmulators) {
 export const createGameFn = httpsCallable<{ name: string }, { id: string }>(functions, "createGame");
 export const joinGameFn = httpsCallable<{ code: string }, { id: string }>(functions, "joinGame");
 export const newInviteCodeFn = httpsCallable<{ gameId: string }, { code: string }>(functions, "newGameInviteCode");
+export const deleteGameFn = httpsCallable<{ gameId: string; name: string }, { ok: boolean }>(functions, "deleteGame");
 /** Firebase errors carry codes like "auth/wrong-password"; turn the common ones into plain sentences. */
 export function friendlyError(err: unknown): string {
   const code = (err as { code?: string })?.code ?? "";
