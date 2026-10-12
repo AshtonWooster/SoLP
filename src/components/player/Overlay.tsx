@@ -1,9 +1,14 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 /** Popups currently open, oldest first. */
 const open: symbol[] = [];
 
-/** A full-screen popup over the player screen. Closing it returns to exactly where you were. */
+/**
+ * A full-screen popup over the player screen. Closing it returns to exactly where you were.
+ * It's drawn straight into <body> so nothing it's opened from (like the board's token popup, which
+ * some themes clip to its shape) can hide it or tuck it behind the map.
+ */
 export function Overlay({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   // Escape closes only the topmost popup (e.g. a Page opened from Cycle characters).
   const close = useRef(onClose);
@@ -18,7 +23,7 @@ export function Overlay({ title, onClose, children }: { title: string; onClose: 
       open.splice(open.indexOf(me), 1);
     };
   }, []);
-  return (
+  return createPortal(
     <div className="overlay" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
       <div className="overlay-box" onClick={(e) => e.stopPropagation()}>
         <header className="overlay-head">
@@ -29,6 +34,7 @@ export function Overlay({ title, onClose, children }: { title: string; onClose: 
         </header>
         <div className="overlay-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
