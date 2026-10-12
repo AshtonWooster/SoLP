@@ -27,6 +27,7 @@ import {
 } from "../../shared/engine.ts";
 import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
+import { fogOfWarOn } from "../../shared/fog.ts";
 import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
 import { effectsClearAfterCombat } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
@@ -90,11 +91,14 @@ export class Host {
 
   /** Keeps the member list current, e.g. when someone joins mid-session. */
   setGame(game: GameDoc) {
+    const fogWas = fogOfWarOn(this.game);
     this.game = game;
     // Hang up on anyone the GM removed from the game.
     for (const peer of this.peers) {
       if (!game.members[peer.actor.uid]) this.refuse(peer, "The GM removed you from this game.");
     }
+    // Turning fog of war on or off in Game settings changes what players are sent.
+    if (fogOfWarOn(game) !== fogWas) this.publish();
     // The GM may have changed the stat formulas: seated players' max Resources follow.
     this.syncSeatedPlayers();
   }
@@ -412,12 +416,13 @@ export class Host {
     // Players see how many Pages are left in each draw pile, but not their order, and nothing the GM
     // hid: on the map, or on their characters' sheets (shared/secrets.ts). The board is a shared
     // screen, so it gets the same, even on the GM's account.
+    const view = { fog: fogOfWarOn(this.game) };
     let forPlayers: TableState | undefined;
     let forGm: TableState | undefined;
     for (const peer of this.peers) {
       if (!peer.view) continue;
       const gm = peer.actor.role === "gm";
-      const table = gm && peer.view !== "board" ? (forGm ??= tableForGm(this.table)) : (forPlayers ??= tableForPlayers(playerView(this.table)));
+      const table = gm && peer.view !== "board" ? (forGm ??= tableForGm(this.table)) : (forPlayers ??= tableForPlayers(playerView(this.table, view)));
       this.send(peer, {
         t: "state",
         table,

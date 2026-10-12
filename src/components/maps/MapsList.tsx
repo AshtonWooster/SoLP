@@ -53,10 +53,13 @@ export function MapPreview({
   act,
   onClose,
   onEdit,
+  fog,
 }: {
   table: TableState;
   mapId: string;
   act: Act;
+  /** Fog of war is on in Game settings. */
+  fog?: boolean;
   onClose: () => void;
   /** Open this map in the map editor. */
   onEdit: () => void;
@@ -81,7 +84,7 @@ export function MapPreview({
         </div>
         <div className="overlay-body">
           <div className="preview-frame" style={{ maxWidth: `calc(60vh * ${map.width} / ${map.height})` }}>
-            <MapPicture map={map} tokens={tokens} asPlayers={asPlayers} />
+            <MapPicture map={map} tokens={tokens} asPlayers={asPlayers} fog={fog} />
           </div>
           <label className="me-check">
             <input type="checkbox" checked={asPlayers} onChange={(e) => setAsPlayers(e.target.checked)} /> Show it the way players will see it

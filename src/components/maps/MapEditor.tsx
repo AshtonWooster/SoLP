@@ -9,6 +9,8 @@ import { friendlyError } from "../../firebase.ts";
 import { ImageUpload, IMAGE_ACCEPT, uploadImage } from "../ImageUpload.tsx";
 import { NumberField } from "../NumberField.tsx";
 import { PIN_COLORS, Pin } from "./MapLayers.tsx";
+import { FogDraw, FogLayer, FogTools, type FogMode } from "./Fog.tsx";
+import { fogMask, itemInView, tokenInView } from "../../../shared/fog.ts";
 
 type Act = (a: TableAction) => boolean;
 type LayerKey = "pins" | "tokens" | "assets" | "background";
@@ -78,11 +80,14 @@ export function MapEditor({
   mapId,
   act,
   onEditToken,
+  fog,
 }: {
   gameId: string;
   table: TableState;
   mapId: string;
   act: Act;
+  /** Fog of war is on in Game settings: show its tools and the fog. */
+  fog?: boolean;
   /** Open a token's stats on the table screen (tokens on the players' map only). */
   onEditToken?: (tokenId: string) => void;
 }) {
@@ -92,6 +97,7 @@ export function MapEditor({
   const [snap, setSnap] = useSnap();
   const [zoom, setZoom] = useState(1);
   const [asPlayers, setAsPlayers] = useState(false);
+  const [fogMode, setFogMode] = useState<FogMode>(null);
   const [layers, setLayers] = useState<Record<LayerKey, { show: boolean; lock: boolean }>>({
     pins: { show: true, lock: false },
     tokens: { show: true, lock: false },
@@ -267,9 +273,11 @@ export function MapEditor({
   /** Where an item is drawn right now (following a drag in progress). */
   const live = (i: MapItem) => (drag && drag.id === i.id && drag.kind !== "token" ? { ...i, ...drag.to } : i);
   const shown = (hidden?: boolean) => !(asPlayers && hidden);
-  const images = items.filter((i) => i.kind === "image" && shown(i.hidden)).map(live);
-  const pins = items.filter((i) => i.kind === "pin" && shown(i.hidden)).map(live);
-  const tokens = scope.tokens.filter((t) => shown(t.hidden));
+  // Viewing as players, what's under the fog is left out too, as it is on their screens.
+  const mask = fog && asPlayers ? fogMask(map) : undefined;
+  const images = items.filter((i) => i.kind === "image" && shown(i.hidden) && itemInView(map, mask, i)).map(live);
+  const pins = items.filter((i) => i.kind === "pin" && shown(i.hidden) && itemInView(map, mask, i)).map(live);
+  const tokens = scope.tokens.filter((t) => shown(t.hidden) && tokenInView(map, mask, t));
   const px = (n: number) => `${n * cell}px`;
   // Images already on any of the game's maps, to reuse with a click.
   const allMaps = [table.map, ...Object.values(table.maps ?? {})];
@@ -283,11 +291,26 @@ export function MapEditor({
           <button className={tool === "select" ? "on" : ""} onClick={() => setTool("select")} title="Select, drag and resize (Esc)">
             ↖ Select
           </button>
-          <button className={tool === "pin" ? "on" : ""} onClick={() => setTool("pin")} title="Click the map to drop a pin with a note">
+          <button
+            className={tool === "pin" ? "on" : ""}
+            onClick={() => {
+              setTool("pin");
+              setFogMode(null);
+            }} title="Click the map to drop a pin with a note">
             📍 Pin
           </button>
         </div>
         <UploadButton gameId={gameId} onUploaded={addImage} onError={setError} />
+        {fog && (
+          <FogTools
+            mode={fogMode}
+            setMode={(m) => {
+              setFogMode(m);
+              if (m) setTool("select");
+            }}
+            onAll={(hidden) => act({ type: "fogAll", mapId, hidden })}
+          />
+        )}
         <label className="me-check">
           <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Snap to grid
         </label>
@@ -376,6 +399,7 @@ export function MapEditor({
               </div>
             )}
             {!map.hideGrid && <div className="me-gridlines" style={{ backgroundSize: `${cell}px ${cell}px` }} />}
+            {fog && <FogLayer map={map} gm={!asPlayers} />}
             {layers.tokens.show && (
               <div className={"me-layer" + (layers.tokens.lock ? " locked" : "")}>
                 {tokens.map((t) => {
@@ -423,6 +447,7 @@ export function MapEditor({
                 ))}
               </div>
             )}
+            {fog && fogMode && <FogDraw map={map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId, ...r })} />}
           </div>
         </div>
 
