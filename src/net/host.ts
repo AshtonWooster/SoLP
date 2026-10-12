@@ -28,6 +28,7 @@ import {
 import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
 import { effectsClearAfterCombat } from "../../shared/types.ts";
+import { gameStatFormulas } from "../../shared/formulas.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
@@ -92,6 +93,8 @@ export class Host {
     for (const peer of this.peers) {
       if (!game.members[peer.actor.uid]) this.refuse(peer, "The GM removed you from this game.");
     }
+    // The GM may have changed the stat formulas: seated players' max Resources follow.
+    this.syncSeatedPlayers();
   }
 
   subscribe(fn: (s: HostSnapshot) => void): () => void {
@@ -301,7 +304,7 @@ export class Host {
     return c
       ? {
           name: c.name,
-          max: maxResources(c),
+          max: maxResources(c, gameStatFormulas(this.game)),
           justice: c.primary.justice,
           resistances: c.armor?.resistances,
           staggerResistances: c.armor?.staggerResistances,

@@ -2,7 +2,16 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { arrayRemove, deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
-import { blankCharacter, characterChecks, maxResources } from "../../shared/ruleset.ts";
+import { blankCharacter, characterChecks, maxResources, RANKS } from "../../shared/ruleset.ts";
+import {
+  DEFAULT_STAT_FORMULAS,
+  formulaError,
+  formulaRank,
+  gameStatFormulas,
+  LEGACY_STAT_FORMULAS,
+  STAT_FORMULA_FIELDS,
+  type StatFormulas,
+} from "../../shared/formulas.ts";
 import { pendingCount } from "../../shared/permissions.ts";
 import {
   effectsClearAfterCombat,
@@ -20,7 +29,7 @@ import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError, newInviteCodeFn } from "../firebase.ts";
 
 /** One player: their character at a glance, a link to the sheet, and Kick. */
-function PlayerCard({ gameId, uid, displayName, character, onKick }: { gameId: string; uid: string; displayName: string; character?: Character; onKick: () => void }) {
+function PlayerCard({ gameId, uid, displayName, character, formulas, onKick }: { gameId: string; uid: string; displayName: string; character?: Character; formulas: StatFormulas; onKick: () => void }) {
   const c = character ? { ...blankCharacter(uid, displayName), ...character } : undefined;
   const todo = c ? characterChecks(c).filter((ch) => !ch.ok).length : 0;
   const waiting = pendingCount(c);
@@ -31,7 +40,7 @@ function PlayerCard({ gameId, uid, displayName, character, onKick }: { gameId: s
         <strong>{c ? c.name || "Unnamed character" : "No character yet"}</strong>
         <span className="muted small">
           Played by {displayName}
-          {c && ` · Rank ${c.rank} · ${maxResources(c).maxHp} HP · ${todo ? `${todo} left to finish` : "ready"}`}
+          {c && ` · Rank ${c.rank} · ${maxResources(c, formulas).maxHp} HP · ${todo ? `${todo} left to finish` : "ready"}`}
         </span>
         {waiting > 0 && (
           <Link className="chip warn" to={`/games/${gameId}/characters/${uid}`}>
@@ -63,6 +72,112 @@ function Toggle({ label, hint, on, onChange }: { label: string; hint: string; on
       </span>
       <input type="checkbox" role="switch" className="switch" aria-label={label} checked={on} onChange={(e) => onChange(e.target.checked)} />
     </label>
+  );
+}
+
+const sameFormulas = (a: StatFormulas, b: StatFormulas) => STAT_FORMULA_FIELDS.every(({ key }) => a[key].trim() === b[key].trim());
+
+/** The GM edits how Rank and Stats set max Health, Stagger Resist, Sanity and Light, with a preview by Rank. */
+function StatFormulasSection({ game, onSave }: { game: GameDoc; onSave: (f: StatFormulas) => Promise<void> }) {
+  const saved = gameStatFormulas(game);
+  const [draft, setDraft] = useState<StatFormulas>(saved);
+  const [stat, setStat] = useState(0);
+  // Follow saves from elsewhere while nothing here is being edited.
+  const savedKey = JSON.stringify(saved);
+  const [lastSaved, setLastSaved] = useState(savedKey);
+  if (savedKey !== lastSaved) {
+    if (sameFormulas(draft, JSON.parse(lastSaved) as StatFormulas)) setDraft(saved);
+    setLastSaved(savedKey);
+  }
+  const errors = Object.fromEntries(STAT_FORMULA_FIELDS.map(({ key }) => [key, formulaError(draft[key])]));
+  const valid = STAT_FORMULA_FIELDS.every(({ key }) => !errors[key]);
+  const dirty = !sameFormulas(draft, saved);
+  const legacy = !game.settings?.statFormulas;
+  const isDefault = sameFormulas(draft, DEFAULT_STAT_FORMULAS);
+  const primary = { fortitude: stat, prudence: stat, justice: stat, temperance: stat };
+  return (
+    <section className="panel settings-section" aria-label="Stat formulas">
+      <h2>Stat formulas</h2>
+      <p className="muted small">
+        How Rank and Stats set every character's max Health, Stagger Resist, Sanity and Light. Ranks count down, so in a formula <strong>Rank</strong> counts up:
+        Rank 9 is 1, Rank 8 is 2, down to Rank 1 as 9. You can also use Fortitude, Prudence, Justice and Temperance, + − × ÷ and brackets, and floor(), ceil(),
+        round(), min() and max(). Results are rounded down. Characters you set numbers for by hand keep them.
+      </p>
+      {legacy && (
+        <p className="chip warn formula-legacy">
+          This game is older than stat formulas, so it uses its original numbers (shown below). Use the standard formulas to switch to the new ones.
+        </p>
+      )}
+      <div className="formula-fields">
+        {STAT_FORMULA_FIELDS.map(({ key, label }) => (
+          <label key={key} className="field">
+            <span>{label}</span>
+            <input
+              aria-label={`${label} formula`}
+              className={errors[key] ? "invalid" : undefined}
+              value={draft[key]}
+              spellCheck={false}
+              onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
+            />
+            {errors[key] ? <span className="error small">{errors[key]}</span> : <span className="muted small">Default: {DEFAULT_STAT_FORMULAS[key]}</span>}
+          </label>
+        ))}
+      </div>
+      <div className="formula-preview">
+        <div className="row-between wrap">
+          <strong className="small">Preview</strong>
+          <label className="muted small formula-stat">
+            Each Stat at{" "}
+            <input type="number" min={0} max={20} aria-label="Preview Stat value" value={stat} onChange={(e) => setStat(Math.max(0, Math.min(20, Math.round(Number(e.target.value) || 0))))} />
+          </label>
+        </div>
+        <div className="formula-table-wrap">
+          <table className="formula-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                {STAT_FORMULA_FIELDS.map(({ key, label }) => (
+                  <th key={key}>{label.replace(" Resist", "")}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {RANKS.map((rank) => {
+                const m = maxResources({ rank, primary }, valid ? draft : saved);
+                return (
+                  <tr key={rank}>
+                    <th>
+                      {rank} <span className="muted small rank-note">(Rank = {formulaRank(rank)})</span>
+                    </th>
+                    {STAT_FORMULA_FIELDS.map(({ key, max }) => (
+                      <td key={key}>{m[max]}</td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="row wrap">
+        <button type="button" disabled={!valid || (!dirty && !legacy)} onClick={() => onSave(draft)}>
+          Save formulas
+        </button>
+        <button type="button" disabled={isDefault} onClick={() => setDraft({ ...DEFAULT_STAT_FORMULAS })}>
+          Use the standard formulas
+        </button>
+        {legacy && !sameFormulas(draft, LEGACY_STAT_FORMULAS) && (
+          <button type="button" className="link" onClick={() => setDraft({ ...LEGACY_STAT_FORMULAS })}>
+            Back to the original numbers
+          </button>
+        )}
+        {dirty && (
+          <button type="button" className="link" onClick={() => setDraft(saved)}>
+            Undo changes
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -152,7 +267,7 @@ export function Settings() {
           ) : (
             <ul className="plain settings-players">
               {players.map(([uid, m]) => (
-                <PlayerCard key={uid} gameId={id} uid={uid} displayName={m.displayName} character={characters?.[uid]} onKick={() => kick(uid, m.displayName)} />
+                <PlayerCard key={uid} gameId={id} uid={uid} displayName={m.displayName} character={characters?.[uid]} formulas={gameStatFormulas(g)} onKick={() => kick(uid, m.displayName)} />
               ))}
             </ul>
           )}
@@ -214,6 +329,18 @@ export function Settings() {
             }}
           />
         </section>
+
+        <StatFormulasSection
+          game={g}
+          onSave={async (f) => {
+            try {
+              await updateDoc(ref, { "settings.statFormulas": Object.fromEntries(STAT_FORMULA_FIELDS.map(({ key }) => [key, f[key].trim()])) });
+              setMessage("Stat formulas saved. Characters at the table update right away.");
+            } catch (err) {
+              setMessage(friendlyError(err));
+            }
+          }}
+        />
       </main>
     </>
   );
