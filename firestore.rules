@@ -38,6 +38,28 @@ service cloud.firestore {
       return exists(table) && get(table).data.get("combat", null) != null;
     }
 
+    // A new sheet's field is missing or still blank (as in blankCharacter, shared/ruleset.ts).
+    function blankOr(field, blank) {
+      return request.resource.data.get(field, blank) == blank;
+    }
+    function zeroes(field) {
+      return request.resource.data.get(field, {}).values().hasOnly([0]);
+    }
+    // A player's new sheet starts blank in the parts the GM approves, so deleting the sheet and
+    // making it again can't skip that approval (or the Combat Deck lock during combat).
+    function blankWhereLocked(gameId) {
+      let inv = request.resource.data.get("inventory", {});
+      return (playerMayEdit(gameId, "stats") || (zeroes("primary") && zeroes("secondary")))
+        && (playerMayEdit(gameId, "inventory")
+            || (blankOr("ahn", 0) && inv.get("items", []).size() == 0
+                && inv.get("trinket", null) == null && inv.get("slotCount", 9) <= 9))
+        && (playerMayEdit(gameId, "augment")
+            || (blankOr("augment", { "name": "", "description": "", "passives": [] }) && blankOr("proficiencies", [])))
+        && (playerMayEdit(gameId, "equipment")
+            || (blankOr("weapons", []) && blankOr("armor", null) && blankOr("deck", []) && blankOr("ego", [])))
+        && (!inCombat(gameId) || blankOr("deck", []));
+    }
+
     function validName(name) {
       return name is string && name.size() > 0 && name.size() <= 32;
     }
@@ -72,11 +94,15 @@ service cloud.firestore {
 
       // The saved table holds everything the GM hid (hidden tokens, the other maps, enemies' secrets),
       // so only the GM's hosting tab reads it; players get their copy from the host (shared/secrets.ts).
+      // Members read only "status", which says whether combat is running (character sheets lock decks then).
       match /table/{doc} {
-        allow read: if isGm(gameId);
+        allow read: if isGm(gameId) || (doc == "status" && isMember(gameId));
         // Autosave from the GM's hosting tab.
         allow write: if doc == "state" && isGm(gameId)
           && request.resource.data.keys().hasOnly(["map", "maps", "tokens", "log", "combat"]);
+        allow write: if doc == "status" && isGm(gameId)
+          && request.resource.data.keys().hasOnly(["combat"])
+          && request.resource.data.combat is bool;
       }
 
       // Present while a GM screen is hosting; devices watch it to know where to connect.
@@ -108,7 +134,8 @@ service cloud.firestore {
         allow read: if isMember(gameId);
         allow create: if isMember(gameId) && request.auth.uid == uid
           && request.resource.data.ownerId == uid
-          && request.resource.data.rank == 9;
+          && request.resource.data.rank == 9
+          && blankWhereLocked(gameId);
         // Players can't change their Combat Deck mid-combat (Act 6: edit decks while resting).
         allow update: if isGm(gameId)
           || (request.auth.uid == uid

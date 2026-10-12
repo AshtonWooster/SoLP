@@ -40,6 +40,7 @@ import type {
   SignalDoc,
   TableAction,
   TableState,
+  TableStatus,
   View,
 } from "../../shared/types.ts";
 import { db } from "../firebase.ts";
@@ -196,6 +197,8 @@ export class Host {
     try {
       await Promise.all([
         setDoc(doc(db, "games", this.gameId, "table", "state"), this.table),
+        // Players can't read the saved table (it holds what the GM hid), only whether combat is running.
+        setDoc(doc(db, "games", this.gameId, "table", "status"), { combat: !!this.table.combat } satisfies TableStatus),
         setDoc(doc(db, "games", this.gameId, "gm", "notes"), { tokens: this.notes } satisfies GmNotes),
       ]);
     } catch (err) {

@@ -7,8 +7,10 @@
 // Firestore layout:
 //   users/{uid}                     UserDoc            owner read/write (display name, theme)
 //   inviteCodes/{code}              { gameId }         functions only
+//   joinAttempts/{uid}              JoinAttempts       functions only (shared/invites.ts)
 //   games/{gameId}                  GameDoc            members read; functions write
 //   games/{gameId}/table/state      TableState         GM read/write (host autosave)
+//   games/{gameId}/table/status     TableStatus        members read; GM write (host autosave)
 //   games/{gameId}/gm/meta          GmMeta             GM read; functions write
 //   games/{gameId}/gm/notes         GmNotes            GM read/write
 //   games/{gameId}/session/host     SessionDoc         members read; GM write
@@ -417,6 +419,11 @@ export interface SavedMap extends MapInfo {
   tokens: Record<string, Token>;
   /** Where the tokens that travel between maps (player characters) last stood here. */
   positions: Record<string, { x: number; y: number }>;
+}
+
+/** What members may read of the saved table: whether combat is running. */
+export interface TableStatus {
+  combat: boolean;
 }
 
 export interface TableState {
