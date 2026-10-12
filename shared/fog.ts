@@ -1,12 +1,11 @@
 // Fog of war: the GM draws boxes on a map that hide or reveal parts of it, or hides or reveals the
 // whole map at once. Each map keeps its own fog (`MapInfo.fog`); a map without one is fully revealed,
-// so maps made before fog existed look the same. Fog only applies while the GM has it on in Game
-// settings (`fogOfWarOn`).
+// so maps made before fog existed look the same. The tools are always there for the GM.
 //
 // Players never get what's under the fog: `playerView` (shared/maps.ts) leaves out the tokens, pins
 // and assets inside hidden areas before the table is sent, and their screens cover the hidden tiles.
 import { ActionError, clamp } from "./core.ts";
-import type { GameDoc, MapInfo, MapItem, Token } from "./types.ts";
+import type { MapInfo, MapItem, Token } from "./types.ts";
 
 /** Most boxes one map keeps; past this the fog is redrawn as the fewest boxes that cover it. */
 export const MAX_FOG_RECTS = 200;
@@ -25,11 +24,6 @@ export interface Fog {
   /** The whole map starts hidden (Hide all); the boxes are drawn over that. */
   covered?: boolean;
   rects?: FogRect[];
-}
-
-/** Whether the GM turned fog of war on in Game settings. Off by default. */
-export function fogOfWarOn(game: GameDoc | undefined): boolean {
-  return game?.settings?.fogOfWar === true;
 }
 
 /** Which tiles are hidden, row by row (index y * width + x), or undefined when nothing is. */
