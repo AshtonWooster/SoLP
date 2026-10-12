@@ -5,18 +5,22 @@ import type { GameDoc, GameRole } from "../../shared/types.ts";
 import { useAuth } from "../api.ts";
 import { createGameFn, db, friendlyError } from "../firebase.ts";
 import { TopBar } from "../components/TopBar.tsx";
+import { Footer } from "../components/Footer.tsx";
 
 export function Home() {
   const { user } = useAuth();
   if (user === undefined) return <main className="center muted">Loading…</main>;
   if (!user) {
     return (
+      <>
       <main className="center">
         <h1 className="brand-hero">SoLP</h1>
         <p className="muted">A digital table for the LoR PMTTRPG. Run the board on a big screen, the game from your laptop, and play from your phone.</p>
         <Link className="big-button" to="/signup">Create an account</Link>
         <Link className="big-button secondary" to="/login">Log in</Link>
       </main>
+      <Footer />
+      </>
     );
   }
   return <Dashboard uid={user.id} />;
@@ -120,7 +124,7 @@ function Dashboard({ uid }: { uid: string }) {
           </form>
         </section>
       </main>
-      <footer className="build muted">Build {__APP_VERSION__}</footer>
+      <Footer build />
     </>
   );
 }

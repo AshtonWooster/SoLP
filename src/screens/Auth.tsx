@@ -5,6 +5,7 @@ import { doc, setDoc } from "firebase/firestore";
 import type { UserDoc } from "../../shared/types.ts";
 import { useAuth } from "../api.ts";
 import { auth, db, friendlyError } from "../firebase.ts";
+import { Footer } from "../components/Footer.tsx";
 
 /** Only follow same-site paths after login, never another website. */
 function safeNext(next: string | null): string {
@@ -53,6 +54,7 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const otherHref = `/${other}${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`;
 
   return (
+    <>
     <main className="center">
       <Link to="/" className="brand">SoLP</Link>
       <h1>{mode === "login" ? "Log in" : "Create an account"}</h1>
@@ -79,6 +81,12 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
           />
         </label>
         {error && <p className="error">{error}</p>}
+        {mode === "signup" && (
+          <p className="muted small">
+            By creating an account you agree to the <Link to="/terms">Terms of Service</Link> and confirm you've read the{" "}
+            <Link to="/privacy">Privacy Policy</Link>.
+          </p>
+        )}
         <button className="big-button" disabled={busy}>
           {mode === "login" ? "Log in" : "Sign up"}
         </button>
@@ -88,6 +96,8 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <Link to={otherHref}>{mode === "login" ? "Create an account" : "Log in"}</Link>
       </p>
     </main>
+    <Footer />
+    </>
   );
 }
 

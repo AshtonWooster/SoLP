@@ -22,6 +22,8 @@ import { Items } from "./screens/Items.tsx";
 import { Effects } from "./screens/Effects.tsx";
 import { Account } from "./screens/Account.tsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
+import { CookieBanner } from "./components/CookieBanner.tsx";
+import { Cookies, Privacy, Terms } from "./screens/Legal.tsx";
 import "./styles.css";
 import "./themes.css";
 
@@ -70,6 +72,9 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/cookies" element={<Cookies />} />
           <Route path="/settings" element={authed(<Account />)} />
           <Route path="/join/:code" element={authed(<Join />)} />
           <Route path="/games/:id" element={authed(<GamePage />)} />
@@ -84,6 +89,7 @@ function App() {
           <Route path="/games/:id/effects" element={authed(<Effects />)} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <CookieBanner />
       </BrowserRouter>
     </AuthContext.Provider>
   );
