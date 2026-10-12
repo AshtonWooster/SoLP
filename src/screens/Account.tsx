@@ -8,6 +8,8 @@ import { useAuth, useDoc } from "../api.ts";
 import { TopBar } from "../components/TopBar.tsx";
 import { auth, db, friendlyError } from "../firebase.ts";
 import { applyTheme, savedTheme } from "../theme.ts";
+import { openConsent, useConsent } from "../consent.ts";
+import { Footer } from "../components/Footer.tsx";
 
 /** Account settings, from the gear in the top bar: your display name and the app's look. */
 export function Account() {
@@ -19,6 +21,7 @@ export function Account() {
   const [busy, setBusy] = useState(false);
   const [theme, setTheme] = useState<ThemeId>(savedTheme());
   const [themeMsg, setThemeMsg] = useState("");
+  const consent = useConsent();
 
   // Once the account loads, show the theme it has saved.
   const stored = profile.data?.theme;
@@ -117,7 +120,22 @@ export function Account() {
             </p>
           )}
         </section>
+
+        <section className="panel settings-section stack">
+          <h2>Privacy</h2>
+          <p className="muted small">
+            Theme fonts from Google Fonts are {consent?.fonts ? "on" : "off"} on this device.{" "}
+            {consent?.fonts ? "" : "Themes use your device's own fonts until you allow them. "}
+            <button type="button" className="link" onClick={openConsent}>
+              Cookie preferences
+            </button>
+          </p>
+          <p className="muted small">
+            To download or delete your account and its data, see the <Link to="/privacy">Privacy Policy</Link>.
+          </p>
+        </section>
       </main>
+      <Footer />
     </>
   );
 }

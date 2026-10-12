@@ -1306,3 +1306,28 @@ select.piece.add { color: #6fb4ff; }
 .secrets-editor .secret-row input { flex: none; width: auto; margin-top: 3px; }
 .npc-secrets { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; margin: 0; }
 .npc-secrets legend { padding: 0 4px; font-size: 0.9rem; }
+
+/* Legal pages, footer links and the cookie banner */
+.site-footer { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px 16px 32px; margin-top: 24px; border-top: 1px solid var(--line); text-align: center; }
+.site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: 0.9rem; }
+.site-footer nav a { color: var(--muted); }
+.site-footer nav a:hover, .site-footer nav button.link:hover { color: var(--accent); }
+.site-footer button.link, .legal-page button.link, .account-page button.link { padding: 0; font-size: inherit; }
+.site-footer p { margin: 0; }
+.site-footer .build { padding: 0; }
+.legal-page { max-width: 760px; margin: 0 auto; padding: 24px 16px; line-height: 1.6; }
+.legal-page h2 { margin-top: 1.75rem; font-size: 1.2rem; }
+.legal-page li { margin-bottom: 0.4rem; }
+.legal-placeholder { background: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--text); padding: 0 4px; border-radius: 4px; }
+.legal-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; display: block; overflow-x: auto; }
+.legal-table th, .legal-table td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--line); }
+.legal-table th { color: var(--muted); font-weight: 600; }
+.cookie-banner { position: fixed; z-index: 1000; left: 16px; right: 16px; bottom: 16px; max-width: 560px; margin: 0 auto; padding: 16px; background: var(--panel); color: var(--text); border: 1px solid var(--accent); border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 10px; font-size: 0.9rem; }
+.cookie-banner h2 { margin: 0; font-size: 1.05rem; }
+.cookie-banner p { margin: 0; line-height: 1.5; }
+.cookie-options { display: flex; flex-direction: column; gap: 6px; }
+.cookie-option { display: flex; align-items: center; gap: 8px; }
+.cookie-option input { width: auto; }
+.cookie-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.cookie-actions button { flex: 1 1 140px; }
+.cookie-actions button.primary { border-color: var(--accent); color: var(--accent); }
