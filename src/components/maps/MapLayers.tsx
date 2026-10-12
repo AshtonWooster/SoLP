@@ -67,25 +67,22 @@ export function MapPicture({
   map: full,
   tokens,
   asPlayers,
-  fog,
   className = "",
 }: {
   map: MapInfo;
   tokens: Token[];
   asPlayers?: boolean;
-  /** Fog of war is on in Game settings. */
-  fog?: boolean;
   className?: string;
 }) {
-  const map = asPlayers ? visibleMap(full, { fog }) : full;
-  const shown = asPlayers ? visibleTokens(full, tokens, { fog }) : tokens;
+  const map = asPlayers ? visibleMap(full) : full;
+  const shown = asPlayers ? visibleTokens(full, tokens) : tokens;
   return (
     <div className={"map-picture " + className} style={{ aspectRatio: `${map.width} / ${map.height}` }} role="img" aria-label={`${full.name}, ${full.width} by ${full.height} tiles`}>
       {map.background && <img className={"picture-bg" + (map.backgroundHidden ? " is-hidden" : "")} src={map.background} alt="" />}
       {!map.hideGrid && <span className="picture-lines" style={{ backgroundSize: `${100 / map.width}% ${100 / map.height}%` }} />}
       {map.background && map.backgroundHidden && !asPlayers && <span className="hidden-tag">Background hidden</span>}
       <AssetLayer map={map} />
-      {fog && <FogLayer map={full} gm={!asPlayers} />}
+      <FogLayer map={full} gm={!asPlayers} />
       {shown.map((t) => (
         <span
           key={t.id}

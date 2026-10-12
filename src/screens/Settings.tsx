@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { arrayRemove, deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
-import { fogOfWarOn } from "../../shared/fog.ts";
 import { blankCharacter, characterChecks, maxResources, RANKS } from "../../shared/ruleset.ts";
 import {
   DEFAULT_STAT_FORMULAS,
@@ -16,6 +15,7 @@ import {
 import { pendingCount } from "../../shared/permissions.ts";
 import {
   effectsClearAfterCombat,
+  emotionLevelsOn,
   type GameDoc,
   type GmMeta,
   PLAYER_EDIT_OPTIONS,
@@ -329,16 +329,13 @@ export function Settings() {
               }
             }}
           />
-        </section>
-        <section className="panel settings-section" aria-label="Maps">
-          <h2>Maps</h2>
           <Toggle
-            label="Fog of war"
-            hint="On: Hide area, Reveal area, Hide all and Reveal all appear above the map on the GM screen and in the map editor. Players and the board can't see what's under the fog, including the characters there; you see it tinted. Each map keeps its own fog and starts fully revealed. Off: no fog anywhere, and the fog you drew is kept for next time."
-            on={fogOfWarOn(g)}
+            label="Emotion Levels"
+            hint="On: characters build Emotion in combat like Library of Ruina (1 point for each die they win, lose, land or are hit by), going up to Emotion Level 5 at the end of a round. Effects can check the level and react when it rises. Off: nobody gains Emotion."
+            on={emotionLevelsOn(g)}
             onChange={async (on) => {
               try {
-                await updateDoc(ref, { "settings.fogOfWar": on });
+                await updateDoc(ref, { "settings.emotionLevels": on });
               } catch (err) {
                 setMessage(friendlyError(err));
               }

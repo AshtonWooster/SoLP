@@ -17,7 +17,6 @@ import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { MapEditor } from "../components/maps/MapEditor.tsx";
 import { MapList, MapPreview, NewMapForm } from "../components/maps/MapsList.tsx";
 import { FogDraw, FogTools, type FogMode } from "../components/maps/Fog.tsx";
-import { fogOfWarOn } from "../../shared/fog.ts";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
 import { useHost } from "../net/hooks.ts";
@@ -69,7 +68,6 @@ export function Gm() {
   };
 
   const table = snapshot.table;
-  const fogOn = fogOfWarOn(game.data);
   const selected = selectedId ? table?.tokens[selectedId] : undefined;
   const players = playerList(id, game.data!, characters, true);
   const setTab = (next: "table" | "maps") => {
@@ -105,7 +103,7 @@ export function Gm() {
     </header>
   );
   const preview = table && previewId && (
-    <MapPreview table={table} mapId={previewId} act={act} fog={fogOn} onClose={() => setPreviewId(null)} onEdit={() => openInEditor(previewId)} />
+    <MapPreview table={table} mapId={previewId} act={act} onClose={() => setPreviewId(null)} onEdit={() => openInEditor(previewId)} />
   );
 
   if (tab === "maps") {
@@ -145,7 +143,6 @@ export function Gm() {
                 table={table}
                 mapId={editing}
                 act={act}
-                fog={fogOn}
                 onEditToken={(tokenId) => {
                   setSelectedId(tokenId);
                   setTab("table");
@@ -200,9 +197,9 @@ export function Gm() {
             </ToolbarMenu>
             <ToolbarMenu label="Characters">{() => <TemplateList gameId={id} templates={templates} table={table} act={act} />}</ToolbarMenu>
             {!table.combat && <ToolbarMenu label="Start combat">{(close) => <CombatStart table={table} act={act} onStarted={close} />}</ToolbarMenu>}
-            {fogOn && <FogTools mode={fogMode} setMode={setFogMode} onAll={(hidden) => act({ type: "fogAll", mapId: table.map.id!, hidden })} />}
+            <FogTools mode={fogMode} setMode={setFogMode} onAll={(hidden) => act({ type: "fogAll", mapId: table.map.id!, hidden })} />
             <span className="muted small gm-hint">
-              {fogOn && fogMode ? `Drag across the map to ${fogMode} an area. Esc to stop.` : "Click a token to see it; with it open, click a tile to move it."}
+              {fogMode ? `Drag across the map to ${fogMode} an area. Esc to stop.` : "Click a token to see it; with it open, click a tile to move it."}
             </span>
           </div>
         )}
@@ -224,9 +221,9 @@ export function Gm() {
                 setSelectedId(t.id === selectedId ? null : t.id);
               }}
               onCellClick={(x, y) => selectedId && act({ type: "move", tokenId: selectedId, x, y })}
-              fog={fogOn ? "gm" : undefined}
+              fog="gm"
             >
-              {fogOn && fogMode && <FogDraw map={table.map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId: table.map.id!, ...r })} />}
+              {fogMode && <FogDraw map={table.map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId: table.map.id!, ...r })} />}
             </Grid>
           )}
           {selected && (

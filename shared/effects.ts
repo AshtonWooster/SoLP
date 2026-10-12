@@ -7,7 +7,7 @@
 //
 // Firestore: games/{gameId}/effects/{effectId}  EffectDef  members read; GM write (players too when the
 // GM's Game settings allow, but their effects only work once the GM approves them).
-import type { Character, Dice, DiceKind, Passive, Proficiency } from "./character.ts";
+import type { Character, Dice, DiceKind, Page, Passive, Proficiency } from "./character.ts";
 import { newId, rollDie } from "./id.ts";
 import { secret } from "./secrets.ts";
 import type { Side } from "./types.ts";
@@ -38,7 +38,13 @@ export type When =
   | "effectFires"
   | "effectFiresOnThem"
   | "gained"
-  | "gave";
+  | "gave"
+  | "someoneDown"
+  | "recovered"
+  | "healed"
+  | "lost"
+  | "discard"
+  | "emotionUp";
 
 export const WHEN_OPTIONS: { value: When; label: string; hint: string }[] = [
   { value: "turnEnd", label: "At the end of my turn", hint: "After Combat Actions" },
@@ -64,6 +70,12 @@ export const WHEN_OPTIONS: { value: When; label: string; hint: string }[] = [
   { value: "effectFiresOnThem", label: "When I set off their Effect", hint: "An Effect on the one I hit or clash with fires (a Burst, a Devastating Hit…)" },
   { value: "gained", label: "When I gain an Effect", hint: "Someone (or something) gives me stacks" },
   { value: "gave", label: "When I give someone an Effect", hint: "One of my rules gives someone stacks" },
+  { value: "lost", label: "When I lose an Effect", hint: "A rule takes my stacks away (spending Charge…), not wearing off" },
+  { value: "someoneDown", label: "When someone else is Knocked Out", hint: "An ally or an enemy; they are \"they\"" },
+  { value: "recovered", label: "When I recover from Stagger", hint: "My Stagger Resist comes back" },
+  { value: "healed", label: "When I recover Health", hint: "\"That many\" is how much" },
+  { value: "discard", label: "When I discard a Page", hint: "A rule makes me discard one from my hand" },
+  { value: "emotionUp", label: "When my Emotion Level rises", hint: "Needs the Game setting \"Emotion Levels\"; \"That many\" is the new level" },
 ];
 
 /** A Dice effect's When, worded for the die it's on. Only these make sense for a die. */
@@ -82,7 +94,7 @@ export const DIE_WHEN_OPTIONS: { value: When; label: string; hint: string }[] = 
 export const whenOptions = (kind: EffectKind) => (kind === "die" ? DIE_WHEN_OPTIONS : WHEN_OPTIONS);
 
 /** Triggers about one Effect in particular: the rule can name it (missing = any). */
-export const EFFECT_WHENS: When[] = ["effectFires", "effectFiresOnThem", "gained", "gave"];
+export const EFFECT_WHENS: When[] = ["effectFires", "effectFiresOnThem", "gained", "gave", "lost"];
 
 /** Who "them" is depends on When: the one I hit, who hit me, who I clashed with, who gave me stacks… */
 const HAS_OTHER: Record<When, boolean> = {
@@ -109,30 +121,52 @@ const HAS_OTHER: Record<When, boolean> = {
   effectFiresOnThem: true,
   gained: true,
   gave: true,
+  lost: true,
+  someoneDown: true,
+  recovered: false,
+  healed: false,
+  discard: false,
+  emotionUp: false,
 };
 /** Triggers that involve one of the dice, so "the die" checks and amounts make sense. */
-const HAS_DIE: Record<When, boolean> = { ...HAS_OTHER, use: false, takingDamage: false, knockOut: false, gained: false, gave: false, effectFires: false, effectFiresOnThem: false };
+const HAS_DIE: Record<When, boolean> = { ...HAS_OTHER, use: false, takingDamage: false, knockOut: false, gained: false, gave: false, lost: false, someoneDown: false, effectFires: false, effectFiresOnThem: false };
+/** Triggers that come with the Page being used, so "the Page" checks make sense. */
+const HAS_PAGE: When[] = ["use", "roll", "theyRoll", "hit", "wasHit", "takingHit", "clashWin", "clashLose"];
 /** Triggers that change a die roll (Power, Max, advantage). */
 const ROLLS: When[] = ["roll", "theyRoll", "speed"];
 /** Triggers where incoming damage can be raised or lowered. */
 const DAMAGE_WHENS: When[] = ["takingHit", "takingDamage"];
 /** Triggers that carry a number, for "That many". */
-const HAS_EVENT: When[] = ["takingHit", "takingDamage", "effectFires", "effectFiresOnThem", "gained", "gave"];
+const HAS_EVENT: When[] = ["takingHit", "takingDamage", "effectFires", "effectFiresOnThem", "gained", "gave", "lost", "healed", "emotionUp"];
 
 /** How much: picked from a list, never typed as a formula. */
-export type AmountKind = "number" | "perStack" | "halfStacks" | "roll" | "dieRoll" | "stat" | "effectStacks" | "rolls" | "event" | "healthLost";
+export type AmountKind =
+  | "number"
+  | "perStack"
+  | "halfStacks"
+  | "roll"
+  | "dieRoll"
+  | "stat"
+  | "effectStacks"
+  | "rolls"
+  | "event"
+  | "healthLost"
+  | "maxHealth"
+  | "maxStagger"
+  | "speed"
+  | "speedDiff";
 
 export type Whose = "me" | "them";
 
 export interface Amount {
   kind: AmountKind;
-  /** number: the number. perStack / effectStacks: how much per stack. */
+  /** number: the number. perStack / effectStacks: how much per stack. maxHealth / maxStagger: the percent. */
   n?: number;
   /** roll / rolls: the die size (1d4 to 1d20). */
   sides?: number;
   /** stat: which Stat (Primary or Secondary). */
   stat?: string;
-  /** effectStacks / rolls: whose stacks of which Effect (rolls without one: this Effect's stacks). */
+  /** effectStacks / rolls: whose stacks of which Effect (rolls without one: this Effect's stacks). speed: whose Speed. */
   effectId?: string;
   whose?: Whose;
   /** Divided by this, rounded down (rolls: fewer dice). Missing or 1: not divided. */
@@ -153,15 +187,21 @@ export const AMOUNT_OPTIONS: { value: AmountKind; label: string }[] = [
   { value: "dieRoll", label: "Another roll of this die" },
   { value: "stat", label: "One of my Stats" },
   { value: "healthLost", label: "% of my Health lost" },
+  { value: "maxHealth", label: "% of my max Health" },
+  { value: "maxStagger", label: "% of my max Stagger Resist" },
+  { value: "speed", label: "A Speed" },
+  { value: "speedDiff", label: "How much faster I am than them" },
   { value: "event", label: "That many (from the trigger)" },
 ];
 
-export type Who = "me" | "them" | "alliesNear" | "enemiesNear";
+export type Who = "me" | "them" | "alliesNear" | "enemiesNear" | "randomAllies" | "randomEnemies" | "mostHurt";
 
 export interface Target {
   who: Who;
   /** alliesNear / enemiesNear: within this many tiles. */
   range?: number;
+  /** randomAllies / randomEnemies: how many. */
+  count?: number;
 }
 
 export const WHO_OPTIONS: { value: Who; label: string }[] = [
@@ -169,9 +209,58 @@ export const WHO_OPTIONS: { value: Who; label: string }[] = [
   { value: "them", label: "They" },
   { value: "enemiesNear", label: "Enemies near me" },
   { value: "alliesNear", label: "Allies near me" },
+  { value: "randomEnemies", label: "Random enemies" },
+  { value: "randomAllies", label: "Random allies" },
+  { value: "mostHurt", label: "The most hurt of my side" },
 ];
 
-export type CheckKind = "roll" | "stacks" | "effect" | "die" | "health" | "sanity" | "state" | "round" | "count" | "damage";
+export type CheckKind =
+  | "roll"
+  | "stacks"
+  | "effect"
+  | "die"
+  | "health"
+  | "sanity"
+  | "state"
+  | "round"
+  | "count"
+  | "damage"
+  | "speed"
+  | "hand"
+  | "used"
+  | "light"
+  | "page"
+  | "lethal"
+  | "resist"
+  | "side"
+  | "oneSided"
+  | "emotion";
+
+/** What a "the Page" check asks about the Page being used. */
+export type PageIs = "melee" | "ranged" | "mass" | "first" | "firstDie" | "cost" | "dice" | "kinds" | "named" | "gives";
+
+export const PAGE_IS_OPTIONS: { value: PageIs; label: string }[] = [
+  { value: "melee", label: "is Melee" },
+  { value: "ranged", label: "is Ranged" },
+  { value: "mass", label: "is a Mass Attack" },
+  { value: "first", label: "is the first one I used this round" },
+  { value: "firstDie", label: "has this die as its first Offensive die" },
+  { value: "cost", label: "costs" },
+  { value: "dice", label: "has this many dice" },
+  { value: "kinds", label: "has this many kinds of dice" },
+  { value: "named", label: "is named" },
+  { value: "gives", label: "mentions" },
+];
+
+/** Library of Ruina's resistance words and the multipliers this app uses for them. */
+export const RESIST_LEVELS: { value: number; label: string }[] = [
+  { value: 200, label: "Fatal" },
+  { value: 150, label: "Weak" },
+  { value: 100, label: "Normal" },
+  { value: 50, label: "Endured" },
+  { value: 25, label: "Ineffective" },
+];
+const resistName = (n: number | undefined) => RESIST_LEVELS.find((l) => l.value === n)?.label ?? "Normal";
 
 /** One "only if" condition. Every check on a rule must pass. */
 export interface Check {
@@ -180,13 +269,17 @@ export interface Check {
   sides?: number;
   /** compare at most or at least. */
   cmp?: "atMost" | "atLeast";
-  /** roll: what the roll is compared to. */
+  /** roll / speed: what the roll or the Speed is compared to. */
   amount?: Amount;
-  /** stacks / effect: how many. health: the percent of max Health. sanity: Sanity. round: the round. count: how many characters. */
+  /**
+   * stacks / effect: how many. health: the percent of max Health. sanity: Sanity. round: the round. count: how many characters.
+   * hand / used / light / emotion: Pages in my hand, Pages I used this round, my Light, my Emotion Level.
+   * page: its Cost, dice or kinds of dice. resist: the resistance (RESIST_LEVELS).
+   */
   n?: number;
   /** die: the kind of die rolled. */
   dieKind?: DiceKind | "offensive" | "defensive";
-  /** effect / health / sanity / state: on whom. */
+  /** effect / health / sanity / state / speed / resist: on whom. */
   whose?: Whose;
   /** effect: which Effect. damage: from which Effect (missing: any Effect). */
   effectId?: string;
@@ -203,6 +296,10 @@ export interface Check {
   /** damage: Health or Stagger damage, from an attack or an Effect. */
   damageType?: "any" | "health" | "stagger";
   source?: "any" | "attack" | "effect";
+  /** page: what about the Page. */
+  pageIs?: PageIs;
+  /** page "named": the words its name contains. */
+  text?: string;
 }
 
 export const CHECK_OPTIONS: { value: CheckKind; label: string }[] = [
@@ -216,6 +313,16 @@ export const CHECK_OPTIONS: { value: CheckKind; label: string }[] = [
   { value: "round", label: "The round" },
   { value: "count", label: "How many allies or enemies" },
   { value: "damage", label: "The kind of damage" },
+  { value: "speed", label: "Speed" },
+  { value: "page", label: "The Page" },
+  { value: "hand", label: "Pages in my hand" },
+  { value: "used", label: "Pages I used this round" },
+  { value: "light", label: "My Light" },
+  { value: "lethal", label: "It would Knock me Out" },
+  { value: "resist", label: "Their Resistance to the die" },
+  { value: "side", label: "They're an ally or an enemy" },
+  { value: "oneSided", label: "One-Sided or Clash" },
+  { value: "emotion", label: "My Emotion Level" },
 ];
 
 export type ActionKind =
@@ -247,7 +354,25 @@ export type ActionKind =
   | "loseMovement"
   | "push"
   | "pull"
-  | "draw";
+  | "draw"
+  | "healthDamage"
+  | "lessHealthDamage"
+  | "staggerHit"
+  | "lessStaggerHit"
+  | "speedDice"
+  | "loseSpeedDice"
+  | "raiseMin"
+  | "rollMax"
+  | "rerollMin"
+  | "drawTo"
+  | "discard"
+  | "addPage"
+  | "costDown"
+  | "counterDie"
+  | "resist"
+  | "giveRandom"
+  | "cancelNext"
+  | "emotion";
 
 /** One thing a rule does. */
 export interface Action {
@@ -257,8 +382,22 @@ export interface Action {
   amount: Amount;
   /** give / take / clear / activate: the Effect. */
   effectId?: string;
-  /** give: the stacks arrive at the start of the next round ("next round"), not now. */
+  /** give / giveRandom: the stacks arrive at the start of the next round ("next round"), not now. */
   later?: boolean;
+  /** giveRandom / cancelNext: the Effects to pick one of at random. */
+  effectIds?: string[];
+  /** Damage changes: the amount is a percent of the damage, not a number of points. */
+  percent?: boolean;
+  /** addPage: the Page's name (one of the character's own Pages; several, split by commas, picks one at random). */
+  text?: string;
+  /** counterDie: its kind and Base Power (the amount is its size). */
+  dieKind?: DiceKind;
+  base?: number;
+  /** resist: which damage type ("die": the one that hit; "random": one that it would raise), how resistant, which, and for how long. */
+  dmgType?: "slash" | "pierce" | "blunt" | "die" | "random";
+  level?: number;
+  which?: "health" | "stagger" | "both";
+  until?: "round" | "nextRound" | "combat";
 }
 
 /** Every action, its menu label, and which When it makes sense with (missing = any). */
@@ -292,7 +431,29 @@ export const ACTION_OPTIONS: { value: ActionKind; label: string; targets: boolea
   { value: "gainStacks", label: "This gains stacks", targets: false },
   { value: "loseStacks", label: "This loses stacks", targets: false },
   { value: "draw", label: "Draw Pages", targets: false },
+  { value: "drawTo", label: "Draw until I have this many Pages", targets: false },
+  { value: "discard", label: "Discard random Pages", targets: true },
+  { value: "addPage", label: "Add a copy of one of my Pages to my hand", targets: false },
+  { value: "costDown", label: "A random Page in my hand costs less this round", targets: false },
+  { value: "counterDie", label: "Gain a Counter Die", targets: true },
+  { value: "giveRandom", label: "Gain a random Effect from a list", targets: true },
+  { value: "cancelNext", label: "Lose next round's stacks of a random Effect", targets: true, noAmount: true },
+  { value: "resist", label: "Change a Resistance", targets: true, noAmount: true },
+  { value: "emotion", label: "Gain Emotion Points", targets: true },
+  { value: "healthDamage", label: "Deal more Health damage", targets: false, only: ["hit"] },
+  { value: "lessHealthDamage", label: "Deal less Health damage", targets: false, only: ["hit"] },
+  { value: "staggerHit", label: "Deal more Stagger damage", targets: false, only: ["hit"] },
+  { value: "lessStaggerHit", label: "Deal less Stagger damage", targets: false, only: ["hit"] },
+  { value: "speedDice", label: "Gain Speed Dice", targets: false },
+  { value: "loseSpeedDice", label: "Lose Speed Dice", targets: false },
+  { value: "raiseMin", label: "Raise the die's Min", targets: false, only: ROLLS },
+  { value: "rollMax", label: "It rolls its Max", targets: false, only: ROLLS, noAmount: true },
+  { value: "rerollMin", label: "Reroll it once if it rolls its Min", targets: false, only: ROLLS, noAmount: true },
 ];
+
+/** Actions that can work in percent of the damage. */
+export const PERCENT_ACTIONS: ActionKind[] = ["extraDamage", "increaseDamage", "reduceDamage", "healthDamage", "lessHealthDamage", "staggerHit", "lessStaggerHit"];
+const DAMAGE_TYPE_OPTIONS = ["slash", "pierce", "blunt", "die", "random"] as const;
 
 /** How a status Effect's stacks go away on their own. */
 export type Decay =
@@ -321,11 +482,12 @@ export const DECAY_OPTIONS: { value: Decay; label: string }[] = [
 ];
 
 /** How often a rule may fire. */
-export type Limit = "always" | "round" | "combat";
+export type Limit = "always" | "round" | "combat" | "roundTarget";
 
 export const LIMIT_OPTIONS: { value: Limit; label: string }[] = [
   { value: "always", label: "every time" },
   { value: "round", label: "once a round" },
+  { value: "roundTarget", label: "once a round per target" },
   { value: "combat", label: "once a combat" },
 ];
 
@@ -336,6 +498,10 @@ export interface Rule {
   effectId?: string;
   /** Missing: every time. */
   limit?: Limit;
+  /** Only every Nth time it would fire (every 3rd hit…). Missing or 1: every time. */
+  every?: number;
+  /** When it fires, the effect's later rules don't run this time ("one of the following"). */
+  stop?: boolean;
   checks: Check[];
   actions: Action[];
 }
@@ -375,6 +541,8 @@ export interface EffectDef {
   holds?: string;
   /** Status effects: each character's stacks are kept apart, so rules can ask for "the ones I gave" (Marks). */
   bySource?: boolean;
+  /** Passives and Proficiencies: whoever has it can hold more (or fewer) stacks of this Effect (Triple-R Suit: up to 20 Charge). */
+  cap?: { effectId: string; max: number };
   rules: Rule[];
   /** The player who made it, when the GM lets players make effects. Missing: the GM's. */
   createdBy?: string;
@@ -384,7 +552,8 @@ export interface EffectDef {
 }
 
 export const MAX_STACKS = 99;
-const DIE_SIZES = [4, 6, 8, 10, 12, 20];
+/** Die sizes for rolls in rules: d2 and d3 make "1-2" and "2-3" (1d2 + 1). */
+export const DIE_SIZES = [2, 3, 4, 6, 8, 10, 12, 20];
 /** Effects can set off other effects (Burn given on hit…), but only this many deep. */
 const MAX_DEPTH = 4;
 
@@ -477,6 +646,12 @@ export const blankAction = (kind: ActionKind = "damage"): Action => {
   if (opt.targets) a.target = { who: kind === "push" || kind === "pull" ? "them" : "me" };
   if (opt.effect) a.effectId = "preset:burn";
   if (kind === "extraDamage") a.amount = { kind: "roll", sides: 4 };
+  if (kind === "giveRandom") a.effectIds = ["preset:strength", "preset:endurance"];
+  if (kind === "cancelNext") a.effectIds = ["preset:feeble"];
+  if (kind === "drawTo") a.amount = { kind: "number", n: 4 };
+  if (kind === "addPage") a.text = "";
+  if (kind === "counterDie") Object.assign(a, { dieKind: "block", base: 0, amount: { kind: "number", n: 6 } });
+  if (kind === "resist") Object.assign(a, { target: { who: "me" }, dmgType: "die", level: 50, which: "both", until: "round" });
   return a;
 };
 
@@ -502,6 +677,26 @@ export function blankCheck(kind: CheckKind = "roll"): Check {
       return { kind, side: "allies", cmp: "atLeast", n: 1 };
     case "damage":
       return { kind, damageType: "health", source: "attack" };
+    case "speed":
+      return { kind, cmp: "atLeast", amount: { kind: "speed", whose: "them", plus: 1 } };
+    case "hand":
+      return { kind, cmp: "atMost", n: 3 };
+    case "used":
+      return { kind, cmp: "atMost", n: 0 };
+    case "light":
+      return { kind, cmp: "atMost", n: 0 };
+    case "page":
+      return { kind, pageIs: "melee" };
+    case "lethal":
+      return { kind };
+    case "resist":
+      return { kind, whose: "them", cmp: "atLeast", n: 150 };
+    case "side":
+      return { kind, side: "allies" };
+    case "oneSided":
+      return { kind };
+    case "emotion":
+      return { kind, cmp: "atLeast", n: 3 };
   }
 }
 
@@ -533,17 +728,20 @@ const int = (v: unknown, lo: number, hi: number, d: number) => {
   return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d;
 };
 const id80 = (v: unknown, d = "") => String(v ?? d).slice(0, 80);
+const level = (v: unknown, d: number) => (RESIST_LEVELS.some((l) => l.value === Number(v)) ? Number(v) : d);
 const DIE_KIND_CHECKS = ["slash", "pierce", "blunt", "block", "evade", "offensive", "defensive"] as const;
 
 function cleanAmount(raw: unknown): Amount {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<Amount>;
   const kind = oneOf(r.kind, AMOUNT_OPTIONS, "number");
   let a: Amount;
-  if (kind === "number") a = { kind, n: int(r.n, 0, 99, 1) };
+  if (kind === "number") a = { kind, n: int(r.n, 0, 999, 1) };
   else if (kind === "perStack") a = { kind, n: int(r.n, 1, 20, 1) };
   else if (kind === "roll") a = { kind, sides: DIE_SIZES.includes(Number(r.sides)) ? Number(r.sides) : 6 };
   else if (kind === "stat") a = { kind, stat: String(r.stat ?? "justice").slice(0, 40) };
   else if (kind === "effectStacks") a = { kind, n: int(r.n, 1, 20, 1), effectId: id80(r.effectId, "preset:burn"), whose: r.whose === "them" ? "them" : "me" };
+  else if (kind === "maxHealth" || kind === "maxStagger") a = { kind, n: int(r.n, 1, 100, 10) };
+  else if (kind === "speed") a = { kind, whose: r.whose === "them" ? "them" : "me" };
   else if (kind === "rolls") {
     a = { kind, sides: DIE_SIZES.includes(Number(r.sides)) ? Number(r.sides) : 10 };
     if (r.effectId) Object.assign(a, { effectId: id80(r.effectId), whose: r.whose === "them" ? "them" : "me" });
@@ -560,7 +758,9 @@ function cleanAmount(raw: unknown): Amount {
 function cleanTarget(raw: unknown): Target {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<Target>;
   const who = oneOf(r.who, WHO_OPTIONS, "me");
-  return who === "alliesNear" || who === "enemiesNear" ? { who, range: int(r.range, 1, 20, 2) } : { who };
+  if (who === "alliesNear" || who === "enemiesNear") return { who, range: int(r.range, 1, 99, 2) };
+  if (who === "randomAllies" || who === "randomEnemies") return { who, count: int(r.count, 1, 10, 1) };
+  return { who };
 }
 
 const WHOSE = (r: Partial<Check>) => (r.whose === "them" ? { whose: "them" as const } : {});
@@ -601,6 +801,30 @@ function cleanCheck(raw: unknown): Check {
     }
     case "die":
       return { kind: "die", dieKind: (DIE_KIND_CHECKS as readonly string[]).includes(String(r.dieKind)) ? (r.dieKind as Check["dieKind"]) : "offensive" };
+    case "speed":
+      return { kind: "speed", ...WHOSE(r), cmp, amount: cleanAmount(r.amount ?? c.amount) };
+    case "hand":
+    case "used":
+    case "light":
+      return { kind: c.kind, cmp, n: int(r.n, 0, 99, c.n ?? 0) };
+    case "emotion":
+      return { kind: "emotion", cmp, n: int(r.n, 0, 5, 3) };
+    case "page": {
+      const pageIs = oneOf(r.pageIs, PAGE_IS_OPTIONS, "melee");
+      const out: Check = { kind: "page", pageIs };
+      if (pageIs === "cost" || pageIs === "dice" || pageIs === "kinds") Object.assign(out, { cmp, n: int(r.n, 0, 20, pageIs === "cost" ? 3 : 1) });
+      if (pageIs === "named") out.text = String(r.text ?? "").slice(0, 60);
+      if (pageIs === "gives") out.effectId = id80(r.effectId, "preset:burn");
+      return out;
+    }
+    case "lethal":
+      return { kind: "lethal" };
+    case "resist":
+      return { kind: "resist", ...(r.whose === "me" ? {} : { whose: "them" as const }), cmp, n: level(r.n, 150) };
+    case "side":
+      return { kind: "side", side: r.side === "enemies" ? "enemies" : "allies" };
+    case "oneSided":
+      return { kind: "oneSided", ...(r.is === false ? { is: false } : {}) };
   }
 }
 
@@ -611,7 +835,20 @@ function cleanAction(raw: unknown): Action {
   const a: Action = { kind, amount: cleanAmount(r.amount) };
   if (opt.targets) a.target = cleanTarget(r.target);
   if (opt.effect) a.effectId = id80(r.effectId);
-  if (kind === "give" && r.later === true) a.later = true;
+  if ((kind === "give" || kind === "giveRandom") && r.later === true) a.later = true;
+  if (kind === "giveRandom" || kind === "cancelNext") a.effectIds = (Array.isArray(r.effectIds) ? r.effectIds : []).slice(0, 6).map((id) => id80(id));
+  if (PERCENT_ACTIONS.includes(kind) && r.percent === true) a.percent = true;
+  if (kind === "addPage") a.text = String(r.text ?? "").slice(0, 200);
+  if (kind === "counterDie") {
+    a.dieKind = (["slash", "pierce", "blunt", "block", "evade"] as const).find((k) => k === r.dieKind) ?? "block";
+    a.base = int(r.base, -20, 20, 0);
+  }
+  if (kind === "resist") {
+    a.dmgType = DAMAGE_TYPE_OPTIONS.find((k) => k === r.dmgType) ?? "die";
+    a.level = level(r.level, 100);
+    a.which = r.which === "health" || r.which === "stagger" ? r.which : "both";
+    a.until = r.until === "combat" || r.until === "nextRound" ? r.until : "round";
+  }
   return a;
 }
 
@@ -627,7 +864,10 @@ export function cleanEffect(raw: unknown): EffectDef {
       const when = oneOf(rule?.when, whenOptions(kind), kind === "die" ? "hit" : "turnEnd");
       const out: Rule = { id: String(rule?.id || newId()).slice(0, 40), when, checks: [], actions: [] };
       if (EFFECT_WHENS.includes(when) && rule?.effectId) out.effectId = id80(rule.effectId);
-      if (rule?.limit === "round" || rule?.limit === "combat") out.limit = rule.limit;
+      if (rule?.limit === "round" || rule?.limit === "combat" || rule?.limit === "roundTarget") out.limit = rule.limit;
+      const every = int(rule?.every, 1, 20, 1);
+      if (every > 1) out.every = every;
+      if (rule?.stop === true) out.stop = true;
       out.checks = (Array.isArray(rule?.checks) ? rule.checks : []).slice(0, 4).map(cleanCheck);
       out.actions = (Array.isArray(rule?.actions) ? rule.actions : []).slice(0, 6).map(cleanAction);
       return out;
@@ -638,6 +878,9 @@ export function cleanEffect(raw: unknown): EffectDef {
   if (kind === "status" && r.maxStacks != null && r.maxStacks !== ("" as unknown)) def.maxStacks = int(r.maxStacks, 1, MAX_STACKS, MAX_STACKS);
   if (kind === "status" && r.holds) def.holds = id80(r.holds);
   if (kind === "status" && r.bySource === true) def.bySource = true;
+  if ((kind === "passive" || kind === "proficiency") && r.cap && typeof r.cap === "object" && r.cap.effectId) {
+    def.cap = { effectId: id80(r.cap.effectId), max: int(r.cap.max, 1, MAX_STACKS, 20) };
+  }
   if (r.createdBy) def.createdBy = String(r.createdBy);
   if (r.createdBy && r.approved === true) def.approved = true;
   if (r.updatedAt) def.updatedAt = Number(r.updatedAt) || 0;
@@ -687,6 +930,18 @@ function amountText(a: Amount, unit: string, stats: Record<string, string> = {},
     case "healthLost":
       text = equal("the % of my Health I've lost");
       break;
+    case "maxHealth":
+      text = equal(`${a.n ?? 10}% of my max Health`);
+      break;
+    case "maxStagger":
+      text = equal(`${a.n ?? 10}% of my max Stagger Resist`);
+      break;
+    case "speed":
+      text = equal(`${whose} Speed`);
+      break;
+    case "speedDiff":
+      text = equal("how much faster I am than them");
+      break;
   }
   if (a.per && a.per > 1 && a.kind !== "rolls") text += ` ÷ ${a.per}`;
   if (a.plus) text += ` ${a.plus > 0 ? "+" : "−"} ${Math.abs(a.plus)}`;
@@ -702,6 +957,12 @@ function whoText(t: Target | undefined): string {
       return `allies within ${t.range ?? 2} ${plural(t.range ?? 2, "tile")}`;
     case "enemiesNear":
       return `enemies within ${t.range ?? 2} ${plural(t.range ?? 2, "tile")}`;
+    case "randomAllies":
+      return (t.count ?? 1) === 1 ? "a random ally" : `${t.count} random allies`;
+    case "randomEnemies":
+      return (t.count ?? 1) === 1 ? "a random enemy" : `${t.count} random enemies`;
+    case "mostHurt":
+      return "the most hurt of my side";
     default:
       return "I";
   }
@@ -750,6 +1011,39 @@ function checkText(c: Check, library: Record<string, EffectDef>): string {
       const from = c.source === "attack" ? " from an attack" : c.source === "effect" ? ` from ${nameOf(library, c.effectId, "an Effect")}` : "";
       return c.damageType === "health" || c.damageType === "stagger" ? `it's ${type}${from}` : from ? `the damage is${from}` : "there's damage";
     }
+    case "speed":
+      return `${them ? "their" : "my"} Speed is ${cmp} ${amountText(c.amount ?? blankAmount(), "", {}, library)}`;
+    case "hand":
+      return `I have ${cmp} ${c.n} ${plural(c.n ?? 0, "Page")} in my hand`;
+    case "used":
+      return c.cmp === "atMost" && c.n === 0 ? "I haven't used a Page this round" : `I've used ${cmp} ${c.n} ${plural(c.n ?? 0, "Page")} this round`;
+    case "light":
+      return `I have ${cmp} ${c.n} Light`;
+    case "emotion":
+      return `my Emotion Level is ${cmp} ${c.n}`;
+    case "page":
+      switch (c.pageIs) {
+        case "cost":
+          return `the Page costs ${cmp} ${c.n}`;
+        case "dice":
+          return `the Page has ${cmp} ${c.n} ${plural(c.n ?? 0, "die", "dice")}`;
+        case "kinds":
+          return `the Page has ${cmp} ${c.n} kinds of dice`;
+        case "named":
+          return `the Page's name has "${c.text ?? ""}" in it`;
+        case "gives":
+          return `the Page mentions ${nameOf(library, c.effectId)}`;
+        default:
+          return `the Page ${PAGE_IS_OPTIONS.find((o) => o.value === c.pageIs)?.label ?? "is Melee"}`;
+      }
+    case "lethal":
+      return "it would Knock me Out";
+    case "resist":
+      return `${them ? "their" : "my"} Resistance to the die is ${cmp} ${resistName(c.n)}`;
+    case "side":
+      return `they're ${c.side === "enemies" ? "an enemy" : "an ally"}`;
+    case "oneSided":
+      return c.is === false ? "it's a Clash" : "it's a One-Sided attack";
   }
 }
 
@@ -757,6 +1051,7 @@ function actionText(a: Action, library: Record<string, EffectDef>, stats?: Recor
   const who = whoText(a.target);
   const amount = (unit: string) => amountText(a.amount, unit, stats, library);
   const name = nameOf(library, a.effectId);
+  const pct = (unit: string) => (a.percent ? `${amountText(a.amount, "", stats, library)}% ${unit}` : amount(unit));
   switch (a.kind) {
     case "damage":
       return `${who} take ${amount("damage")}`;
@@ -803,11 +1098,11 @@ function actionText(a: Action, library: Record<string, EffectDef>, stats?: Recor
     case "disadvantage":
       return "the die is rolled with disadvantage";
     case "extraDamage":
-      return `deal ${amount("extra damage")}`;
+      return `deal ${pct("extra damage")}`;
     case "increaseDamage":
-      return `I take ${amount("more damage")}`;
+      return `I take ${pct("more damage")}`;
     case "reduceDamage":
-      return `I take ${amount("less damage")}`;
+      return `I take ${pct("less damage")}`;
     case "shield":
       return `this blocks up to ${amount("damage")}, losing a stack for each point blocked`;
     case "gainStacks":
@@ -816,14 +1111,61 @@ function actionText(a: Action, library: Record<string, EffectDef>, stats?: Recor
       return `this loses ${amount("")}${a.amount.kind === "number" ? ` ${plural(a.amount.n ?? 0, "stack")}` : ""}`;
     case "draw":
       return `I draw ${amountText(a.amount, "", stats, library)}${a.amount.kind === "number" ? ` ${plural(a.amount.n ?? 0, "Page")}` : " Pages"}`;
+    case "healthDamage":
+      return `deal ${pct("more Health damage")}`;
+    case "lessHealthDamage":
+      return `deal ${pct("less Health damage")}`;
+    case "staggerHit":
+      return `deal ${pct("more Stagger damage")}`;
+    case "lessStaggerHit":
+      return `deal ${pct("less Stagger damage")}`;
+    case "speedDice":
+      return `I get ${amountText(a.amount, "more", stats, library)} Speed ${a.amount.kind === "number" && a.amount.n === 1 ? "Die" : "Dice"}`;
+    case "loseSpeedDice":
+      return `I get ${amountText(a.amount, "fewer", stats, library)} Speed ${a.amount.kind === "number" && a.amount.n === 1 ? "Die" : "Dice"}`;
+    case "raiseMin":
+      return `the die's Min goes up by ${amount("")}`;
+    case "rollMax":
+      return "the die rolls its Max";
+    case "rerollMin":
+      return "the die is rolled again (once) if it rolls its Min";
+    case "drawTo":
+      return `I draw until I have ${amountText(a.amount, "", stats, library)} Pages in my hand`;
+    case "discard":
+      return `${who} discard ${amountText(a.amount, "", stats, library)} random ${a.amount.kind === "number" && a.amount.n === 1 ? "Page" : "Pages"}`;
+    case "addPage": {
+      const names = (a.text ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+      const what = names.length > 1 ? `one of ${joinOr(names.map((x) => `"${x}"`))} (at random)` : `"${names[0] ?? "a Page"}"`;
+      return `I add ${amountText(a.amount, "", stats, library)} ${a.amount.kind === "number" && a.amount.n === 1 ? "copy" : "copies"} of ${what} to my hand`;
+    }
+    case "costDown":
+      return `a random Page in my hand costs ${amount("less")} this round`;
+    case "counterDie":
+      return `${who} gain a Counter ${capital(a.dieKind ?? "block")} die (${amountText(a.amount, "", stats, library).replace(/^(\d+)$/, "1d$1")}${(a.base ?? 0) >= 0 ? "+" : ""}${a.base ?? 0})`;
+    case "giveRandom":
+      return `${who} gain ${amount(`of ${joinOr((a.effectIds ?? []).map((id) => nameOf(library, id)))}`)} (one at random)${a.later ? " next round" : ""}`;
+    case "cancelNext":
+      return `${who} lose next round's stacks of ${joinOr((a.effectIds ?? []).map((id) => nameOf(library, id)))} (one at random)`;
+    case "resist": {
+      const type = a.dmgType === "die" ? "the die's damage type" : a.dmgType === "random" ? "a random damage type" : capital(a.dmgType ?? "slash");
+      const which = a.which === "health" ? "" : a.which === "stagger" ? "Stagger " : "and Stagger ";
+      return `${possessive(a.target)} ${which === "and Stagger " ? "" : which}Resistance${which === "and Stagger " ? "s" : ""} to ${type} ${which === "and Stagger " ? "become" : "becomes"} ${resistName(a.level)} ${a.until === "combat" ? "for the rest of combat" : a.until === "nextRound" ? "until the end of next round" : "until the end of the round"}`;
+    }
+    case "emotion":
+      return `${who} gain ${amount("Emotion Points")}`;
   }
 }
+
+const joinOr = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} or ${parts[parts.length - 1]}`);
+const possessive = (t: Target | undefined) => (t?.who === "them" ? "their" : t?.who === "me" || !t ? "my" : `${whoText(t)}'s`);
 
 const joinAnd = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`);
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** A rule's When as words, naming its Effect when it has one: "When I set off their Rupture". */
-export function whenText(rule: Pick<Rule, "when" | "effectId" | "limit">, library: Record<string, EffectDef> = PRESET_EFFECTS, kind: EffectKind = "status"): string {
+const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th")}`;
+
+export function whenText(rule: Pick<Rule, "when" | "effectId" | "limit" | "every">, library: Record<string, EffectDef> = PRESET_EFFECTS, kind: EffectKind = "status"): string {
   const die = kind === "die";
   const x = rule.effectId ? nameOf(library, rule.effectId) : "";
   let text = whenOptions(kind).find((o) => o.value === rule.when)?.label ?? WHEN_OPTIONS.find((o) => o.value === rule.when)?.label ?? rule.when;
@@ -831,6 +1173,8 @@ export function whenText(rule: Pick<Rule, "when" | "effectId" | "limit">, librar
   if (x && rule.when === "effectFiresOnThem") text = die ? `When this die sets off their ${x}` : `When I set off their ${x}`;
   if (x && rule.when === "gained") text = `When I gain ${x}`;
   if (x && rule.when === "gave") text = die ? `When this die gives someone ${x}` : `When I give someone ${x}`;
+  if (x && rule.when === "lost") text = `When I lose ${x}`;
+  if (rule.every && rule.every > 1) text += ` (every ${ordinal(rule.every)} time)`;
   if (rule.limit && rule.limit !== "always") text += ` (${LIMIT_OPTIONS.find((o) => o.value === rule.limit)!.label})`;
   return text;
 }
@@ -839,7 +1183,7 @@ export function whenText(rule: Pick<Rule, "when" | "effectId" | "limit">, librar
 export function describeRule(rule: Rule, library: Record<string, EffectDef> = PRESET_EFFECTS, stats?: Record<string, string>, kind: EffectKind = "status"): string {
   const checks = rule.checks.length ? `, if ${joinAnd(rule.checks.map((c) => checkText(c, library)))}` : "";
   const actions = rule.actions.length ? joinAnd(rule.actions.map((a) => actionText(a, library, stats))) : "nothing happens";
-  return `${whenText(rule, library, kind)}${checks}, ${actions}.`;
+  return `${whenText(rule, library, kind)}${checks}, ${actions}.${rule.stop ? " Then skip the rules below." : ""}`;
 }
 
 const DECAY_TEXT: Record<Decay, string> = {
@@ -862,6 +1206,7 @@ export function describeEffect(def: EffectDef, library: Record<string, EffectDef
   if (def.maxStacks && def.maxStacks < MAX_STACKS) lines.push(`Up to ${def.maxStacks} ${plural(def.maxStacks, "stack")}.`);
   if (def.kind === "status" && def.holds) lines.push(`While this is on me, my ${nameOf(library, def.holds)} doesn't lose stacks on its own.`);
   if (def.kind === "status" && def.bySource) lines.push("Each character's stacks are kept apart.");
+  if (def.cap) lines.push(`I can have up to ${def.cap.max} ${nameOf(library, def.cap.effectId)}.`);
   if (def.note?.trim()) lines.push(def.note.trim());
   return lines.map(capital).join(" ");
 }
@@ -873,7 +1218,7 @@ export function effectWarnings(def: EffectDef): string[] {
   if (!def.name.trim()) out.push("Give it a name.");
   if (def.rules.length === 0) {
     if (def.kind === "status" || def.kind === "die") out.push("It has no rules yet, so it won't do anything.");
-    else if (!def.note?.trim()) out.push("Say what it does, or add a rule to automate it.");
+    else if (!def.note?.trim() && !def.cap) out.push("Say what it does, or add a rule to automate it.");
   }
   for (const [i, r] of def.rules.entries()) {
     const n = def.rules.length > 1 ? `Rule ${i + 1}: ` : "";
@@ -896,6 +1241,19 @@ export function effectWarnings(def: EffectDef): string[] {
       if (c.kind === "die" && !HAS_DIE[r.when]) out.push(`${n}there's no die to check here.`);
       if (c.kind === "damage" && !DAMAGE_WHENS.includes(r.when)) out.push(`${n}"The kind of damage" only works with "${label("takingDamage")}" or "${label("takingHit")}".`);
       if (c.whose === "them" && !HAS_OTHER[r.when]) out.push(`${n}there's no "they" to check ${label(r.when).toLowerCase()}.`);
+      if (c.kind === "page" && !HAS_PAGE.includes(r.when)) out.push(`${n}there's no Page to check ${label(r.when).toLowerCase()}.`);
+      if (c.kind === "lethal" && !DAMAGE_WHENS.includes(r.when)) out.push(`${n}"It would Knock me Out" only works with "${label("takingDamage")}" or "${label("takingHit")}".`);
+      if (c.kind === "resist" && !HAS_DIE[r.when]) out.push(`${n}there's no die to check a Resistance against here.`);
+      if ((c.kind === "side" || c.kind === "speed") && !HAS_OTHER[r.when] && (c.kind === "side" || c.whose === "them")) out.push(`${n}there's no "they" to check ${label(r.when).toLowerCase()}.`);
+      if (c.kind === "oneSided" && !["hit", "wasHit", "takingHit"].includes(r.when)) out.push(`${n}"One-Sided or Clash" only works when a die hits.`);
+    }
+    for (const a of r.actions) {
+      if (a.kind === "addPage" && !(a.text ?? "").trim()) out.push(`${n}name the Page to add.`);
+      if ((a.kind === "giveRandom" || a.kind === "cancelNext") && (a.effectIds ?? []).length < (a.kind === "giveRandom" ? 2 : 1)) out.push(`${n}pick the Effects to choose from.`);
+      if (a.kind === "resist" && a.dmgType === "die" && !HAS_DIE[r.when]) out.push(`${n}there's no die here; pick a damage type.`);
+    }
+    if (r.when === "emotionUp" || r.checks.some((c) => c.kind === "emotion") || r.actions.some((a) => a.kind === "emotion")) {
+      out.push(`${n}Emotion Levels only count when the GM turns on "Emotion Levels" in Game settings.`);
     }
     if (def.kind === "die" && !DIE_WHEN_OPTIONS.some((o) => o.value === r.when)) out.push(`${n}a Dice effect only runs when its die is rolled, hits or clashes.`);
   }
@@ -967,6 +1325,29 @@ export interface EffectOps<T extends EffectHolder> {
   /** Moves t straight away from `from` (negative: toward it), stopping at the map's edge or another character. */
   push(from: T, t: T, n: number): void;
   log(line: string): void;
+  /** Speed this round (0 out of combat). */
+  speed(t: T): number;
+  resource(t: T, key: "light" | "hp" | "maxHp" | "maxStagger"): number;
+  /** Pages in hand, and Pages used (slotted) this round. */
+  hand(t: T): number;
+  used(t: T): number;
+  /** Emotion Level (0 when the Game setting is off), and Emotion Points to add. */
+  emotion(t: T): number;
+  addEmotion(t: T, n: number): void;
+  /** Discards up to n random Pages from the hand; returns how many. */
+  discard(t: T, n: number): number;
+  /** Adds n copies of one of t's own Pages, picked at random from those whose name matches one of names. */
+  addPage(t: T, names: string[], n: number): void;
+  /** A random Page in t's hand costing 1 or more costs n less until the end of the round. */
+  costDown(t: T, n: number): void;
+  counterDie(t: T, die: Dice): void;
+  /** t's damage (or Stagger) multiplier against a damage type, and changing it for a while. */
+  resist(t: T, kind: DiceKind, stagger: boolean): number;
+  setResist(t: T, kind: "slash" | "pierce" | "blunt", value: number, which: "health" | "stagger" | "both", until: "round" | "nextRound" | "combat"): void;
+  /** Speed Dice for the rest of combat (outside "When I roll Speed"). */
+  speedDice(t: T, n: number): void;
+  /** Whether b is on the other side from a. */
+  enemies(a: T, b: T): boolean;
 }
 
 /** What a trigger hands back: Power and damage to add, damage to take off, the die's Max, and advantage (+) or disadvantage (−). */
@@ -976,6 +1357,18 @@ export interface TriggerResult {
   reduce: number;
   max: number;
   advantage: number;
+  /** Speed Dice to add (or take away). */
+  dice: number;
+  /** The die's Min goes up by this much; rolls its Max; is rolled again on its Min. */
+  min: number;
+  rollMax: boolean;
+  rerollMin: boolean;
+  /** Damage in percent (both), and Health-only or Stagger-only damage in points and in percent. */
+  pct: number;
+  health: number;
+  healthPct: number;
+  stagger: number;
+  staggerPct: number;
 }
 
 /** The number and details a trigger comes with: damage about to be taken, stacks given, the stacks an Effect fired with. */
@@ -996,9 +1389,32 @@ export interface TriggerOptions<T> {
   event?: TriggerEvent;
   /** Only the character's Effects and Passives, or only the die's Dice effects. */
   only?: "character" | "die";
+  /** The Page being used, and which of its owner's Pages this round it was (1: the first). */
+  page?: Page;
+  nth?: number;
+  /** The die lands One-Sided (true) or in a Clash (false). */
+  oneSided?: boolean;
 }
 
-export const noResult = (): TriggerResult => ({ power: 0, damage: 0, reduce: 0, max: 0, advantage: 0 });
+export const noResult = (): TriggerResult => ({
+  power: 0,
+  damage: 0,
+  reduce: 0,
+  max: 0,
+  advantage: 0,
+  dice: 0,
+  min: 0,
+  rollMax: false,
+  rerollMin: false,
+  pct: 0,
+  health: 0,
+  healthPct: 0,
+  stagger: 0,
+  staggerPct: 0,
+});
+
+/** Applies a percent change: 50 is half again, −30 is 30% less. Never below 0. */
+export const withPct = (n: number, pct: number) => (pct ? Math.max(0, Math.floor((n * (100 + pct)) / 100)) : n);
 
 let depth = 0;
 /** Effect triggers in progress (who, what, which Effect), so "when I give Burn, give 1 more Burn" can't feed itself. */
@@ -1024,7 +1440,7 @@ export function giveEffect<T extends EffectHolder>(ops: EffectOps<T>, t: T, defI
       left -= off;
     }
   } else {
-    const max = def.maxStacks ?? MAX_STACKS;
+    const max = maxStacksFor(ops, t, defId, def);
     const sourceId = def.bySource ? opts.sourceId : undefined;
     let have = list.find((e) => e.defId === defId && (!def.bySource || e.sourceId === sourceId));
     if (!have) {
@@ -1036,6 +1452,16 @@ export function giveEffect<T extends EffectHolder>(ops: EffectOps<T>, t: T, defI
     else have.count = Math.min(max, have.count + stacks);
   }
   t.effects = list.filter(keep);
+}
+
+/** The most stacks of an Effect a character can have: the Effect's own limit, unless one of their Passives changes it. */
+function maxStacksFor<T extends EffectHolder>(ops: EffectOps<T>, t: T, defId: string, def: EffectDef): number {
+  const caps = ops
+    .passives(t)
+    .map((id) => ops.def(id)?.cap)
+    .filter((c): c is NonNullable<EffectDef["cap"]> => !!c && c.effectId === defId)
+    .map((c) => c.max);
+  return caps.length ? Math.max(...caps) : (def.maxStacks ?? MAX_STACKS);
 }
 
 /** Every stack of an Effect comes off (next round's too). */
@@ -1090,18 +1516,42 @@ function fire<T extends EffectHolder>(ops: EffectOps<T>, holder: T, src: Source,
   let firedWith = 0;
   for (const rule of rules) {
     if (rule.effectId && rule.effectId !== opts.event?.effectId) continue;
-    const key = `${src.defId}:${rule.id}`;
+    const base = `${src.defId}:${rule.id}`;
+    const key = rule.limit === "roundTarget" ? `${base}@${opts.other?.id ?? ""}` : base;
     const used = holder.effectUses?.[key];
-    if (rule.limit === "round" && used === ops.round()) continue;
+    if ((rule.limit === "round" || rule.limit === "roundTarget") && used === ops.round()) continue;
     if (rule.limit === "combat" && used !== undefined) continue;
     if (entry && entry.count <= 0) break;
     const stacks = entry ? entry.count : 1;
-    const scope: Scope<T> = { ops, holder, other: opts.other, die: opts.die, dieIsMine, stacks, event: opts.event, entry, def, defId: src.defId };
+    const scope: Scope<T> = {
+      ops,
+      holder,
+      other: opts.other,
+      die: opts.die,
+      dieIsMine,
+      stacks,
+      event: opts.event,
+      entry,
+      def,
+      defId: src.defId,
+      page: opts.page,
+      nth: opts.nth,
+      oneSided: opts.oneSided,
+      when: rule.when,
+    };
     if (!rule.checks.every((c) => passes(c, scope))) continue;
-    if (rule.limit === "round" || rule.limit === "combat") (holder.effectUses ??= {})[key] = ops.round();
+    // "Every 3rd time": count the times it would have fired, and fire on every Nth.
+    if (rule.every && rule.every > 1) {
+      const uses = (holder.effectUses ??= {});
+      const count = (uses[`${base}#`] ?? 0) + 1;
+      uses[`${base}#`] = count;
+      if (count % rule.every !== 0) continue;
+    }
+    if (rule.limit && rule.limit !== "always") (holder.effectUses ??= {})[key] = ops.round();
     firedWith ||= stacks;
     ops.log(secretOf(holder, def, `  ${holder.name}'s ${def.name}${entry ? ` ${stacks}` : ""} triggers.`));
     for (const action of rule.actions) act(action, scope, result);
+    if (rule.stop) break;
   }
   if (!firedWith || !entry) return;
   if (!held(ops, holder, src.defId)) {
@@ -1175,7 +1625,7 @@ export function arriveAtRoundStart<T extends EffectHolder>(ops: EffectOps<T>, ho
   for (const e of holder.effects ?? []) {
     if (!e.pending) continue;
     const def = e.defId ? ops.def(e.defId) : undefined;
-    e.count = Math.min(def?.maxStacks ?? MAX_STACKS, e.count + e.pending);
+    e.count = Math.min(def ? maxStacksFor(ops, holder, e.defId!, def) : MAX_STACKS, e.count + e.pending);
     ops.log(secret(holder, "effects", `  ${holder.name} gains ${e.pending} ${e.name} (${e.count}).`));
     delete e.pending;
   }
@@ -1193,6 +1643,10 @@ interface Scope<T extends EffectHolder> {
   entry?: HeldEffect;
   def: EffectDef;
   defId: string;
+  page?: Page;
+  nth?: number;
+  oneSided?: boolean;
+  when?: When;
 }
 
 const whom = <T extends EffectHolder>(whose: Whose | undefined, s: Scope<T>) => (whose === "them" ? s.other : s.holder);
@@ -1232,6 +1686,20 @@ function amountOf<T extends EffectHolder>(a: Amount, s: Scope<T>): number {
       break;
     case "healthLost":
       n = 100 - s.ops.healthPercent(s.holder);
+      break;
+    case "maxHealth":
+      n = Math.floor((s.ops.resource(s.holder, "maxHp") * (a.n ?? 10)) / 100);
+      break;
+    case "maxStagger":
+      n = Math.floor((s.ops.resource(s.holder, "maxStagger") * (a.n ?? 10)) / 100);
+      break;
+    case "speed": {
+      const who = whom(a.whose, s);
+      n = who ? s.ops.speed(who) : 0;
+      break;
+    }
+    case "speedDiff":
+      n = s.other ? s.ops.speed(s.holder) - s.ops.speed(s.other) : 0;
       break;
   }
   if (a.per && a.per > 1 && a.kind !== "rolls") n = Math.floor(n / a.per);
@@ -1280,7 +1748,84 @@ function passes<T extends EffectHolder>(c: Check, s: Scope<T>): boolean {
       if (c.dieKind === "defensive") return k === "block" || k === "evade";
       return k === c.dieKind;
     }
+    case "speed":
+      return !!who && cmp(s.ops.speed(who), amountOf(c.amount ?? blankAmount(), s));
+    case "hand":
+      return cmp(s.ops.hand(s.holder), c.n ?? 0);
+    case "used":
+      return cmp(s.ops.used(s.holder), c.n ?? 0);
+    case "light":
+      return cmp(s.ops.resource(s.holder, "light"), c.n ?? 0);
+    case "emotion":
+      return cmp(s.ops.emotion(s.holder), c.n ?? 0);
+    case "page":
+      return pageIs(c, s);
+    case "lethal": {
+      const ev = s.event;
+      return !!ev && ev.type !== "stagger" && ev.amount > 0 && ev.amount >= s.ops.resource(s.holder, "hp");
+    }
+    case "resist": {
+      const k = s.die?.kind;
+      if (!who || !k || !OFFENSIVE.includes(k)) return false;
+      return cmp(Math.round(s.ops.resist(who, k, false) * 100), c.n ?? 100);
+    }
+    case "side":
+      return !!s.other && s.ops.enemies(s.holder, s.other) === (c.side === "enemies");
+    case "oneSided":
+      return s.oneSided !== undefined && s.oneSided === (c.is !== false);
   }
+}
+
+const OFFENSIVE: DiceKind[] = ["slash", "pierce", "blunt"];
+
+/** A "the Page" check, against the Page being used right now. */
+function pageIs<T extends EffectHolder>(c: Check, s: Scope<T>): boolean {
+  const page = s.page;
+  if (!page) return false;
+  const cmp = (x: number, y: number) => (c.cmp === "atLeast" ? x >= y : x <= y);
+  const dice = page.dice.filter((d) => !d.counter);
+  switch (c.pageIs) {
+    case "melee":
+      return page.type === "melee";
+    case "ranged":
+      return page.type === "ranged";
+    case "mass":
+      return page.type === "massSummation" || page.type === "massIndividual";
+    case "first":
+      return s.nth === 1;
+    case "firstDie":
+      return !!s.die && dice.find((d) => OFFENSIVE.includes(d.kind))?.id === s.die.id;
+    case "cost":
+      return cmp(page.cost, c.n ?? 0);
+    case "dice":
+      return cmp(dice.length, c.n ?? 0);
+    case "kinds":
+      return cmp(new Set(dice.map((d) => d.kind)).size, c.n ?? 0);
+    case "named":
+      return !!c.text?.trim() && page.name.toLowerCase().includes(c.text.trim().toLowerCase());
+    case "gives": {
+      const def = c.effectId ? s.ops.def(c.effectId) : undefined;
+      if (!def) return false;
+      const name = def.name.toLowerCase();
+      const words = [page.effect, ...page.dice.map((d) => d.effect ?? "")].join(" ").toLowerCase();
+      const gives = page.dice.some((d) =>
+        (d.effectIds ?? []).some((id) => s.ops.def(id)?.rules.some((r) => r.actions.some((a) => a.effectId === c.effectId || a.effectIds?.includes(c.effectId!)))),
+      );
+      return gives || (!!name && words.includes(name));
+    }
+    default:
+      return false;
+  }
+}
+
+/** Shuffles a copy of a list (with the same dice as everything else, so tests can fix them). */
+function shuffled<X>(list: X[]): X[] {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = rollDie(i + 1) - 1;
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 function targets<T extends EffectHolder>(t: Target | undefined, s: Scope<T>): T[] {
@@ -1291,6 +1836,13 @@ function targets<T extends EffectHolder>(t: Target | undefined, s: Scope<T>): T[
       return s.ops.near(s.holder, t.range ?? 2, false);
     case "enemiesNear":
       return s.ops.near(s.holder, t.range ?? 2, true);
+    case "randomAllies":
+    case "randomEnemies":
+      return shuffled(s.ops.near(s.holder, 999, t.who === "randomEnemies")).slice(0, t.count ?? 1);
+    case "mostHurt": {
+      const side = [s.holder, ...s.ops.near(s.holder, 999, false)];
+      return [side.reduce((a, b) => (s.ops.healthPercent(b) < s.ops.healthPercent(a) ? b : a))];
+    }
     default:
       return [s.holder];
   }
@@ -1334,12 +1886,15 @@ function act<T extends EffectHolder>(a: Action, s: Scope<T>, result: TriggerResu
         if (!a.effectId || !had || n <= 0) return;
         giveEffect(ops, t, a.effectId, -n);
         ops.log(secret(t, "effects", `  ${t.name} loses ${Math.min(n, had)} ${ops.def(a.effectId)?.name ?? "stacks"}.`));
+        announce(ops, "lost", t, { other: t === s.holder ? undefined : s.holder, event: { amount: Math.min(n, had), effectId: a.effectId } });
       });
     case "clear":
       return each((t) => {
         if (!a.effectId || !(t.effects ?? []).some((e) => e.defId === a.effectId)) return;
+        const had = stacksOf(t, a.effectId);
         clearEffect(t, a.effectId);
         ops.log(secret(t, "effects", `  ${t.name} loses all ${ops.def(a.effectId)?.name ?? "stacks"}.`));
+        if (had) announce(ops, "lost", t, { other: t === s.holder ? undefined : s.holder, event: { amount: had, effectId: a.effectId } });
       });
     case "activate":
       return each((t) => a.effectId && activate(ops, t, a.effectId, s.holder));
@@ -1370,17 +1925,97 @@ function act<T extends EffectHolder>(a: Action, s: Scope<T>, result: TriggerResu
       result.advantage -= 1;
       return;
     case "extraDamage":
-      result.damage += n;
-      if (n) ops.log(secretOf(s.holder, def, `  +${n} damage.`));
+      if (a.percent) result.pct += n;
+      else result.damage += n;
+      if (n) ops.log(secretOf(s.holder, def, `  +${n}${a.percent ? "%" : ""} damage.`));
       return;
     case "increaseDamage":
-      result.damage += n;
-      if (n) ops.log(secretOf(s.holder, def, `  +${n} damage taken.`));
+      if (a.percent) result.pct += n;
+      else result.damage += n;
+      if (n) ops.log(secretOf(s.holder, def, `  +${n}${a.percent ? "%" : ""} damage taken.`));
       return;
     case "reduceDamage":
-      result.reduce += n;
-      if (n) ops.log(secretOf(s.holder, def, `  −${n} damage taken.`));
+      if (a.percent) result.pct -= n;
+      else result.reduce += n;
+      if (n) ops.log(secretOf(s.holder, def, `  −${n}${a.percent ? "%" : ""} damage taken.`));
       return;
+    case "healthDamage":
+    case "lessHealthDamage":
+    case "staggerHit":
+    case "lessStaggerHit": {
+      const sign = a.kind === "healthDamage" || a.kind === "staggerHit" ? 1 : -1;
+      const health = a.kind === "healthDamage" || a.kind === "lessHealthDamage";
+      if (a.percent) {
+        if (health) result.healthPct += sign * n;
+        else result.staggerPct += sign * n;
+      } else if (health) result.health += sign * n;
+      else result.stagger += sign * n;
+      if (n) ops.log(secretOf(s.holder, def, `  ${sign > 0 ? "+" : "−"}${n}${a.percent ? "%" : ""} ${health ? "Health" : "Stagger"} damage.`));
+      return;
+    }
+    case "speedDice":
+    case "loseSpeedDice": {
+      const d = a.kind === "speedDice" ? n : -n;
+      // While Speed is rolled it joins the roll; any other time it changes the dice for the rest of combat.
+      if (s.when === "speed") result.dice += d;
+      else ops.speedDice(s.holder, d);
+      return;
+    }
+    case "raiseMin":
+      result.min += n;
+      return;
+    case "rollMax":
+      result.rollMax = true;
+      return;
+    case "rerollMin":
+      result.rerollMin = true;
+      return;
+    case "drawTo":
+      return ops.draw(s.holder, Math.max(0, n - ops.hand(s.holder)));
+    case "discard":
+      return each((t) => {
+        const gone = ops.discard(t, n);
+        for (let i = 0; i < gone; i++) announce(ops, "discard", t, { event: { amount: 1 } });
+      });
+    case "addPage": {
+      const names = (a.text ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+      if (names.length && n > 0) ops.addPage(s.holder, names, n);
+      return;
+    }
+    case "costDown":
+      if (n > 0) ops.costDown(s.holder, n);
+      return;
+    case "counterDie":
+      return each((t) => ops.counterDie(t, { id: newId(), kind: a.dieKind ?? "block", counter: true, sides: Math.max(1, n), basePower: a.base ?? 0 }));
+    case "giveRandom":
+      return each((t) => {
+        const ids = (a.effectIds ?? []).filter((id) => ops.def(id));
+        if (!ids.length) return;
+        act({ kind: "give", target: { who: t === s.holder ? "me" : "them" }, amount: { kind: "number", n }, effectId: ids[rollDie(ids.length) - 1], later: a.later }, { ...s, other: t === s.holder ? s.other : t }, result);
+      });
+    case "cancelNext":
+      return each((t) => {
+        const pending = (t.effects ?? []).filter((e) => e.defId && (a.effectIds ?? []).includes(e.defId) && (e.pending ?? 0) > 0);
+        if (!pending.length) return;
+        const pick = pending[rollDie(pending.length) - 1];
+        ops.log(secret(t, "effects", `  ${t.name} won't gain ${pick.pending} ${pick.name} next round.`));
+        delete pick.pending;
+        t.effects = (t.effects ?? []).filter(keep);
+      });
+    case "resist":
+      return each((t) => {
+        const which = a.which ?? "both";
+        const value = (a.level ?? 100) / 100;
+        let kind: DiceKind | undefined = a.dmgType === "die" ? s.die?.kind : a.dmgType === "random" ? undefined : a.dmgType;
+        if (a.dmgType === "random") {
+          // One the change would raise (or leave as it is), picked at random.
+          const open = OFFENSIVE.filter((k) => ops.resist(t, k, which === "stagger") <= value);
+          kind = open.length ? open[rollDie(open.length) - 1] : undefined;
+        }
+        if (kind === "slash" || kind === "pierce" || kind === "blunt") ops.setResist(t, kind, value, which, a.until ?? "round");
+      });
+    case "emotion":
+      return each((t) => ops.addEmotion(t, n));
     case "shield": {
       if (!entry) return;
       const left = Math.max(0, (s.event?.amount ?? 0) + result.damage - result.reduce);
@@ -1394,7 +2029,7 @@ function act<T extends EffectHolder>(a: Action, s: Scope<T>, result: TriggerResu
     case "gainStacks":
     case "loseStacks":
       if (!entry) return;
-      entry.count = Math.max(0, Math.min(def.maxStacks ?? MAX_STACKS, entry.count + (a.kind === "gainStacks" ? n : -n)));
+      entry.count = Math.max(0, Math.min(maxStacksFor(ops, s.holder, s.defId, def), entry.count + (a.kind === "gainStacks" ? n : -n)));
       return;
     case "draw":
       return ops.draw(s.holder, n);
