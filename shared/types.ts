@@ -7,6 +7,7 @@
 // Firestore layout:
 //   users/{uid}                     UserDoc            owner read/write (display name, theme)
 //   inviteCodes/{code}              { gameId }         functions only
+//   joinAttempts/{uid}              JoinAttempts       functions only (shared/invites.ts)
 //   games/{gameId}                  GameDoc            members read; functions write
 //   games/{gameId}/table/state      TableState         members read; GM write (host autosave)
 //   games/{gameId}/gm/meta          GmMeta             GM read; functions write
@@ -19,6 +20,7 @@
 import type { ThemeId } from "./account.ts";
 import type { DeckEntry, Dice, NpcSide, Page, ResistanceSet } from "./character.ts";
 import type { Fog } from "./fog.ts";
+import type { StatFormulas } from "./formulas.ts";
 
 // ---- Accounts and games ----
 
@@ -77,6 +79,12 @@ export interface GameSettings {
    * the GM turns it on: then the fog tools show on the GM screen and players can't see what's hidden.
    */
   fogOfWar?: boolean;
+  /**
+   * How Rank and Stats set max Health, Stagger Resist, Sanity and Light (shared/formulas.ts). New
+   * games start with the standard formulas; a game from before formulas has none saved and keeps
+   * its old numbers until the GM changes them.
+   */
+  statFormulas?: Partial<StatFormulas>;
 }
 
 export function playersCanCreateItems(game: GameDoc | undefined): boolean {

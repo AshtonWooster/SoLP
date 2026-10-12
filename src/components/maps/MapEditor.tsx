@@ -4,9 +4,9 @@ import { newId } from "../../../shared/engine.ts";
 import { arrivalSpot, type Corner, MAP_MAX, MAP_MIN, moveRect, type Rect, resizeRect, snapValue, travels } from "../../../shared/maps.ts";
 import { normalizeNpc, npcSpawnData } from "../../../shared/ruleset.ts";
 import type { MapInfo, MapItem, SavedMap, TableAction, TableState, Token } from "../../../shared/types.ts";
-import { useCollection } from "../../api.ts";
+import { useCollection, useStatFormulas } from "../../api.ts";
 import { friendlyError } from "../../firebase.ts";
-import { ImageUpload, uploadImage } from "../ImageUpload.tsx";
+import { ImageUpload, IMAGE_ACCEPT, uploadImage } from "../ImageUpload.tsx";
 import { NumberField } from "../NumberField.tsx";
 import { PIN_COLORS, Pin } from "./MapLayers.tsx";
 import { FogDraw, FogLayer, FogTools, type FogMode } from "./Fog.tsx";
@@ -537,7 +537,7 @@ function UploadButton({ gameId, onUploaded, onError }: { gameId: string; onUploa
       {busy ? "Uploading…" : "🖼 Add image"}
       <input
         type="file"
-        accept="image/*"
+        accept={IMAGE_ACCEPT}
         hidden
         disabled={busy}
         onChange={async (e) => {
@@ -716,6 +716,7 @@ function MapSettings({ gameId, map, act }: { gameId: string; map: MapInfo & { id
 
 /** Put the GM's characters on this map, shown or hidden. */
 function PlaceCharacters({ gameId, map, act }: { gameId: string; map: MapInfo & { id: string }; act: Act }) {
+  const formulas = useStatFormulas(gameId);
   const templates = useCollection<NpcTemplate>(`games/${gameId}/enemies`);
   const [hidden, setHidden] = useState(false);
   const list = Object.entries(templates ?? {})
@@ -737,7 +738,7 @@ function PlaceCharacters({ gameId, map, act }: { gameId: string; map: MapInfo & 
             </span>
             <button
               onClick={() =>
-                act({ type: "spawnEnemy", templateId: tid, template: npcSpawnData(t), x: t.side === "enemy" ? map.width - 3 : 2, y, mapId: map.id, hidden })
+                act({ type: "spawnEnemy", templateId: tid, template: npcSpawnData(t, formulas), x: t.side === "enemy" ? map.width - 3 : 2, y, mapId: map.id, hidden })
               }
             >
               Place

@@ -29,6 +29,7 @@ import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
 import { fogOfWarOn } from "../../shared/fog.ts";
 import { effectsClearAfterCombat } from "../../shared/types.ts";
+import { gameStatFormulas } from "../../shared/formulas.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
@@ -96,6 +97,8 @@ export class Host {
     }
     // Turning fog of war on or off in Game settings changes what players are sent.
     if (fogOfWarOn(game) !== fogWas) this.publish();
+    // The GM may have changed the stat formulas: seated players' max Resources follow.
+    this.syncSeatedPlayers();
   }
 
   subscribe(fn: (s: HostSnapshot) => void): () => void {
@@ -305,7 +308,7 @@ export class Host {
     return c
       ? {
           name: c.name,
-          max: maxResources(c),
+          max: maxResources(c, gameStatFormulas(this.game)),
           justice: c.primary.justice,
           resistances: c.armor?.resistances,
           staggerResistances: c.armor?.staggerResistances,

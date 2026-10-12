@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import type { GameDoc, GmMeta, TableAction, TableState, Token } from "../../shared/types.ts";
-import { useAuth, useCollection, useDoc } from "../api.ts";
+import { useAuth, useCollection, useDoc, useStatFormulas } from "../api.ts";
 import { activeToken } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
@@ -416,11 +416,12 @@ function TemplateList({
   table: TableState;
   act: (action: TableAction) => boolean;
 }) {
+  const formulas = useStatFormulas(gameId);
   const list = Object.entries(templates ?? {})
     .map(([tid, raw]) => [tid, normalizeNpc(raw)] as const)
     .sort((a, b) => a[1].name.localeCompare(b[1].name));
   const place = (templateId: string, t: NpcTemplate) =>
-    act({ type: "spawnEnemy", templateId, template: npcSpawnData(t), x: t.side === "enemy" ? table.map.width - 3 : 2, y: Math.floor(table.map.height / 2) });
+    act({ type: "spawnEnemy", templateId, template: npcSpawnData(t, formulas), x: t.side === "enemy" ? table.map.width - 3 : 2, y: Math.floor(table.map.height / 2) });
   return (
     <div className="template-panel">
       <div className="row-between">

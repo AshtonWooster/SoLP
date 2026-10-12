@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { collection, doc, onSnapshot, type DocumentData } from "firebase/firestore";
-import type { User } from "../shared/types.ts";
+import { gameStatFormulas, type StatFormulas } from "../shared/formulas.ts";
+import type { GameDoc, User } from "../shared/types.ts";
 import { db, friendlyError } from "./firebase.ts";
 
 export interface AuthContextValue {
@@ -61,4 +62,9 @@ export function useCollection<T = DocumentData>(path: string | null): Record<str
     );
   }, [path]);
   return docs;
+}
+
+/** The game's stat formulas (game settings), for screens that don't load the game themselves. */
+export function useStatFormulas(gameId: string): StatFormulas {
+  return gameStatFormulas(useDoc<GameDoc>(gameId ? `games/${gameId}` : null).data);
 }
