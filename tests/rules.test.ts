@@ -47,9 +47,12 @@ beforeEach(async () => {
 const as = (uid: string) => env.authenticatedContext(uid).firestore();
 const anon = () => env.unauthenticatedContext().firestore();
 
-test("members can read the game and table; others can't", async () => {
+test("members can read the game; only the GM reads the saved table; others can't", async () => {
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME)));
-  await assertSucceeds(getDoc(doc(as("p1"), "games", GAME, "table", "state")));
+  await assertSucceeds(getDoc(doc(as("p1"), "games", GAME)));
+  await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "table", "state")));
+  // The saved table has what the GM hid from players (hidden tokens, enemies' secrets).
+  await assertFails(getDoc(doc(as("p1"), "games", GAME, "table", "state")));
   await assertFails(getDoc(doc(as("stranger"), "games", GAME)));
   await assertFails(getDoc(doc(as("stranger"), "games", GAME, "table", "state")));
   await assertFails(getDoc(doc(anon(), "games", GAME)));
@@ -208,6 +211,15 @@ test("only the GM's hosting tab can save the table", async () => {
   const maps = { b: { id: "b", name: "Backstreets", width: 8, height: 6, tokens: {}, positions: {} } };
   await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "table", "state"), { ...table, maps }));
   await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "other"), table));
+});
+
+test("members read whether combat is running, not the saved table; only the GM writes it", async () => {
+  await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "table", "status"), { combat: true }));
+  await assertSucceeds(getDoc(doc(as("p1"), "games", GAME, "table", "status")));
+  await assertFails(getDoc(doc(as("stranger"), "games", GAME, "table", "status")));
+  await assertFails(setDoc(doc(as("p1"), "games", GAME, "table", "status"), { combat: false }));
+  await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "status"), { combat: true, tokens: {} }));
+  await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "status"), { combat: "yes" }));
 });
 
 test("session: only the GM announces hosting; members can see it", async () => {

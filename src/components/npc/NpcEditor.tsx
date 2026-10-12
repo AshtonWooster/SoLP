@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { doc, setDoc } from "firebase/firestore";
 import type { Character, ItemTemplate, NpcTemplate, ResistanceSet } from "../../../shared/character.ts";
 import { linkLibrary } from "../../../shared/effects.ts";
+import { isSecret, SHEET_PARTS } from "../../../shared/secrets.ts";
 import type { StatFormulas } from "../../../shared/formulas.ts";
 import { useStatFormulas } from "../../api.ts";
 import {
@@ -186,6 +187,16 @@ function ProfileTab({ t, update, gameId }: { t: NpcTemplate; update: Update; gam
           <span>GM notes</span>
           <textarea aria-label="GM notes" value={t.notes} placeholder="Tactics, motives, where they turn up…" onChange={(e) => update((d) => void (d.notes = e.target.value))} />
         </label>
+        <fieldset className="secrets-editor npc-secrets">
+          <legend>Hidden from players</legend>
+          <span className="muted small">Copies you place start with these; change each copy from its token on the GM screen.</span>
+          {SHEET_PARTS.map((p) => (
+            <label className="secret-row" key={p.key} title={p.hint}>
+              <input type="checkbox" checked={isSecret(t, p.key)} onChange={(e) => update((d) => void (d.secret = { ...d.secret, [p.key]: e.target.checked }))} />
+              <span>{p.label}</span>
+            </label>
+          ))}
+        </fieldset>
       </section>
 
       <div className="npc-numbers">
