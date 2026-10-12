@@ -42,7 +42,8 @@ import {
 } from "./maps.ts";
 import { newId } from "./id.ts";
 import { moveCost } from "./ruleset.ts";
-import type { Resources, Side, TableAction, TableState, Token } from "./types.ts";
+import { cleanSecrets } from "./secrets.ts";
+import type { Resources, Side, TableAction, TableState, Token, TokenGearInfo } from "./types.ts";
 
 export { activeToken, ActionError, newId, type Actor, type EngineContext };
 export { pinnedBy, validTargets } from "./combat.ts";
@@ -269,6 +270,16 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       token.justice = clamp(action.justice, -20, 50);
       return true;
     }
+    case "setSecret": {
+      gmOnly();
+      const token = tokenOf(action.tokenId);
+      if (token.side === "player") throw new ActionError("Players' characters can't have secrets.");
+      const next = cleanSecrets(action.secret);
+      if (JSON.stringify(next) === JSON.stringify(token.secret ?? {})) return false;
+      if (Object.keys(next).length) token.secret = next;
+      else delete token.secret;
+      return true;
+    }
     case "setResistances": {
       gmOnly();
       const token = tokenOf(action.tokenId);
@@ -306,6 +317,10 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       if (Array.isArray(t.passiveEffects) && t.passiveEffects.length) token.passiveEffects = t.passiveEffects.slice(0, 30).map((x) => String(x).slice(0, 80));
       token.templateId = String(action.templateId);
       if (typeof t.portrait === "string" && t.portrait) token.portrait = t.portrait;
+      const secret = cleanSecrets(t.secret);
+      if (Object.keys(secret).length) token.secret = secret;
+      const gear = cleanGear(t.gear);
+      if (gear) token.gear = gear;
       // Find a free tile near where it was asked for.
       for (let r = 0; occupied(table, token.x, token.y, token.id) && r < Math.max(width, height); r++) {
         const spot = reachableTiles(table, token, r + 1).values().next().value;
@@ -481,6 +496,22 @@ function reveal(token: Token | undefined) {
 function cleanResistances(r: Partial<ResistanceSet> | undefined): ResistanceSet {
   const num = (v: unknown) => Math.max(0, Math.min(10, Number(v ?? 1)));
   return { slash: num(r?.slash), pierce: num(r?.pierce), blunt: num(r?.blunt) };
+}
+
+/** The gear names a placed GM character brings along (for players, when the GM shows them). */
+function cleanGear(raw: unknown): TokenGearInfo | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const g = raw as Partial<TokenGearInfo>;
+  const name = (v: unknown) => String(v ?? "").slice(0, 120);
+  const out: TokenGearInfo = {
+    weapons: (Array.isArray(g.weapons) ? g.weapons : []).slice(0, 10).map((w) => ({ id: name(w?.id), name: name(w?.name), hands: w?.hands === 2 ? 2 : 1 })),
+  };
+  if (g.armor && typeof g.armor === "object") out.armor = { name: name(g.armor.name) };
+  if (g.augment && typeof g.augment === "object") {
+    const passives = Array.isArray(g.augment.passives) ? g.augment.passives : [];
+    out.augment = { name: name(g.augment.name), passives: passives.slice(0, 30).map(name) };
+  }
+  return out;
 }
 
 function cleanDeckEntries(deck: unknown): DeckEntry[] {

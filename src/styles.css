@@ -79,6 +79,15 @@ button:disabled { opacity: 0.6; cursor: default; }
 .theme-swatch-reception .theme-preview span:nth-child(1) { background: #07090c; }
 .theme-swatch-reception .theme-preview span:nth-child(2) { background: #63d3ff; }
 .theme-swatch-reception .theme-preview span:nth-child(3) { background: #ff3b45; }
+.theme-swatch-facility .theme-preview span:nth-child(1) { background: #050807; }
+.theme-swatch-facility .theme-preview span:nth-child(2) { background: #59f08a; }
+.theme-swatch-facility .theme-preview span:nth-child(3) { background: #ffb000; }
+.theme-swatch-limbus .theme-preview span:nth-child(1) { background: #0a0708; }
+.theme-swatch-limbus .theme-preview span:nth-child(2) { background: #d4213d; }
+.theme-swatch-limbus .theme-preview span:nth-child(3) { background: #efe7da; }
+.theme-swatch-backstreets .theme-preview span:nth-child(1) { background: #1c1a18; }
+.theme-swatch-backstreets .theme-preview span:nth-child(2) { background: #e86a2b; }
+.theme-swatch-backstreets .theme-preview span:nth-child(3) { background: #f2c230; }
 .dashboard { max-width: 960px; margin: 0 auto; padding: 24px 16px; display: grid; grid-template-columns: 1fr 300px; gap: 24px; align-items: start; }
 .dashboard-actions { display: flex; flex-direction: column; gap: 16px; }
 @media (max-width: 720px) { .dashboard { grid-template-columns: 1fr; } }
@@ -1293,3 +1302,7 @@ select.piece.add { color: #6fb4ff; }
 .formula-table th:first-child { text-align: left; }
 .formula-table thead th { border-top: none; color: var(--muted); font-weight: 600; }
 @media (max-width: 520px) { .formula-table .rank-note { display: none; } .formula-table th, .formula-table td { padding: 4px 6px; } }
+.secrets-editor .secret-row { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; cursor: pointer; }
+.secrets-editor .secret-row input { flex: none; width: auto; margin-top: 3px; }
+.npc-secrets { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; margin: 0; }
+.npc-secrets legend { padding: 0 4px; font-size: 0.9rem; }

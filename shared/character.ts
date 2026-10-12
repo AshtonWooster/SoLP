@@ -1,6 +1,7 @@
 // A player character, built with the steps in Act 5 of the ruleset ("Creating a Character").
 // Stored at games/{gameId}/characters/{uid}: one character per player per game.
 
+import type { SheetSecrets } from "./secrets.ts";
 import type { PlayerEditKey } from "./types.ts";
 
 export type PrimaryStat = "fortitude" | "prudence" | "justice" | "temperance";
@@ -212,4 +213,6 @@ export interface NpcTemplate extends Character {
   /** Pages of its own, besides the ones on its Weapons and Armor. */
   pages: Page[];
   overrides: NpcOverrides;
+  /** Parts of its sheet players can't see; each copy placed on the map starts with these (shared/secrets.ts). */
+  secret?: SheetSecrets;
 }

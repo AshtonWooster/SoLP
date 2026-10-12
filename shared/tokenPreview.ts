@@ -1,12 +1,9 @@
 // What the popup shows when a token on the map is clicked: the character's gear and Combat Deck.
 import type { Character, Page } from "./character.ts";
-import { cleanDeck, equipmentPages } from "./ruleset.ts";
-import type { Token } from "./types.ts";
+import { cleanDeck, equipmentPages, gearNames } from "./ruleset.ts";
+import type { Token, TokenGearInfo } from "./types.ts";
 
-export interface TokenGear {
-  weapons: { id: string; name: string; hands: 1 | 2 }[];
-  armor?: { name: string };
-  augment?: { name: string; passives: string[] };
+export interface TokenGear extends TokenGearInfo {
   /** The Combat Deck: each Page with its copies. */
   deck: { page: Page; copies: number }[];
 }
@@ -14,18 +11,11 @@ export interface TokenGear {
 /**
  * A token's gear and deck. `source` is the character it stands for: the player's character
  * sheet, or the GM character it was placed from. A GM character's deck is the token's own (the GM
- * may have changed it since placing it); a player's comes from their sheet.
+ * may have changed it since placing it); a player's comes from their sheet. Without a source (on
+ * players' screens), a GM character shows the gear it was placed with.
  */
 export function tokenGear(token: Token, source?: Character): TokenGear {
-  const gear: TokenGear = {
-    weapons: (source?.weapons ?? []).map((w) => ({ id: w.id, name: w.name.trim() || "Unnamed weapon", hands: w.hands })),
-    deck: [],
-  };
-  if (source?.armor) gear.armor = { name: source.armor.name.trim() || "Unnamed armor" };
-  const aug = source?.augment;
-  if (aug && (aug.name.trim() || aug.passives.length)) {
-    gear.augment = { name: aug.name.trim() || "Unnamed augment", passives: aug.passives.map((p) => p.name.trim() || "Unnamed passive") };
-  }
+  const gear: TokenGear = { ...(source ? gearNames(source) : (token.gear ?? { weapons: [] })), deck: [] };
   if (token.side === "player") {
     if (source) {
       const pages = new Map(equipmentPages(source).map((s) => [s.page.id, s.page]));

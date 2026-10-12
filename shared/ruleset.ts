@@ -24,7 +24,8 @@ import type {
   PrimaryStat,
   Weapon,
 } from "./character.ts";
-import type { Resources, SpawnData } from "./types.ts";
+import { cleanSecrets } from "./secrets.ts";
+import type { Resources, SpawnData, TokenGearInfo } from "./types.ts";
 import { computeMaxResources, type StatFormulas } from "./formulas.ts";
 
 /** Act 5, Step 1: "For most campaigns, it is encouraged to start at Rank 9." */
@@ -472,7 +473,24 @@ export function npcSpawnData(t: NpcTemplate, formulas: StatFormulas): SpawnData 
   if (t.portrait) data.portrait = t.portrait;
   const passiveEffects = linkedEffects(t);
   if (passiveEffects.length) data.passiveEffects = passiveEffects;
+  const secret = cleanSecrets(t.secret);
+  if (Object.keys(secret).length) data.secret = secret;
+  // Only the GM can read the template, so the token keeps the names players may be shown.
+  data.gear = gearNames(t);
   return data;
+}
+
+/** The names of a character's Weapons, Armor and Augment (with its Passives), as the token popup lists them. */
+export function gearNames(c: Pick<Character, "weapons" | "armor" | "augment">): TokenGearInfo {
+  const gear: TokenGearInfo = {
+    weapons: (c.weapons ?? []).map((w) => ({ id: w.id, name: w.name.trim() || "Unnamed weapon", hands: w.hands })),
+  };
+  if (c.armor) gear.armor = { name: c.armor.name.trim() || "Unnamed armor" };
+  const aug = c.augment;
+  if (aug && (aug.name.trim() || aug.passives.length)) {
+    gear.augment = { name: aug.name.trim() || "Unnamed augment", passives: aug.passives.map((p) => p.name.trim() || "Unnamed passive") };
+  }
+  return gear;
 }
 
 /** Library ids of the automated effects a character's Passives (Augment, Weapons, Armor) and Proficiencies link to. */

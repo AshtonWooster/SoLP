@@ -4,7 +4,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import type { Character, ItemTemplate } from "../../shared/character.ts";
 import { blankCharacter, characterChecks, linkInventory } from "../../shared/ruleset.ts";
 import { approveEdits, describeEdits, partsNeedingApproval, proposeEdits, rejectEdits, withProposals } from "../../shared/permissions.ts";
-import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playersCanCreateEffects, type TableState } from "../../shared/types.ts";
+import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playersCanCreateEffects, type TableStatus } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { DeckTab } from "../components/DeckTab.tsx";
 import { AugmentTab } from "../components/creator/AugmentTab.tsx";
@@ -176,8 +176,8 @@ export function CharacterSheet() {
   const { character: c, error, save, update, create, withdraw } = useCharacter(id, uid, ownerName, canEdit, isMine && !isGm, needApproval);
   const [params, setParams] = useSearchParams();
   const tab: Tab = TABS.some(([t]) => t === params.get("tab")) ? (params.get("tab") as Tab) : "sheet";
-  // Decks can't change mid-combat (Act 6). The GM's table saves combat state every few seconds.
-  const table = useDoc<TableState>(`games/${id}/table/state`);
+  // Decks can't change mid-combat (Act 6). The GM's table saves whether combat is running every few seconds.
+  const table = useDoc<TableStatus>(`games/${id}/table/status`);
   // The GM's item library: inventory items take their details from it.
   const library = useCollection<ItemTemplate>(`games/${id}/items`);
   const decksLocked = !!table.data?.combat && !isGm;

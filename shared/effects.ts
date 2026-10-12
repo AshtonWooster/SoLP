@@ -9,6 +9,8 @@
 // GM's Game settings allow, but their effects only work once the GM approves them).
 import type { Character, Dice, DiceKind, Passive, Proficiency } from "./character.ts";
 import { newId, rollDie } from "./id.ts";
+import { secret } from "./secrets.ts";
+import type { Side } from "./types.ts";
 
 // ---- The pieces ----
 
@@ -926,6 +928,8 @@ export interface EffectHolder {
   effects?: HeldEffect[];
   /** Rules that fire once a round or once a combat: the round each last fired in. */
   effectUses?: Record<string, number>;
+  /** Players' characters have no secrets in the log (shared/secrets.ts). */
+  side?: Side;
 }
 
 /** Where damage comes from: an attack, or an Effect (and who that Effect belongs to). */
@@ -1096,7 +1100,7 @@ function fire<T extends EffectHolder>(ops: EffectOps<T>, holder: T, src: Source,
     if (!rule.checks.every((c) => passes(c, scope))) continue;
     if (rule.limit === "round" || rule.limit === "combat") (holder.effectUses ??= {})[key] = ops.round();
     firedWith ||= stacks;
-    ops.log(`  ${holder.name}'s ${def.name}${entry ? ` ${stacks}` : ""} triggers.`);
+    ops.log(secretOf(holder, def, `  ${holder.name}'s ${def.name}${entry ? ` ${stacks}` : ""} triggers.`));
     for (const action of rule.actions) act(action, scope, result);
   }
   if (!firedWith || !entry) return;
@@ -1109,6 +1113,12 @@ function fire<T extends EffectHolder>(ops: EffectOps<T>, holder: T, src: Source,
   const event: TriggerEvent = { amount: firedWith, effectId: src.defId };
   announce(ops, "effectFires", holder, { other: opts.other, die: opts.die, dieIsMine, event });
   if (opts.other) announce(ops, "effectFiresOnThem", opts.other, { other: holder, die: opts.die, dieIsMine: !dieIsMine, event });
+}
+
+/** A log line about a rule firing: a status Effect's belongs with Effects, a Passive's or Proficiency's with gear. Dice effects are on Pages being played. */
+function secretOf(holder: EffectHolder, def: EffectDef, line: string): string {
+  if (def.kind === "die") return line;
+  return secret(holder, def.kind === "status" ? "effects" : "gear", line);
 }
 
 /** Runs an Effect-about trigger, unless that same trigger is already running (it would only feed itself). */
@@ -1131,7 +1141,7 @@ function activate<T extends EffectHolder>(ops: EffectOps<T>, t: T, defId: string
   const def = ops.def(defId);
   const entries = (t.effects ?? []).filter((e) => e.defId === defId && e.count > 0);
   if (!def || !entries.length) return;
-  ops.log(`  ${t.name}'s ${def.name} goes off.`);
+  ops.log(secret(t, "effects", `  ${t.name}'s ${def.name} goes off.`));
   for (const entry of entries) {
     fire(ops, t, { defId, entry, kinds: ["status"] }, (r) => TIMED.includes(r.when), { other: by === t ? undefined : by }, noResult());
     if (!held(ops, t, defId)) entry.count = decayed(def.decay, entry.count, def.decay.endsWith("TurnEnd") ? "turn" : "round");
@@ -1155,7 +1165,7 @@ export function decayAtEnd<T extends EffectHolder>(ops: EffectOps<T>, holder: T,
     if (!def || held(ops, holder, e.defId!)) continue;
     const before = e.count;
     e.count = decayed(def.decay, e.count, at);
-    if (e.count !== before) ops.log(`  ${holder.name}'s ${def.name}: ${before} → ${e.count}.`);
+    if (e.count !== before) ops.log(secret(holder, "effects", `  ${holder.name}'s ${def.name}: ${before} → ${e.count}.`));
   }
   holder.effects = holder.effects.filter(keep);
 }
@@ -1166,7 +1176,7 @@ export function arriveAtRoundStart<T extends EffectHolder>(ops: EffectOps<T>, ho
     if (!e.pending) continue;
     const def = e.defId ? ops.def(e.defId) : undefined;
     e.count = Math.min(def?.maxStacks ?? MAX_STACKS, e.count + e.pending);
-    ops.log(`  ${holder.name} gains ${e.pending} ${e.name} (${e.count}).`);
+    ops.log(secret(holder, "effects", `  ${holder.name} gains ${e.pending} ${e.name} (${e.count}).`));
     delete e.pending;
   }
 }
@@ -1238,7 +1248,7 @@ function passes<T extends EffectHolder>(c: Check, s: Scope<T>): boolean {
       const roll = rollDie(c.sides ?? 10);
       const target = amountOf(c.amount ?? blankAmount(), s);
       const ok = cmp(roll, target);
-      s.ops.log(`  ${s.holder.name} rolls d${c.sides ?? 10}: ${roll} (needs ${c.cmp === "atLeast" ? "at least" : "at most"} ${target}) ${ok ? "✓" : "✗"}`);
+      s.ops.log(secretOf(s.holder, s.def, `  ${s.holder.name} rolls d${c.sides ?? 10}: ${roll} (needs ${c.cmp === "atLeast" ? "at least" : "at most"} ${target}) ${ok ? "✓" : "✗"}`));
       return ok;
     }
     case "stacks":
@@ -1313,7 +1323,7 @@ function act<T extends EffectHolder>(a: Action, s: Scope<T>, result: TriggerResu
         const given = a.effectId ? ops.def(a.effectId) : undefined;
         if (!given || n <= 0) return;
         giveEffect(ops, t, a.effectId!, n, { later: a.later, sourceId: s.holder.id });
-        ops.log(`  ${t.name} gains ${n} ${given.name}${a.later ? " next round" : ""}.`);
+        ops.log(secret(t, "effects", `  ${t.name} gains ${n} ${given.name}${a.later ? " next round" : ""}.`));
         const event: TriggerEvent = { amount: n, effectId: a.effectId };
         announce(ops, "gained", t, { other: t === s.holder ? undefined : s.holder, event });
         announce(ops, "gave", s.holder, { other: t === s.holder ? undefined : t, die: s.die, dieIsMine: s.dieIsMine, event });
@@ -1323,13 +1333,13 @@ function act<T extends EffectHolder>(a: Action, s: Scope<T>, result: TriggerResu
         const had = stacksOf(t, a.effectId);
         if (!a.effectId || !had || n <= 0) return;
         giveEffect(ops, t, a.effectId, -n);
-        ops.log(`  ${t.name} loses ${Math.min(n, had)} ${ops.def(a.effectId)?.name ?? "stacks"}.`);
+        ops.log(secret(t, "effects", `  ${t.name} loses ${Math.min(n, had)} ${ops.def(a.effectId)?.name ?? "stacks"}.`));
       });
     case "clear":
       return each((t) => {
         if (!a.effectId || !(t.effects ?? []).some((e) => e.defId === a.effectId)) return;
         clearEffect(t, a.effectId);
-        ops.log(`  ${t.name} loses all ${ops.def(a.effectId)?.name ?? "stacks"}.`);
+        ops.log(secret(t, "effects", `  ${t.name} loses all ${ops.def(a.effectId)?.name ?? "stacks"}.`));
       });
     case "activate":
       return each((t) => a.effectId && activate(ops, t, a.effectId, s.holder));
@@ -1361,15 +1371,15 @@ function act<T extends EffectHolder>(a: Action, s: Scope<T>, result: TriggerResu
       return;
     case "extraDamage":
       result.damage += n;
-      if (n) ops.log(`  +${n} damage.`);
+      if (n) ops.log(secretOf(s.holder, def, `  +${n} damage.`));
       return;
     case "increaseDamage":
       result.damage += n;
-      if (n) ops.log(`  +${n} damage taken.`);
+      if (n) ops.log(secretOf(s.holder, def, `  +${n} damage taken.`));
       return;
     case "reduceDamage":
       result.reduce += n;
-      if (n) ops.log(`  −${n} damage taken.`);
+      if (n) ops.log(secretOf(s.holder, def, `  −${n} damage taken.`));
       return;
     case "shield": {
       if (!entry) return;
@@ -1378,7 +1388,7 @@ function act<T extends EffectHolder>(a: Action, s: Scope<T>, result: TriggerResu
       if (!blocked) return;
       result.reduce += blocked;
       entry.count -= blocked;
-      ops.log(`  ${def.name} blocks ${blocked} (${entry.count} left).`);
+      ops.log(secret(s.holder, "effects", `  ${def.name} blocks ${blocked} (${entry.count} left).`));
       return;
     }
     case "gainStacks":

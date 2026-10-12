@@ -1,8 +1,11 @@
 import { useState } from "react";
 import type { Page } from "../../../shared/character.ts";
+import { withheld } from "../../../shared/secrets.ts";
 import type { Effect, SlottedPage, TableState, Token } from "../../../shared/types.ts";
 import { Overlay } from "./Overlay.tsx";
 import { PageCard } from "./PageCard.tsx";
+
+const MAX = { hp: "maxHp", sanity: "maxSanity", stagger: "maxStagger", light: "maxLight" } as const;
 
 /** A character's portrait, or their initial on their token color. */
 export function Portrait({ token, size = 48 }: { token?: Token; size?: number }) {
@@ -77,10 +80,11 @@ export function CycleCharacters({
                 <div>
                   <h3>{who.name}</h3>
                   <div className="mini-res">
-                    <span className="res-hp">{r.hp}/{r.maxHp}</span>
-                    <span className="res-sanity">{r.sanity}/{r.maxSanity}</span>
-                    <span className="res-stagger">{r.stagger}/{r.maxStagger}</span>
-                    <span className="res-light">{r.light}/{r.maxLight}</span>
+                    {(["hp", "sanity", "stagger", "light"] as const).map((k) => (
+                      <span className={`res-${k}`} key={k}>
+                        {withheld(who, k) ? "?" : `${r[k]}/${r[MAX[k]]}`}
+                      </span>
+                    ))}
                   </div>
                   {(who.effects ?? []).length > 0 && <p className="muted small">Effects: {who.effects!.map((e) => `${e.name} ${e.count}`).join(", ")}</p>}
                 </div>
