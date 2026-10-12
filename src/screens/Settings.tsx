@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { arrayRemove, deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
@@ -27,6 +27,7 @@ import {
 } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
+import { CopyButton } from "../components/CopyButton.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, deleteGameFn, friendlyError, newInviteCodeFn } from "../firebase.ts";
 
@@ -80,7 +81,7 @@ function Toggle({ label, hint, on, onChange }: { label: string; hint: string; on
 const sameFormulas = (a: StatFormulas, b: StatFormulas) => STAT_FORMULA_FIELDS.every(({ key }) => a[key].trim() === b[key].trim());
 
 /** The GM edits how Rank and Stats set max Health, Stagger Resist, Sanity and Light, with a preview by Rank. */
-function StatFormulasSection({ game, onSave }: { game: GameDoc; onSave: (f: StatFormulas) => Promise<void> }) {
+function StatFormulasSection({ game, note, onSave }: { game: GameDoc; note: string; onSave: (f: StatFormulas) => Promise<void> }) {
   const saved = gameStatFormulas(game);
   const [draft, setDraft] = useState<StatFormulas>(saved);
   const [stat, setStat] = useState(0);
@@ -96,6 +97,13 @@ function StatFormulasSection({ game, onSave }: { game: GameDoc; onSave: (f: Stat
   const dirty = !sameFormulas(draft, saved);
   const legacy = !game.settings?.statFormulas;
   const isDefault = sameFormulas(draft, DEFAULT_STAT_FORMULAS);
+  // Formulas change every character at once, so they wait for Save; leaving with edits asks first.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   const primary = { fortitude: stat, prudence: stat, justice: stat, temperance: stat };
   return (
     <section className="panel settings-section" aria-label="Stat formulas">
@@ -178,7 +186,13 @@ function StatFormulasSection({ game, onSave }: { game: GameDoc; onSave: (f: Stat
             Undo changes
           </button>
         )}
+        {dirty && <span className="chip static warn">Not saved yet</span>}
       </div>
+      {note && (
+        <p className="muted settings-note" role="status">
+          {note}
+        </p>
+      )}
     </section>
   );
 }
@@ -264,6 +278,8 @@ function DeleteGameSection({ gameId, name }: { gameId: string; name: string }) {
   );
 }
 
+type Area = "players" | "permissions" | "items" | "effects" | "formulas";
+
 /** The GM's game settings: the players (open their sheets, kick them) and what players may edit. */
 export function Settings() {
   const { id = "" } = useParams();
@@ -272,7 +288,8 @@ export function Settings() {
   const isGm = !!user && game.data?.gmId === user.id;
   const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
   const characters = useCollection<Character>(isGm ? `games/${id}/characters` : null);
-  const [message, setMessage] = useState("");
+  // Each message shows in the section whose control it's about, not at the top of the page.
+  const [message, setMessage] = useState<{ at: Area; text: string } | null>(null);
 
   if (game.loading) return <main className="center muted">Loading…</main>;
   if (!isGm) {
@@ -295,25 +312,24 @@ export function Settings() {
   const kick = async (uid: string, name: string) => {
     try {
       await updateDoc(ref, { memberIds: arrayRemove(uid), [`members.${uid}`]: deleteField() });
-      setMessage(`${name} was removed from the game.`);
+      setMessage({ at: "players", text: `${name} was removed from the game.` });
     } catch (err) {
-      setMessage(friendlyError(err));
+      setMessage({ at: "players", text: friendlyError(err) });
     }
   };
   const newCode = async () => {
-    if (!confirm("Make a new invite code? The current code stops working, so only people you give the new one to can join.")) return;
     try {
       const { data } = await newInviteCodeFn({ gameId: id });
-      setMessage(`New invite code: ${data.code}. The old one no longer works.`);
+      setMessage({ at: "players", text: `New invite code: ${data.code}. The old one no longer works.` });
     } catch (err) {
-      setMessage(friendlyError(err));
+      setMessage({ at: "players", text: friendlyError(err) });
     }
   };
   const setEdit = async (key: PlayerEditKey, on: boolean) => {
     try {
       await updateDoc(ref, { [`settings.playerEdit.${key}`]: on });
     } catch (err) {
-      setMessage(friendlyError(err));
+      setMessage({ at: "permissions", text: friendlyError(err) });
     }
   };
 
@@ -326,11 +342,6 @@ export function Settings() {
             ← {g.name}
           </Link>
           <h1>Game settings</h1>
-          {message && (
-            <p className="muted" role="status">
-              {message}
-            </p>
-          )}
         </header>
 
         <section className="panel settings-section" aria-label="Players">
@@ -338,10 +349,10 @@ export function Settings() {
             <h2>Players ({players.length})</h2>
             {meta.data?.inviteCode && (
               <span className="muted small">
-                Invite code <strong className="invite-code">{meta.data.inviteCode}</strong>{" "}
-                <button type="button" className="link small" onClick={newCode}>
+                Invite code <strong className="invite-code">{meta.data.inviteCode}</strong> <CopyButton text={meta.data.inviteCode} label="Copy" />{" "}
+                <ConfirmButton className="link small" confirmLabel="Old code stops working. Confirm?" ms={3000} onConfirm={newCode}>
                   New code
-                </button>
+                </ConfirmButton>
               </span>
             )}
           </div>
@@ -357,6 +368,7 @@ export function Settings() {
           <p className="muted small">
             Kicking removes a player from the game and disconnects them from the table. Their character is kept, so it comes back if they rejoin with the invite code. To keep them out, make a new code too.
           </p>
+          {message?.at === "players" && <p className="muted settings-note" role="status">{message.text}</p>}
         </section>
 
         <section className="panel settings-section" aria-label="Player permissions">
@@ -367,6 +379,7 @@ export function Settings() {
           {PLAYER_EDIT_OPTIONS.map((o) => (
             <Toggle key={o.key} label={o.label} hint={o.hint} on={playerCanEdit(g, o.key)} onChange={(on) => setEdit(o.key, on)} />
           ))}
+          {message?.at === "permissions" && <p className="muted settings-note" role="status">{message.text}</p>}
         </section>
 
         <section className="panel settings-section" aria-label="Item library">
@@ -379,10 +392,11 @@ export function Settings() {
               try {
                 await updateDoc(ref, { "settings.playersCreateItems": on });
               } catch (err) {
-                setMessage(friendlyError(err));
+                setMessage({ at: "items", text: friendlyError(err) });
               }
             }}
           />
+          {message?.at === "items" && <p className="muted settings-note" role="status">{message.text}</p>}
         </section>
 
         <section className="panel settings-section" aria-label="Effect library">
@@ -395,7 +409,7 @@ export function Settings() {
               try {
                 await updateDoc(ref, { "settings.playersCreateEffects": on });
               } catch (err) {
-                setMessage(friendlyError(err));
+                setMessage({ at: "effects", text: friendlyError(err) });
               }
             }}
           />
@@ -407,7 +421,7 @@ export function Settings() {
               try {
                 await updateDoc(ref, { "settings.clearEffectsAfterCombat": on });
               } catch (err) {
-                setMessage(friendlyError(err));
+                setMessage({ at: "effects", text: friendlyError(err) });
               }
             }}
           />
@@ -419,20 +433,22 @@ export function Settings() {
               try {
                 await updateDoc(ref, { "settings.emotionLevels": on });
               } catch (err) {
-                setMessage(friendlyError(err));
+                setMessage({ at: "effects", text: friendlyError(err) });
               }
             }}
           />
+          {message?.at === "effects" && <p className="muted settings-note" role="status">{message.text}</p>}
         </section>
 
         <StatFormulasSection
           game={g}
+          note={message?.at === "formulas" ? message.text : ""}
           onSave={async (f) => {
             try {
               await updateDoc(ref, { "settings.statFormulas": Object.fromEntries(STAT_FORMULA_FIELDS.map(({ key }) => [key, f[key].trim()])) });
-              setMessage("Stat formulas saved. Characters at the table update right away.");
+              setMessage({ at: "formulas", text: "Stat formulas saved. Characters at the table update right away." });
             } catch (err) {
-              setMessage(friendlyError(err));
+              setMessage({ at: "formulas", text: friendlyError(err) });
             }
           }}
         />

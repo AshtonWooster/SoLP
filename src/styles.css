@@ -412,7 +412,8 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .center-text { text-align: center; }
 .player-screen { max-width: 720px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }
 .player-top { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
-.pt-who { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; max-width: 88px; }
+.pt-who { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; max-width: 88px; padding: 0; background: none; border: 0; color: inherit; cursor: pointer; }
+.player-bottom .end-turn { width: 100%; padding: 0.7rem; font-size: 1.05rem; font-weight: 700; border-color: var(--accent); }
 .pt-name { font-weight: 700; text-align: center; overflow-wrap: anywhere; font-size: 0.9rem; text-decoration: none; color: var(--text); }
 .pt-res, .pt-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; min-width: 0; }
 .res-box { border-radius: 8px; padding: 4px 6px; display: flex; flex-direction: column; justify-content: center; color: #120e0a; min-width: 0; }
@@ -427,7 +428,7 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .pt-side button { flex: 1; font-size: 0.8rem; padding: 0.3rem 0.5rem; max-width: 88px; }
 @media (max-width: 520px) {
   .player-top { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .pt-actions { grid-column: 1 / -1; grid-row: 2; grid-template-columns: repeat(4, 1fr); }
+  .pt-actions { grid-column: 1 / -1; grid-row: 2; grid-template-columns: repeat(2, 1fr); }
   .pt-side { grid-column: 3; grid-row: 1; }
   .pt-side button { font-size: 0.72rem; padding: 0.25rem 0.35rem; max-width: 76px; }
   .pt-who { max-width: 72px; }
@@ -1338,3 +1339,48 @@ select.piece.add { color: #6fb4ff; }
 .cookie-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .cookie-actions button { flex: 1 1 140px; }
 .cookie-actions button.primary { border-color: var(--accent); color: var(--accent); }
+
+.summary-text-in { width: 100%; min-height: 4.5rem; resize: vertical; }
+
+/* The effect card is its own editor: type the name and words right on it. */
+.effect-card.edit { gap: 6px; }
+.effect-card-name { font-size: 1.15rem; font-weight: 700; background: transparent; border: 1px dashed transparent; padding: 2px 4px; margin: -2px -4px; color: inherit; width: 100%; }
+.effect-card-name:hover, .effect-card-name:focus { border-color: color-mix(in srgb, currentColor 35%, transparent); outline: none; }
+.effect-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.effect-card-meta select { font-size: 0.8rem; padding: 1px 4px; }
+.effect-card-text { background: transparent; border: 1px dashed color-mix(in srgb, currentColor 25%, transparent); color: inherit; min-height: 3.2rem; resize: vertical; line-height: 1.45; padding: 4px 6px; }
+.effect-card-text:focus { border-style: solid; outline: none; }
+.effect-card-foot { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 6px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
+
+/* Tap the picture itself to upload. */
+.image-preview.pickable { cursor: pointer; position: relative; text-align: center; padding: 4px; }
+.image-preview.pickable:hover { border-color: var(--accent); }
+.image-preview .image-busy { position: absolute; inset: auto 0 0 0; background: #000a; color: #fff; padding: 2px; }
+.image-upload .image-preview.pickable { padding: 0; }
+
+/* GM characters: the name is the heading; portrait, side, rank and token color sit together. */
+.npc-name-input { font-family: inherit; font-size: 1.5rem; font-weight: 700; background: transparent; border: 1px dashed transparent; color: var(--text); padding: 2px 6px; margin-left: -6px; width: auto; max-width: 100%; flex: none; }
+.npc-name-input:hover, .npc-name-input:focus { border-color: var(--line); outline: none; }
+.npc-id-top { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.npc-id-top .image-upload { flex-direction: column; align-items: flex-start; gap: 4px; }
+.npc-id-facts { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 140px; }
+.npc-id-facts select { width: auto; }
+.npc-id-facts input[type="color"] { width: 40px; min-height: 30px; padding: 2px; }
+.open-slot { width: 100%; text-align: left; cursor: pointer; font: inherit; }
+.open-slot:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+
+/* Token popup: type over a GM character's name to rename that copy; Remove sits by Close. */
+.tp-name-input { font: inherit; font-size: 1.17em; font-weight: 700; background: transparent; border: 1px dashed transparent; color: inherit; padding: 1px 4px; margin-left: -4px; width: 100%; min-width: 0; }
+.tp-name-input:hover, .tp-name-input:focus { border-color: var(--line); outline: none; }
+.tp-head .tp-remove { padding: 0.25rem 0.5rem; font-size: 0.8rem; white-space: nowrap; }
+.gm-map-area.placing, .gm-map-area.placing * { cursor: crosshair; }
+.me-pin-bubble { position: absolute; left: 18px; top: -10px; z-index: 5; width: 220px; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel, #1f1b17); border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 6px 18px #0008; }
+.me-pin-bubble textarea { min-height: 3.5rem; }
+.me-map-name { align-self: flex-start; font: inherit; font-size: 1.25rem; font-weight: 700; background: transparent; border: 1px dashed transparent; color: var(--text); padding: 2px 6px; margin-left: -6px; min-width: 12rem; }
+.me-map-name:hover, .me-map-name:focus { border-color: var(--line); outline: none; }
+.game-name-input { font: inherit; background: transparent; border: 1px dashed transparent; color: inherit; padding: 0 6px; margin-left: -6px; max-width: 100%; }
+.game-name-input:hover, .game-name-input:focus { border-color: var(--line); outline: none; }
+.copy-button { padding: 0.2rem 0.6rem; }
+.settings-note { margin: 8px 0 0; padding: 6px 10px; border-left: 3px solid var(--accent); }
+.turn-order li.draggable { cursor: grab; }
+.turn-order li.drop-here { box-shadow: inset 0 2px 0 var(--accent); }

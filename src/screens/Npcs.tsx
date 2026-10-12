@@ -204,7 +204,6 @@ export function Npcs() {
               onExport={exportOne}
               onDuplicate={(t) => create({ ...structuredClone(t), name: `${t.name || "Unnamed"} (copy)` })}
               onDelete={async () => {
-                if (!confirm("Delete this character? Copies already on the map stay.")) return;
                 // Close the editor first, so its last save lands before the delete.
                 setSelected(null);
                 await new Promise((r) => setTimeout(r));

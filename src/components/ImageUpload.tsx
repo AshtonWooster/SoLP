@@ -18,13 +18,14 @@ export async function uploadImage(folder: string, file: File): Promise<string> {
   return getDownloadURL(r);
 }
 
-/** Upload an image to Cloud Storage under `folder` and report its URL. */
+/** Tap the picture to upload an image to Cloud Storage under `folder`; reports its URL. */
 export function ImageUpload({
   folder,
   value,
   onChange,
   label = "Image",
   shape = "square",
+  ring,
 }: {
   folder: string;
   value?: string;
@@ -32,36 +33,39 @@ export function ImageUpload({
   label?: string;
   /** "page": 4:3 landscape, like Page art everywhere it's shown. */
   shape?: "square" | "page";
+  /** A colored ring around the picture, like a token's color. */
+  ring?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return (
     <div className={`image-upload ${shape}`}>
-      <div className="image-preview">{value ? <img src={value} alt="" /> : <span className="muted small">No {label.toLowerCase()}</span>}</div>
+      <label className={"image-preview pickable" + (busy ? " busy" : "")} title={value ? `Change ${label.toLowerCase()}` : `Add ${label.toLowerCase()}`} style={ring ? { borderColor: ring, boxShadow: `0 0 0 2px ${ring}` } : undefined}>
+        {value ? <img src={value} alt="" /> : <span className="muted small">{busy ? "Uploading…" : `Tap to add ${label.toLowerCase()}`}</span>}
+        {busy && value && <span className="image-busy small">Uploading…</span>}
+        <input
+          type="file"
+          accept={IMAGE_ACCEPT}
+          hidden
+          aria-label={label}
+          disabled={busy}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            setBusy(true);
+            setError("");
+            try {
+              onChange(await uploadImage(folder, file));
+            } catch (err) {
+              setError(friendlyError(err));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      </label>
       <div className="image-actions">
-        <label className={"button-like" + (busy ? " disabled" : "")}>
-          {busy ? "Uploading…" : value ? `Change ${label.toLowerCase()}` : `Upload ${label.toLowerCase()}`}
-          <input
-            type="file"
-            accept={IMAGE_ACCEPT}
-            hidden
-            disabled={busy}
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (!file) return;
-              setBusy(true);
-              setError("");
-              try {
-                onChange(await uploadImage(folder, file));
-              } catch (err) {
-                setError(friendlyError(err));
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-        </label>
         {value && (
           <button type="button" className="link" onClick={() => onChange(undefined)}>
             Remove

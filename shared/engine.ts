@@ -264,6 +264,15 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       tokenOf(action.tokenId);
       return false;
     }
+    case "renameToken": {
+      gmOnly();
+      const token = tokenOf(action.tokenId);
+      if (token.side === "player") throw new ActionError("Players' tokens take their name from the character sheet.");
+      const name = String(action.name ?? "").trim().slice(0, 24);
+      if (!name || name === token.name) return false;
+      token.name = name;
+      return true;
+    }
     case "setJustice": {
       gmOnly();
       const token = tokenOf(action.tokenId);
@@ -413,10 +422,11 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       gmOnly();
       const c = inCombat();
       const i = c.order.findIndex((x) => x.tokenId === action.tokenId);
-      const j = i + (action.dir === -1 ? -1 : 1);
-      if (i < 0 || j < 0 || j >= c.order.length) return false;
+      const j = typeof action.to === "number" && Number.isFinite(action.to) ? Math.round(action.to) : i + (action.dir === -1 ? -1 : 1);
+      if (i < 0 || j < 0 || j >= c.order.length || j === i) return false;
       const activeId = c.order[c.turn].tokenId;
-      [c.order[i], c.order[j]] = [c.order[j], c.order[i]];
+      const [moved] = c.order.splice(i, 1);
+      c.order.splice(j, 0, moved);
       c.turn = c.order.findIndex((x) => x.tokenId === activeId);
       return true;
     }

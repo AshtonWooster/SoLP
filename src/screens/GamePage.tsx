@@ -1,12 +1,16 @@
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { doc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
 import { characterChecks } from "../../shared/ruleset.ts";
 import { pendingCount } from "../../shared/permissions.ts";
 import { playerList } from "../../shared/players.ts";
 import { type GameDoc, type GmMeta, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
+import { CopyButton } from "../components/CopyButton.tsx";
 import { PlayerPreview } from "../components/PlayerPreview.tsx";
 import { TopBar } from "../components/TopBar.tsx";
+import { db, friendlyError } from "../firebase.ts";
 
 /** A game's home: what you can open from here depends on whether you're its GM or a player. */
 export function GamePage() {
@@ -43,7 +47,7 @@ export function GamePage() {
             ← Your games
           </Link>
           <h1>
-            {game.data.name} <span className={`role-badge role-${isGm ? "gm" : "player"}`}>{isGm ? "GM" : "Player"}</span>
+            {isGm ? <GameName gameId={id} name={game.data.name} /> : game.data.name} <span className={`role-badge role-${isGm ? "gm" : "player"}`}>{isGm ? "GM" : "Player"}</span>
           </h1>
 
           {isGm ? (
@@ -80,12 +84,14 @@ export function GamePage() {
               </div>
               <section className="panel">
                 <h3>Invite players</h3>
-                <p>
+                <p className="row wrap">
                   Invite code: <strong className="invite-code">{inviteCode ?? "…"}</strong>
+                  {inviteCode && <CopyButton text={inviteCode} label="Copy code" />}
                 </p>
                 {inviteUrl && (
-                  <p className="muted">
+                  <p className="muted row wrap">
                     Or share this link: <a href={inviteUrl}>{inviteUrl}</a>
+                    <CopyButton text={inviteUrl} label="Copy link" />
                   </p>
                 )}
               </section>
@@ -147,6 +153,40 @@ export function GamePage() {
           </ul>
         </aside>
       </main>
+    </>
+  );
+}
+
+/** The game's name as its title: the GM types over it to rename the game. */
+function GameName({ gameId, name }: { gameId: string; name: string }) {
+  const [draft, setDraft] = useState(name);
+  const [error, setError] = useState("");
+  useEffect(() => setDraft(name), [name]);
+  const commit = async () => {
+    const next = draft.trim().slice(0, 60);
+    if (!next || next === name) return setDraft(name);
+    try {
+      await updateDoc(doc(db, "games", gameId), { name: next });
+      setError("");
+    } catch (err) {
+      setError(friendlyError(err));
+      setDraft(name);
+    }
+  };
+  return (
+    <>
+      <input
+        className="game-name-input"
+        aria-label="Game name"
+        title="Rename this game"
+        value={draft}
+        maxLength={60}
+        size={Math.max(8, draft.length)}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+      />
+      {error && <span className="error small">{error}</span>}
     </>
   );
 }

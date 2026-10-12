@@ -102,6 +102,8 @@ export function MapEditor({
     background: { show: true, lock: false },
   });
   const [drag, setDrag] = useState<Drag | null>(null);
+  // A pin whose label and note are being typed right on the map.
+  const [editingPin, setEditingPin] = useState<string | null>(null);
   const [error, setError] = useState("");
   const history = useRef<Record<string, { undo: MapItem[][]; redo: MapItem[][] }>>({});
   const [, bump] = useState(0);
@@ -283,6 +285,7 @@ export function MapEditor({
 
   return (
     <div className="map-editor-screen">
+      <MapName map={map} act={act} />
       <div className="me-toolbar" role="toolbar" aria-label="Map editor tools">
         <div className="seg">
           <button className={tool === "select" ? "on" : ""} onClick={() => setTool("select")} title="Select, drag and resize (Esc)">
@@ -430,6 +433,8 @@ export function MapEditor({
                     key={p.id}
                     className="me-pin-wrap"
                     style={{ left: px(p.x), top: px(p.y) }}
+                    title="Double-click to type its label and note here"
+                    onDoubleClick={() => setEditingPin(p.id)}
                     onPointerDown={(e) => {
                       if (tool === "pin") return;
                       setSel({ type: "item", id: p.id });
@@ -438,6 +443,7 @@ export function MapEditor({
                     }}
                   >
                     <Pin map={{ ...map, width: 1, height: 1 }} pin={{ ...p, x: 0, y: 0 }} selected={selectedItem?.id === p.id} />
+                    {editingPin === p.id && <PinBubble pin={p} onChange={(patch) => updateItem(p.id, patch)} onClose={() => setEditingPin(null)} />}
                   </div>
                 ))}
               </div>
@@ -614,9 +620,40 @@ function AssetInspector({
   );
 }
 
+/** Type a pin's label and note right beside it on the map; saves when you click away or press Enter. */
+function PinBubble({ pin, onChange, onClose }: { pin: MapItem; onChange: (patch: Partial<MapItem>) => void; onClose: () => void }) {
+  const [name, setName] = useState(pin.name ?? "");
+  const [note, setNote] = useState(pin.note ?? "");
+  const save = () => {
+    const patch: Partial<MapItem> = {};
+    if (name !== (pin.name ?? "")) patch.name = name;
+    if (note !== (pin.note ?? "")) patch.note = note;
+    if (Object.keys(patch).length) onChange(patch);
+    onClose();
+  };
+  return (
+    <div
+      className="me-pin-bubble"
+      onPointerDown={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && save()}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+        if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") save();
+      }}
+    >
+      <input autoFocus aria-label="Pin label" placeholder="Label" value={name} onChange={(e) => setName(e.target.value)} />
+      <textarea aria-label="Pin note" placeholder="Note (players can read it by tapping the pin, unless it's hidden)" value={note} onChange={(e) => setNote(e.target.value)} />
+    </div>
+  );
+}
+
 function PinInspector({ pin, onChange, onRemove }: { pin: MapItem; onChange: (patch: Partial<MapItem>) => void; onRemove: () => void }) {
   const [name, setName] = useState(pin.name ?? "");
   const [note, setNote] = useState(pin.note ?? "");
+  // Follow edits made on the map itself (or undone).
+  useEffect(() => setName(pin.name ?? ""), [pin.name]);
+  useEffect(() => setNote(pin.note ?? ""), [pin.note]);
   return (
     <section className="me-section">
       <h4>Pin</h4>
@@ -680,15 +717,19 @@ function TokenInspector({ token, onHide, onRemove, onEdit }: { token: EditorToke
   );
 }
 
-/** Name, size in tiles, background, and grid lines. */
-function MapSettings({ gameId, map, act }: { gameId: string; map: MapInfo & { id: string }; act: Act }) {
+/** The map's name as the editor's title: type over it to rename the map. */
+function MapName({ map, act }: { map: MapInfo & { id: string }; act: Act }) {
   const [name, setName] = useState(map.name);
   useEffect(() => setName(map.name), [map.name]);
-  const commitName = () => (name.trim() && name !== map.name ? act({ type: "updateMap", mapId: map.id, name }) : setName(map.name));
+  const commit = () => (name.trim() && name !== map.name ? act({ type: "updateMap", mapId: map.id, name }) : setName(map.name));
+  return <input className="me-map-name" aria-label="Map name" title="Rename this map" value={name} onChange={(e) => setName(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} />;
+}
+
+/** Size in tiles, background, and grid lines. */
+function MapSettings({ gameId, map, act }: { gameId: string; map: MapInfo & { id: string }; act: Act }) {
   return (
     <section className="me-section">
       <h4>Map</h4>
-      <input aria-label="Map name" value={name} onChange={(e) => setName(e.target.value)} onBlur={commitName} onKeyDown={(e) => e.key === "Enter" && commitName()} />
       <div className="row map-size">
         <label className="inline">
           Width <NumberField label="Width in tiles" value={map.width} onCommit={(n) => act({ type: "updateMap", mapId: map.id, width: n })} />

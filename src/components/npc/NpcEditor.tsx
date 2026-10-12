@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { doc, setDoc } from "firebase/firestore";
-import type { Character, ItemTemplate, NpcTemplate, ResistanceSet } from "../../../shared/character.ts";
+import type { Character, ItemTemplate, NpcTemplate, Page, ResistanceSet } from "../../../shared/character.ts";
 import { linkLibrary } from "../../../shared/effects.ts";
 import { isSecret, SHEET_PARTS } from "../../../shared/secrets.ts";
 import type { StatFormulas } from "../../../shared/formulas.ts";
@@ -30,6 +30,7 @@ import { InventoryTab } from "../items/InventoryTab.tsx";
 import { PEEK_WIDTH } from "../peek.ts";
 import { PvCard } from "../player/LorCard.tsx";
 import { type GearEntry, GearLibrary } from "./GearLibrary.tsx";
+import { ConfirmButton } from "../ConfirmButton.tsx";
 
 const SAVE_DELAY_MS = 600;
 const TABS = [
@@ -141,47 +142,48 @@ function ProfileTab({ t, update, gameId }: { t: NpcTemplate; update: Update; gam
   return (
     <div className="npc-profile">
       <section className="npc-id panel">
-        <ImageUpload folder={`games/${gameId}/assets/enemies`} label="Portrait" value={t.portrait} onChange={(url) => update((d) => void (url ? (d.portrait = url) : delete d.portrait))} />
-        <label className="field">
-          <span>Name</span>
-          <input aria-label="Name" value={t.name} onChange={(e) => update((d) => void (d.name = e.target.value))} />
-        </label>
-        <div className="field">
-          <span>Side</span>
-          <div className="row wrap">
-            {NPC_SIDES.map((side) => (
-              <button
-                key={side.value}
-                type="button"
-                className={"chip" + (t.side === side.value ? " active" : "")}
-                onClick={() =>
-                  update((d) => {
-                    // Keep a custom color; swap the default one for the new side's.
-                    if (NPC_SIDES.some((x) => x.color === d.color)) d.color = side.color;
-                    d.side = side.value;
-                  })
-                }
-              >
-                {side.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="row wrap">
-          <label className="field">
-            <span>Rank</span>
-            <select aria-label="Rank" value={t.rank} onChange={(e) => update((d) => void (d.rank = Number(e.target.value)))}>
-              {RANKS.map((r) => (
-                <option key={r} value={r}>
-                  Rank {r}
-                </option>
+        <div className="npc-id-top">
+          <ImageUpload
+            folder={`games/${gameId}/assets/enemies`}
+            label="Portrait"
+            ring={t.color}
+            value={t.portrait}
+            onChange={(url) => update((d) => void (url ? (d.portrait = url) : delete d.portrait))}
+          />
+          <div className="npc-id-facts">
+            <div className="row wrap" role="group" aria-label="Side">
+              {NPC_SIDES.map((side) => (
+                <button
+                  key={side.value}
+                  type="button"
+                  className={"chip" + (t.side === side.value ? " active" : "")}
+                  aria-pressed={t.side === side.value}
+                  onClick={() =>
+                    update((d) => {
+                      // Keep a custom color; swap the default one for the new side's.
+                      if (NPC_SIDES.some((x) => x.color === d.color)) d.color = side.color;
+                      d.side = side.value;
+                    })
+                  }
+                >
+                  {side.label}
+                </button>
               ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Token color</span>
-            <input type="color" aria-label="Token color" value={t.color} onChange={(e) => update((d) => void (d.color = e.target.value))} />
-          </label>
+            </div>
+            <div className="row wrap">
+              <select aria-label="Rank" value={t.rank} onChange={(e) => update((d) => void (d.rank = Number(e.target.value)))}>
+                {RANKS.map((r) => (
+                  <option key={r} value={r}>
+                    Rank {r}
+                  </option>
+                ))}
+              </select>
+              <label className="inline small" title="Token color: the ring around the portrait">
+                <input type="color" aria-label="Token color" value={t.color} onChange={(e) => update((d) => void (d.color = e.target.value))} />
+                Token
+              </label>
+            </div>
+          </div>
         </div>
         <label className="field">
           <span>GM notes</span>
@@ -339,6 +341,14 @@ function AugmentProficienciesTab({ t, update, gear }: { t: NpcTemplate; update: 
   );
 }
 
+/** Puts an edited Page back where it lives: the character's own Pages, or a Weapon or Armor. */
+function replacePage(d: NpcTemplate, np: Page) {
+  const swap = (pages: Page[]) => pages.map((p) => (p.id === np.id ? np : p));
+  d.pages = swap(d.pages);
+  d.weapons = d.weapons.map((w) => ({ ...w, pages: swap(w.pages) }));
+  if (d.armor) d.armor = { ...d.armor, pages: swap(d.armor.pages) };
+}
+
 function DeckTab({ t, update, gameId, gear }: { t: NpcTemplate; update: Update; gameId: string; gear: GearEntry[] }) {
   const [peek, setPeek] = useState<Peek>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -352,7 +362,9 @@ function DeckTab({ t, update, gameId, gear }: { t: NpcTemplate; update: Update; 
       d.deck = d.deck.filter((e) => e.copies > 0);
     });
   const total = sources.reduce((n, s) => n + copies(s.page.id), 0);
-  const openPage = t.pages.find((p) => p.id === open);
+  const openSource = sources.find((x) => x.page.id === open);
+  const openPage = openSource?.page;
+  const openFrom = openSource?.from;
 
   return (
     <div className="npc-deck-tab">
@@ -392,59 +404,75 @@ function DeckTab({ t, update, gameId, gear }: { t: NpcTemplate; update: Update; 
         <div className="npc-pages">
           <section className="sheet-section">
             <h2>Pages</h2>
-            <p className="muted small">Use − and + under a Page to set its copies in the deck. Own Pages aren't on a Weapon or Armor, like a beast's claws: tap one to edit it. Equipment Pages are edited on the Augment, Weapons &amp; Armor tab.</p>
-            {sources.some((x) => x.from) && (
-              <div className="npc-own-pages">
-                {sources
-                  .filter((x) => x.from)
-                  .map(({ page, from }) => (
-                    <div key={page.id} className={"thumb-wrap" + (copies(page.id) ? " in-deck" : "")}>
-                      <PvCard page={page} size="thumb" />
-                      <span className="muted small thumb-from">{from}</span>
-                      <Stepper label={`copies of ${page.name || "page"}`} value={copies(page.id)} max={99} onChange={(n) => setCopies(page.id, n)} />
+            <p className="muted small">Tap a Page to edit it on the left. Use − and + under a Page to set its copies in the deck. Own Pages aren't on a Weapon or Armor, like a beast's claws.</p>
+            <div className="equip-studio npc-page-studio">
+              <div className="equip-editor">
+                {openPage ? (
+                  <PageEditor
+                    key={openPage.id}
+                    page={openPage}
+                    artFolder={`games/${gameId}/assets/pages`}
+                    onChange={(np) => update((d) => replacePage(d, np))}
+                    onRemove={
+                      openFrom
+                        ? undefined
+                        : () => {
+                            update((d) => {
+                              d.pages = d.pages.filter((p) => p.id !== openPage.id);
+                              d.deck = d.deck.filter((e) => e.pageId !== openPage.id);
+                            });
+                            setOpen(null);
+                          }
+                    }
+                  />
+                ) : (
+                  <p className="muted equip-empty">Tap a Page to edit it here, or + to make one.</p>
+                )}
+                {openFrom && <p className="muted small">On {openFrom}. Remove it on the Weapons &amp; Armor tab.</p>}
+              </div>
+              <div>
+                {sources.some((x) => x.from) && (
+                  <>
+                    <h4>From equipment</h4>
+                    <div className="npc-own-pages">
+                      {sources
+                        .filter((x) => x.from)
+                        .map(({ page, from }) => (
+                          <div key={page.id} className={"thumb-wrap" + (copies(page.id) ? " in-deck" : "")}>
+                            <PvCard page={page} size="thumb" selected={page.id === open} onClick={() => setOpen(page.id === open ? null : page.id)} />
+                            <span className="muted small thumb-from">{from}</span>
+                            <Stepper label={`copies of ${page.name || "page"}`} value={copies(page.id)} max={99} onChange={(n) => setCopies(page.id, n)} />
+                          </div>
+                        ))}
+                    </div>
+                  </>
+                )}
+                <h4>Own Pages</h4>
+                <div className="npc-own-pages">
+                  {t.pages.map((p) => (
+                    <div key={p.id} className={"thumb-wrap" + (copies(p.id) ? " in-deck" : "")}>
+                      <PvCard page={p} size="thumb" selected={p.id === open} onClick={() => setOpen(p.id === open ? null : p.id)} />
+                      <Stepper label={`copies of ${p.name || "page"}`} value={copies(p.id)} max={99} onChange={(n) => setCopies(p.id, n)} />
                     </div>
                   ))}
-              </div>
-            )}
-            <h4>Own Pages</h4>
-            <div className="npc-own-pages">
-              {t.pages.map((p) => (
-                <div key={p.id} className={"thumb-wrap" + (copies(p.id) ? " in-deck" : "")}>
-                  <PvCard page={p} size="thumb" selected={p.id === open} onClick={() => setOpen(p.id === open ? null : p.id)} />
-                  <Stepper label={`copies of ${p.name || "page"}`} value={copies(p.id)} max={99} onChange={(n) => setCopies(p.id, n)} />
+                  <button
+                    type="button"
+                    className="equip-add-page"
+                    aria-label="New Page"
+                    onClick={() => {
+                      const page = { ...blankPage("basic"), name: `Attack ${t.pages.length + 1}` };
+                      update((d) => {
+                        d.pages.push(page);
+                        d.deck.push({ pageId: page.id, copies: 1 });
+                      });
+                      setOpen(page.id);
+                    }}
+                  >
+                    +
+                  </button>
                 </div>
-              ))}
-              <button
-                type="button"
-                className="equip-add-page"
-                aria-label="New Page"
-                onClick={() => {
-                  const page = { ...blankPage("basic"), name: `Attack ${t.pages.length + 1}` };
-                  update((d) => {
-                    d.pages.push(page);
-                    d.deck.push({ pageId: page.id, copies: 1 });
-                  });
-                  setOpen(page.id);
-                }}
-              >
-                +
-              </button>
+              </div>
             </div>
-            {openPage && (
-              <PageEditor
-                key={openPage.id}
-                page={openPage}
-                artFolder={`games/${gameId}/assets/pages`}
-                onChange={(np) => update((d) => void (d.pages = d.pages.map((p) => (p.id === np.id ? np : p))))}
-                onRemove={() => {
-                  update((d) => {
-                    d.pages = d.pages.filter((p) => p.id !== openPage.id);
-                    d.deck = d.deck.filter((e) => e.pageId !== openPage.id);
-                  });
-                  setOpen(null);
-                }}
-              />
-            )}
           </section>
           <GearLibrary
             title="Reuse Pages"
@@ -500,7 +528,7 @@ export function NpcEditor({
     <div className="npc-editor">
       <div className="npc-editor-head">
         <div className="npc-editor-title">
-          <h2>{t.name || "Unnamed character"}</h2>
+          <input className="npc-name-input" aria-label="Name" placeholder="Name this character" size={Math.max(12, t.name.length + 1)} value={t.name} onChange={(e) => update((d) => void (d.name = e.target.value))} />
           <span className={status === "Saved" ? "ok-text small" : "muted small"}>{status}</span>
         </div>
         <div className="row wrap">
@@ -510,9 +538,9 @@ export function NpcEditor({
           <button type="button" onClick={() => onDuplicate(t)}>
             Duplicate
           </button>
-          <button type="button" className="danger" onClick={onDelete}>
+          <ConfirmButton className="danger" confirmLabel="Delete? Copies on the map stay" ms={3000} onConfirm={onDelete}>
             Delete
-          </button>
+          </ConfirmButton>
         </div>
       </div>
       <nav className="tabs" role="tablist">

@@ -7,6 +7,7 @@ import { useAuth, useCollection, useDoc } from "../api.ts";
 import { EffectBuilder, effectText } from "../components/effects/EffectBuilder.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
+import { ConfirmButton } from "../components/ConfirmButton.tsx";
 
 const SAVE_DELAY_MS = 500;
 
@@ -18,6 +19,7 @@ function DefEditor({
   library,
   isGm,
   autoApprove,
+  footer,
 }: {
   gameId: string;
   id: string;
@@ -26,6 +28,7 @@ function DefEditor({
   isGm: boolean;
   /** "Players can create effects" is on: a player's changes work without the GM's approval. */
   autoApprove: boolean;
+  footer?: React.ReactNode;
 }) {
   const [d, setD] = useState(def);
   const [status, setStatus] = useState("");
@@ -58,7 +61,7 @@ function DefEditor({
   return (
     <div className="item-editor">
       <span className={"save-state " + (status === "Saved" ? "saved" : "")}>{status}</span>
-      <EffectBuilder def={d} library={{ ...library, [id]: d }} onChange={update} />
+      <EffectBuilder def={d} library={{ ...library, [id]: d }} onChange={update} footer={footer} />
     </div>
   );
 }
@@ -172,9 +175,16 @@ export function Effects() {
         <div className="equip-studio items-studio effects-studio">
           <div className="equip-editor">
             {current && def && mayEdit(current, def) ? (
-              <>
-                <DefEditor key={current} gameId={id} id={current} def={def} library={library} isGm={isGm} autoApprove={autoApprove} />
-                <div className="row wrap">
+              <DefEditor
+                key={current}
+                gameId={id}
+                id={current}
+                def={def}
+                library={library}
+                isGm={isGm}
+                autoApprove={autoApprove}
+                footer={
+                <>
                   {isGm && def.createdBy && def.rules.length > 0 && (
                     <button
                       type="button"
@@ -189,22 +199,23 @@ export function Effects() {
                   </button>
                   {/* Removing an approved effect is a change too: only the GM can, unless players' effects need no approval. */}
                   {autoApprove || !def.approved ? (
-                    <button
-                      type="button"
+                    <ConfirmButton
                       className="danger"
-                      onClick={async () => {
-                        if (!confirm(`Delete ${def.name || "this entry"}? Sheets that have it keep its words.`)) return;
+                      confirmLabel="Confirm delete (sheets keep its words)"
+                      ms={3000}
+                      onConfirm={async () => {
                         await deleteDoc(doc(db, "games", id, "effects", current)).catch((e) => setMessage(friendlyError(e)));
                         setSelected(null);
                       }}
                     >
                       Delete
-                    </button>
+                    </ConfirmButton>
                   ) : (
                     <span className="muted small">Approved by your GM: ask them to delete it.</span>
                   )}
-                </div>
-              </>
+                </>
+                }
+              />
             ) : current && def ? (
               <div className="item-editor">
                 <div className="effect-card">

@@ -64,10 +64,10 @@ test("front page query only works for your own games", async () => {
   await assertFails(getDocs(collection(as("p1"), "games")));
 });
 
-test("nobody can rename games, add members or read invite codes directly, not even the GM", async () => {
+test("nobody can add members or read invite codes directly, not even the GM; players can't rename games", async () => {
+  await assertFails(updateDoc(doc(as("p1"), "games", GAME), { name: "hacked" }));
   for (const uid of ["gm", "p1"]) {
     const db = as(uid);
-    await assertFails(updateDoc(doc(db, "games", GAME), { name: "hacked" }));
     await assertFails(updateDoc(doc(db, "games", GAME), { memberIds: ["gm", "p1", "friend"] }));
     await assertFails(deleteDoc(doc(db, "games", GAME)));
     await assertFails(setDoc(doc(db, "games", "newgame"), { gmId: uid, memberIds: [uid] }));
@@ -92,6 +92,19 @@ test("game settings: only the GM changes them and kicks players; the GM can't be
   // Kicked: the player can't read the game or its table any more.
   await assertFails(getDoc(doc(as("p1"), "games", GAME)));
   await assertFails(getDoc(doc(as("p1"), "games", GAME, "table", "state")));
+});
+
+test("renaming a game: only the GM, to a name of 1-60 characters that isn't blank", async () => {
+  const game = (who: string) => doc(as(who), "games", GAME);
+  await assertFails(updateDoc(game("p1"), { name: "Mine now" }));
+  await assertSucceeds(updateDoc(game("gm"), { name: "The Backstreets Job" }));
+  await assertFails(updateDoc(game("gm"), { name: "" }));
+  await assertFails(updateDoc(game("gm"), { name: "   " }));
+  await assertFails(updateDoc(game("gm"), { name: "x".repeat(61) }));
+  await assertFails(updateDoc(game("gm"), { name: 42 }));
+  await assertSucceeds(updateDoc(game("gm"), { name: "x".repeat(60) }));
+  // Renaming goes with other GM changes, but still can't hand the game over.
+  await assertFails(updateDoc(game("gm"), { name: "Taken", gmId: "p1" }));
 });
 
 test("account settings: you set your own display name and theme, within limits", async () => {

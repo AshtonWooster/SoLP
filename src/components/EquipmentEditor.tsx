@@ -5,6 +5,7 @@ import { PassiveSlots } from "./effects/library.tsx";
 import { NumberInput, Stepper, TextField } from "./Fields.tsx";
 import { ResistanceGrid } from "./LorIcons.tsx";
 import { PageCardEditor, PvCard } from "./player/LorCard.tsx";
+import { ConfirmButton } from "./ConfirmButton.tsx";
 
 export const PAGE_TYPES: { value: PageType; label: string }[] = [
   { value: "melee", label: "Melee" },
@@ -105,9 +106,9 @@ function EquipmentCardEditor<T extends Weapon | Armor>({
         <span className="muted small">
           {item.pages.length} Page{item.pages.length === 1 ? "" : "s"}: tap one on the right to edit it
         </span>
-        <button type="button" className="danger" onClick={onRemove}>
+        <ConfirmButton className="danger" confirmLabel="Confirm remove" ms={3000} onConfirm={onRemove}>
           Remove {label.toLowerCase()}
-        </button>
+        </ConfirmButton>
       </div>
     </div>
   );
