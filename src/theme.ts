@@ -1,4 +1,6 @@
 import { DEFAULT_THEME, themeOf, type ThemeId } from "../shared/account.ts";
+import { fontsAllowed } from "../shared/consent.ts";
+import { onConsentChange, readConsent } from "./consent.ts";
 
 const KEY = "solp-theme";
 const FONTS: Partial<Record<ThemeId, string>> = {
@@ -32,7 +34,8 @@ export function applyTheme(theme: ThemeId) {
   if (theme === DEFAULT_THEME) delete root.dataset.theme;
   else root.dataset.theme = theme;
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[theme]);
-  const fonts = FONTS[theme];
+  // Google Fonts sees the visitor's IP address, so themed fonts wait for a yes in the cookie banner.
+  const fonts = fontsAllowed(readConsent()) ? FONTS[theme] : undefined;
   if (fonts && !document.getElementById(`fonts-${theme}`)) {
     const link = document.createElement("link");
     link.id = `fonts-${theme}`;
@@ -46,3 +49,9 @@ export function applyTheme(theme: ThemeId) {
     // Private windows can refuse storage; the account's theme still applies once it loads.
   }
 }
+
+// A change in the cookie banner applies straight away: load the theme's fonts, or drop them.
+onConsentChange((c) => {
+  if (c.fonts) applyTheme(savedTheme());
+  else document.querySelectorAll('link[id^="fonts-"]').forEach((l) => l.remove());
+});
