@@ -1,9 +1,12 @@
-// Only the rare, trust-sensitive steps run here: creating a game, joining one, and the GM changing its invite code.
+// Only the rare, trust-sensitive steps run here: creating a game, joining one, the GM changing its invite code,
+// and the GM deleting the game.
 // Live play never calls a function; the GM's browser hosts the table (see src/net).
 import { randomInt } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, type Transaction } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
+import { deleteGameAsGm } from "./deleteGame.ts";
 import { newTable } from "../../shared/engine.ts";
 import { afterWrongCode, type JoinAttempts, mayTryCode, minutesUntilRetry } from "../../shared/invites.ts";
 import { DEFAULT_STAT_FORMULAS } from "../../shared/formulas.ts";
@@ -119,4 +122,11 @@ export const newGameInviteCode = onCall(async (req) => {
     return code;
   });
   return { code };
+});
+
+/** The GM deletes the game and everything in it, after typing its name. */
+export const deleteGame = onCall(async (req) => {
+  const uid = requireUid(req);
+  await deleteGameAsGm(db, getStorage().bucket(), uid, String(req.data?.gameId ?? ""), String(req.data?.name ?? ""));
+  return { ok: true };
 });

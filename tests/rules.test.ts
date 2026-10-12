@@ -215,6 +215,20 @@ test("only the GM's hosting tab can save the table", async () => {
   await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "other"), table));
 });
 
+test("once a game is deleted, nobody can write into what's left of it, not even a GM tab still hosting", async () => {
+  // deleteGame (functions/src) removes the game document first, then everything under it.
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await deleteDoc(doc(ctx.firestore(), "games", GAME));
+  });
+  const table = { map: { name: "m", width: 4, height: 4 }, tokens: {}, log: [] };
+  await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "state"), table));
+  await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "status"), { combat: false }));
+  await assertFails(setDoc(doc(as("gm"), "games", GAME, "session", "host"), { sessionId: "s" }));
+  await assertFails(setDoc(doc(as("gm"), "games", GAME, "characters", "gm"), { ownerId: "gm", rank: 9 }));
+  await assertFails(setDoc(doc(as("p1"), "games", GAME, "characters", "p1"), { ownerId: "p1", rank: 9 }));
+  await assertFails(getDoc(doc(as("p1"), "games", GAME, "characters", "p1")));
+});
+
 test("members read whether combat is running, not the saved table; only the GM writes it", async () => {
   await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "table", "status"), { combat: true }));
   await assertSucceeds(getDoc(doc(as("p1"), "games", GAME, "table", "status")));

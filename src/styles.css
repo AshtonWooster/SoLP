@@ -1306,3 +1306,10 @@ select.piece.add { color: #6fb4ff; }
 .secrets-editor .secret-row input { flex: none; width: auto; margin-top: 3px; }
 .npc-secrets { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; margin: 0; }
 .npc-secrets legend { padding: 0 4px; font-size: 0.9rem; }
+
+/* Game settings: deleting the game */
+.delete-game { border-color: var(--hp); }
+.delete-game h2 { color: var(--hp); }
+.delete-game-step { display: flex; flex-direction: column; gap: 10px; }
+.delete-game-step .field { flex: none; }
+.delete-game-name { color: var(--text); user-select: all; }
