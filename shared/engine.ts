@@ -30,6 +30,8 @@ import {
   createMap,
   currentMapId,
   deleteMap,
+  drawFogOn,
+  fogAllOn,
   placeToken,
   removeMapItem,
   setMapItems,
@@ -362,6 +364,12 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
     case "setTokenHidden":
       gmOnly();
       return setTokenHidden(table, action);
+    case "drawFog":
+      gmOnly();
+      return drawFogOn(table, action);
+    case "fogAll":
+      gmOnly();
+      return fogAllOn(table, action);
     case "endCombat": {
       gmOnly();
       if (!combat) return false;

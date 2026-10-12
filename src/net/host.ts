@@ -27,6 +27,7 @@ import {
 } from "../../shared/engine.ts";
 import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
+import { fogOfWarOn } from "../../shared/fog.ts";
 import { effectsClearAfterCombat } from "../../shared/types.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
@@ -87,11 +88,14 @@ export class Host {
 
   /** Keeps the member list current, e.g. when someone joins mid-session. */
   setGame(game: GameDoc) {
+    const fogWas = fogOfWarOn(this.game);
     this.game = game;
     // Hang up on anyone the GM removed from the game.
     for (const peer of this.peers) {
       if (!game.members[peer.actor.uid]) this.refuse(peer, "The GM removed you from this game.");
     }
+    // Turning fog of war on or off in Game settings changes what players are sent.
+    if (fogOfWarOn(game) !== fogWas) this.publish();
   }
 
   subscribe(fn: (s: HostSnapshot) => void): () => void {
@@ -403,13 +407,14 @@ export class Host {
     const online = [this.me.uid, ...[...this.peers].filter((p) => p.view).map((p) => p.actor.uid)];
     const unique = [...new Set(online)];
     // Players see how many Pages are left in each draw pile, but not their order, and nothing the GM hid.
-    const forPlayers = hideDrawPiles(playerView(this.table));
+    const view = { fog: fogOfWarOn(this.game) };
+    const forPlayers = hideDrawPiles(playerView(this.table, view));
     // The board is a shared screen, so it never shows what the GM hid, even on the GM's account.
     let forGmBoard: TableState | undefined;
     for (const peer of this.peers) {
       if (!peer.view) continue;
       const gm = peer.actor.role === "gm";
-      const table = !gm ? forPlayers : peer.view === "board" ? (forGmBoard ??= playerView(this.table)) : this.table;
+      const table = !gm ? forPlayers : peer.view === "board" ? (forGmBoard ??= playerView(this.table, view)) : this.table;
       this.send(peer, {
         t: "state",
         table,

@@ -1,10 +1,11 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { validTargets } from "../../shared/engine.ts";
 import type { TableState, Token } from "../../shared/types.ts";
 import { arrowHitSegment, boardArrows } from "./arrows.ts";
 import { FxBubble, type FxStep } from "./ClashFx.tsx";
 import { SlotPages } from "./SlotPages.tsx";
 import { AssetLayer, PinLayer } from "./maps/MapLayers.tsx";
+import { FogLayer } from "./maps/Fog.tsx";
 
 interface Props {
   state: TableState;
@@ -17,6 +18,10 @@ interface Props {
   onCellClick?: (x: number, y: number) => void;
   /** The clash animation step to draw above the characters, if any. */
   fx?: FxStep | null;
+  /** How to draw fog of war: a tint the GM sees through, or the players' solid cover. Missing: no fog. */
+  fog?: "gm" | "players";
+  /** Drawn over the whole map (the GM's fog drawing tool). */
+  children?: ReactNode;
 }
 
 /** Tokens the Page being aimed can target, and those already picked (Mass Attacks). */
@@ -33,7 +38,7 @@ export function aimTargets(table: TableState): { targetable: Set<string>; picked
  * The battle map: the background image, the assets layer, a tile grid with tokens on it, and pins on
  * top. Used full-screen on the board, smaller on the GM screen (where hidden things show faded).
  */
-export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx }: Props) {
+export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, fog, children }: Props) {
   const { width, height } = state.map;
   const { targetable, picked } = aimTargets(state);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -98,6 +103,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
     >
       <AssetLayer map={state.map} />
       {cells}
+      {fog && <FogLayer map={state.map} gm={fog === "gm"} />}
       {Object.values(state.tokens).map((t) => {
         const st = t.status ?? {};
         const classes = [
@@ -195,6 +201,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
         ))}
       <PinLayer map={state.map} />
       {openSlots && <SlotPages state={state} slotIds={openSlots} onClose={() => setOpenSlots(null)} />}
+      {children}
     </div>
   );
 }

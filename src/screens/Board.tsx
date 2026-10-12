@@ -91,6 +91,7 @@ export function Board() {
             selectedId={moving ? playerTurn?.id : carrying}
             reachable={reachable}
             fx={fx}
+            fog="players"
             onTokenClick={(t) => {
               if (aiming && targetable.has(t.id)) {
                 send(mass ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
