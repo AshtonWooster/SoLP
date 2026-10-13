@@ -120,6 +120,12 @@ export function activeToken(table: TableState): Token | undefined {
   return c ? table.tokens[c.order[c.turn]?.tokenId] : undefined;
 }
 
+/** Whose turn the GM is playing: the active combatant, when it's one of the GM's characters. */
+export function gmTurnToken(table: TableState): Token | undefined {
+  const t = activeToken(table);
+  return t && t.side !== "player" ? t : undefined;
+}
+
 /** Speed: 1d6 + Justice, plus anything the character's effects add ("When I roll Speed"). */
 export function rollSpeed(table: TableState, token: Token, dice = SPEED_DICE): Combatant {
   const fx = trigger(table, "speed", token);
