@@ -10,6 +10,8 @@ import { SpeedBubble } from "./SpeedRollFx.tsx";
 import type { SpeedStep } from "./speedRoll.ts";
 import { AssetLayer, PinLayer, type GrabItem } from "./maps/MapLayers.tsx";
 import { FogLayer } from "./maps/Fog.tsx";
+import { tokenVfx } from "../../shared/vfx.ts";
+import { motionStyle, useVfxBursts, VfxView, type VfxByStatus } from "./vfx/VfxView.tsx";
 
 interface Props {
   state: TableState;
@@ -35,6 +37,8 @@ interface Props {
   snap?: boolean;
   /** An asset or pin was dragged to a new spot, in tiles. */
   onMoveItem?: (itemId: string, to: { x: number; y: number }) => void;
+  /** The game's VFX by the status Effect they play on, when "Status effect VFX" is on (shared/vfx.ts). Missing: none play. */
+  vfx?: VfxByStatus;
   /** Drawn over the whole map (the GM's fog drawing tool). */
   children?: ReactNode;
 }
@@ -55,7 +59,7 @@ export function aimTargets(table: TableState): { targetable: Set<string>; picked
  * The battle map: the background image, the assets layer, a tile grid with tokens on it, and pins on
  * top. Used full-screen on the board, smaller on the GM screen (where hidden things show faded).
  */
-export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, speed, fog, layer = "tokens", snap = true, onMoveItem, children }: Props) {
+export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, speed, fog, layer = "tokens", snap = true, onMoveItem, vfx, children }: Props) {
   const { width, height } = state.map;
   const { targetable, picked } = aimTargets(state);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -63,6 +67,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
   const last = useRef<{ mapId?: string; at: Map<string, { x: number; y: number }> }>({ at: new Map() });
   // The arrow tapped to see its Page(s), by the slots it stands for.
   const [openSlots, setOpenSlots] = useState<string[] | null>(null);
+  const bursts = useVfxBursts(state.tokens, vfx);
 
   // Moving tokens slide in a straight line from their old tile to the new one.
   useLayoutEffect(() => {
@@ -179,6 +184,11 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
           st.staggered && "staggered",
           t.hidden && "is-hidden",
         ].filter(Boolean);
+        // Looping VFX for the Effects on it, and any "When gained" ones playing right now.
+        const looks = [
+          ...(vfx ? tokenVfx(t.effects, vfx).filter((v) => v.def.play === "loop") : []).map((v) => ({ ...v, once: false, key: v.id })),
+          ...(bursts[t.id] ?? []).map((v) => ({ ...v, once: true, key: `${v.id}-${v.key}` })),
+        ];
         return (
           <button
             key={t.id}
@@ -191,6 +201,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
               gridColumn: t.x + 1,
               gridRow: t.y + 1,
               background: t.portrait ? `center / cover no-repeat url("${t.portrait}"), ${t.color}` : t.color,
+              ...(looks.length ? motionStyle(looks, t.id === activeId) : undefined),
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -198,6 +209,9 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
             }}
             title={t.hidden ? `${t.name} (hidden from players)` : t.name}
           >
+            {looks.map((v) => (
+              <VfxView key={v.key} def={v.def} stacks={v.stacks} once={v.once} />
+            ))}
             <span className="token-name">{t.name}</span>
             {!withheld(t, "hp") && <span className="bar hp" style={{ width: `${pct(t.resources.hp, t.resources.maxHp)}%` }} />}
             {!withheld(t, "stagger") && <span className="bar stagger" style={{ width: `${pct(t.resources.stagger, t.resources.maxStagger)}%` }} />}

@@ -8,6 +8,8 @@ import { EffectBuilder, effectText } from "../components/effects/EffectBuilder.t
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
+import { StatusVfxPicker } from "../components/vfx/StatusVfxPicker.tsx";
+import { useVfxLibrary } from "../components/vfx/useVfx.ts";
 
 const SAVE_DELAY_MS = 500;
 
@@ -88,6 +90,9 @@ export function Effects() {
   const setKind = (k: EffectKind) => setParams({ kind: k }, { replace: true });
   const own = useCollection<EffectDef>(member ? `games/${id}/effects` : null);
   const library = useMemo(() => effectLibrary(own), [own]);
+  // The GM picks status effects' VFX here too (src/screens/Vfx.tsx).
+  const vfx = useVfxLibrary(isGm ? id : null);
+  const hasVfx = useMemo(() => new Set(Object.values(vfx ?? {}).flatMap((v) => v.statuses ?? [])), [vfx]);
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [onlyWaiting, setOnlyWaiting] = useState(false);
@@ -185,6 +190,7 @@ export function Effects() {
                 autoApprove={autoApprove}
                 footer={
                 <>
+                  {isGm && def.kind === "status" && <StatusVfxPicker gameId={id} statusId={current} library={vfx} />}
                   {isGm && def.createdBy && def.rules.length > 0 && (
                     <button
                       type="button"
@@ -230,6 +236,7 @@ export function Effects() {
                 <button type="button" onClick={() => create(def)}>
                   Make a variant
                 </button>
+                {isGm && def.kind === "status" && <StatusVfxPicker gameId={id} statusId={current} library={vfx} />}
               </div>
             ) : (
               <p className="muted equip-empty">
@@ -259,6 +266,7 @@ export function Effects() {
                       <strong>{d.name || "Unnamed"}</strong>
                       <span className="row">
                         {isPreset(key) && <span className="chip static">Built in</span>}
+                        {hasVfx.has(key) && <span className="chip static">VFX</span>}
                         {waiting(d) && <span className="chip static warn">Waiting for approval</span>}
                         {d.kind === "passive" && <span className="chip static">Cost {d.cost ?? 0}</span>}
                         {d.kind !== "status" && <span className="chip static">{d.rules.length ? "Automated" : "Words only"}</span>}

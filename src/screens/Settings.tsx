@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
+import { statusVfxOn } from "../../shared/vfx.ts";
 import { deleteNameMatches } from "../../shared/deleteGame.ts";
 import { inviteLink } from "../../shared/invites.ts";
 import { blankCharacter, characterChecks, maxResources, RANKS } from "../../shared/ruleset.ts";
@@ -553,6 +554,18 @@ export function Settings() {
             onChange={async (on) => {
               try {
                 await updateDoc(ref, { "settings.emotionLevels": on });
+              } catch (err) {
+                setMessage({ at: "effects", text: friendlyError(err) });
+              }
+            }}
+          />
+          <Toggle
+            label="Status effect VFX"
+            hint="On: status effects play the VFX you built for them in the VFX editor (flames for Burn, a glow for a shield…) on the map, on every screen. Off: the map looks as it always has."
+            on={statusVfxOn(g)}
+            onChange={async (on) => {
+              try {
+                await updateDoc(ref, { "settings.statusVfx": on });
               } catch (err) {
                 setMessage({ at: "effects", text: friendlyError(err) });
               }

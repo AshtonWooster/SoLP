@@ -17,6 +17,7 @@
 //   games/{gameId}/signals/{id}     SignalDoc          connection handshakes (see src/net)
 //   games/{gameId}/characters/{uid} Character          members read; owner or GM write (shared/character.ts)
 //   games/{gameId}/enemies/{id}     NpcTemplate        GM only (shared/character.ts)
+//   games/{gameId}/vfx/{id}         VfxDef             members read; GM write (shared/vfx.ts)
 
 import type { ThemeId } from "./account.ts";
 import type { DeckEntry, Dice, NpcSide, Page, ResistanceSet } from "./character.ts";
@@ -83,6 +84,11 @@ export interface GameSettings {
    * effects can check and react to. Off unless the GM turns it on: then nobody gains Emotion.
    */
   emotionLevels?: boolean;
+  /**
+   * Status Effects play the VFX the GM built for them in the VFX editor (shared/vfx.ts) on the map.
+   * Off unless the GM turns it on: then the map looks as it always did and loads no VFX.
+   */
+  statusVfx?: boolean;
   /**
    * How Rank and Stats set max Health, Stagger Resist, Sanity and Light (shared/formulas.ts). New
    * games start with the standard formulas; a game from before formulas has none saved and keeps

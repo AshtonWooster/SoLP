@@ -74,6 +74,10 @@ export function GamePage() {
                   Effect library
                   <small>Automate Status effects like Burn and Poise, and Passives</small>
                 </Link>
+                <Link className="big-button secondary" to={`/games/${id}/vfx`}>
+                  VFX editor
+                  <small>Build glows, flames and other looks, and play them on status effects on the map</small>
+                </Link>
                 <Link className="big-button secondary" to={`/games/${id}/settings`}>
                   Game settings
                   <small>Rename the game, set its image, invite players, kick them, and choose what players can edit</small>

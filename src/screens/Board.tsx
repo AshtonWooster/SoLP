@@ -17,6 +17,7 @@ import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
 import { Waiting } from "../components/Waiting.tsx";
 import { useClient } from "../net/hooks.ts";
+import { useStatusVfx } from "../components/vfx/useVfx.ts";
 
 /**
  * The shared table display, usually on a big screen; any member can open it. In combat it shows
@@ -40,6 +41,8 @@ export function Board() {
   // Damage from a clash shows once its die has played on the board.
   const { step: fx, table } = useClashPlayback(snapshot.table);
   const speed = useSpeedRollPlayback(snapshot.table);
+  // Status effect VFX, when they're on in Game settings.
+  const vfx = useStatusVfx(isMember ? id : "", game.data);
   const active = table ? activeToken(table) : undefined;
   const combat = table?.combat;
   // Players take their turns at the board; the GM runs enemies from the GM screen.
@@ -96,6 +99,7 @@ export function Board() {
               reachable={reachable}
               fx={fx}
               speed={speed}
+              vfx={vfx}
               fog="players"
               onTokenClick={(t) => {
                 if (aiming && targetable.has(t.id)) {

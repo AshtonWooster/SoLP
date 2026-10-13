@@ -194,6 +194,20 @@ service cloud.firestore {
           && (playersMakeEffects(gameId) || resource.data.get("approved", false) == false);
       }
 
+      // The VFX library (shared/vfx.ts): looks the GM builds and plays on status effects. Everyone in
+      // the game reads it so every screen can draw them; only the GM makes or changes them. Each is a
+      // few numbers and colors, kept small.
+      match /vfx/{vfxId} {
+        allow read: if isMember(gameId);
+        allow delete: if isGm(gameId);
+        allow create, update: if isGm(gameId)
+          && request.resource.data.keys().hasOnly(["name", "layers", "statuses", "play", "scaleWithStacks", "updatedAt"])
+          && request.resource.data.name is string && request.resource.data.name.size() <= 60
+          && request.resource.data.layers is list && request.resource.data.layers.size() <= 6
+          && request.resource.data.statuses is list && request.resource.data.statuses.size() <= 40
+          && request.resource.data.play in ["loop", "gain"];
+      }
+
       // Enemy templates: only the GM sees or edits them.
       match /enemies/{templateId} {
         allow read, write: if isGm(gameId);
