@@ -11,6 +11,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
   type DocumentChange,
 } from "firebase/firestore";
 import type { Character, ItemTemplate } from "../../shared/character.ts";
@@ -32,6 +33,7 @@ import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
 import { effectsClearAfterCombat, emotionLevelsOn } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
 import { clearLog, logClearedAt, logClearRequested } from "../../shared/clearLog.ts";
+import { autosaveWrites, loadedNotes, type LastSaved } from "../../shared/autosave.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
@@ -42,7 +44,6 @@ import type {
   SignalDoc,
   TableAction,
   TableState,
-  TableStatus,
   View,
 } from "../../shared/types.ts";
 import { db } from "../firebase.ts";
@@ -80,6 +81,8 @@ export class Host {
   private unsubs: (() => void)[] = [];
   private saveTimer?: ReturnType<typeof setTimeout>;
   private dirty = false;
+  /** The combat flag and notes as last saved, so autosave skips them when unchanged. */
+  private lastSaved: LastSaved = {};
   private stopped = false;
   private snapshot: HostSnapshot = { status: "starting", notes: {}, online: [] };
   private listeners = new Set<(s: HostSnapshot) => void>();
@@ -128,6 +131,7 @@ export class Host {
       if (this.stopped) return;
       this.table = upgradeTable((tableSnap.data() as TableState | undefined) ?? newTable());
       this.notes = (notesSnap.data() as GmNotes | undefined)?.tokens ?? {};
+      if (notesSnap.exists()) this.lastSaved = loadedNotes(this.notes);
 
       // The GM's item library: inventories take their items' details from it.
       this.unsubs.push(
@@ -208,13 +212,16 @@ export class Host {
     clearTimeout(this.saveTimer);
     if (!this.dirty || !this.table) return;
     this.dirty = false;
+    // One batch: the table, plus the combat flag and notes only if they changed (shared/autosave.ts).
+    const writes = autosaveWrites(this.table, this.notes, this.lastSaved);
+    const batch = writeBatch(db);
+    batch.set(doc(db, "games", this.gameId, "table", "state"), this.table);
+    // Players can't read the saved table (it holds what the GM hid), only whether combat is running.
+    if (writes.status) batch.set(doc(db, "games", this.gameId, "table", "status"), writes.status);
+    if (writes.notes) batch.set(doc(db, "games", this.gameId, "gm", "notes"), writes.notes);
     try {
-      await Promise.all([
-        setDoc(doc(db, "games", this.gameId, "table", "state"), this.table),
-        // Players can't read the saved table (it holds what the GM hid), only whether combat is running.
-        setDoc(doc(db, "games", this.gameId, "table", "status"), { combat: !!this.table.combat } satisfies TableStatus),
-        setDoc(doc(db, "games", this.gameId, "gm", "notes"), { tokens: this.notes } satisfies GmNotes),
-      ]);
+      await batch.commit();
+      this.lastSaved = writes.next;
     } catch (err) {
       this.dirty = true;
       console.error("Autosave failed", err);

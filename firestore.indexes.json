@@ -1,4 +1,226 @@
 {
   "indexes": [],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "table",
+      "fieldPath": "map",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "table",
+      "fieldPath": "maps",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "table",
+      "fieldPath": "mapFolders",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "table",
+      "fieldPath": "tokens",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "table",
+      "fieldPath": "log",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "table",
+      "fieldPath": "combat",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "table",
+      "fieldPath": "popups",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "gm",
+      "fieldPath": "tokens",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "primary",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "secondary",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "proficiencies",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "augment",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "weapons",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "armor",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "details",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "inventory",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "deck",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "ego",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "pendingEdits",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "pages",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "overrides",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "secret",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "resistances",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "staggerResistances",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "characters",
+      "fieldPath": "notes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "primary",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "secondary",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "proficiencies",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "augment",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "weapons",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "armor",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "details",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "inventory",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "deck",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "ego",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "pages",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "overrides",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "secret",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "resistances",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "staggerResistances",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "enemies",
+      "fieldPath": "notes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "signals",
+      "fieldPath": "offer",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "signals",
+      "fieldPath": "answer",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "signals",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    }
+  ]
 }

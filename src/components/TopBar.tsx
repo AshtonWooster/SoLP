@@ -1,11 +1,9 @@
-import { Link, useNavigate } from "react-router-dom";
-import { signOut } from "firebase/auth";
+import { Link } from "react-router-dom";
 import { useAuth } from "../api.ts";
-import { auth } from "../firebase.ts";
+import { logOut } from "../firebase.ts";
 
 export function TopBar() {
-  const { user, setUser } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   return (
     <header className="topbar">
       <Link to="/" className="brand" title={`Build ${__APP_VERSION__}`}>SoLP</Link>
@@ -20,11 +18,7 @@ export function TopBar() {
           </Link>
           <button
             className="link"
-            onClick={async () => {
-              await signOut(auth);
-              setUser(null);
-              navigate("/");
-            }}
+            onClick={() => void logOut("/")}
           >
             Log out
           </button>

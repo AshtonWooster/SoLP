@@ -1,6 +1,13 @@
 import { initializeApp, type FirebaseOptions } from "firebase/app";
-import { connectAuthEmulator, getAuth } from "firebase/auth";
-import { connectFirestoreEmulator, initializeFirestore } from "firebase/firestore";
+import { connectAuthEmulator, getAuth, signOut } from "firebase/auth";
+import {
+  clearIndexedDbPersistence,
+  connectFirestoreEmulator,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  terminate,
+} from "firebase/firestore";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
 
@@ -18,7 +25,12 @@ async function loadConfig(): Promise<FirebaseOptions> {
 const app = initializeApp(await loadConfig());
 export const auth = getAuth(app);
 // Token fields like ownerId are optional; leave them out instead of rejecting the save.
-export const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
+// The cache is kept on the device (shared by its tabs), so a screen opened again within half an
+// hour is charged only for documents that changed, not for every item, effect and enemy again.
+export const db = initializeFirestore(app, {
+  ignoreUndefinedProperties: true,
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 export const functions = getFunctions(app);
 export const storage = getStorage(app);
 
@@ -31,9 +43,21 @@ if (useEmulators) {
   connectStorageEmulator(storage, host, 9199);
 }
 
+/**
+ * Logs out and wipes this device's saved copy of the games, so the next person on a shared
+ * device can't read it. Firestore can't be used again after this, so the page reloads at `to`.
+ */
+export async function logOut(to = "/"): Promise<void> {
+  await signOut(auth).catch(() => {});
+  await terminate(db).catch(() => {});
+  await clearIndexedDbPersistence(db).catch((err) => console.warn("Couldn't clear saved game data", err));
+  location.assign(to);
+}
+
 export const createGameFn = httpsCallable<{ name: string }, { id: string }>(functions, "createGame");
 export const joinGameFn = httpsCallable<{ code: string }, { id: string }>(functions, "joinGame");
 export const newInviteCodeFn = httpsCallable<{ gameId: string }, { code: string }>(functions, "newGameInviteCode");
+export const removePlayerFn = httpsCallable<{ gameId: string; uid: string }, { ok: boolean }>(functions, "removePlayer");
 export const deleteGameFn = httpsCallable<{ gameId: string; name: string }, { ok: boolean }>(functions, "deleteGame");
 export const deleteAccountFn = httpsCallable<{ email: string }, { deletedGames: number }>(functions, "deleteAccount");
 /** Firebase errors carry codes like "auth/wrong-password"; turn the common ones into plain sentences. */

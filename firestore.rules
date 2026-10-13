@@ -118,8 +118,10 @@ service cloud.firestore {
       match /signals/{signalId} {
         allow create: if isMember(gameId)
           && request.resource.data.uid == request.auth.uid
-          && request.resource.data.keys().hasOnly(["uid", "sessionId", "offer", "createdAt"])
+          && request.resource.data.keys().hasOnly(["uid", "sessionId", "offer", "createdAt", "expireAt"])
           && request.resource.data.offer is string
+          // Firestore deletes leftover handshakes at expireAt (TTL policy in firestore.indexes.json).
+          && request.resource.data.get("expireAt", request.time) is timestamp
           && request.resource.data.offer.size() < 20000;
         // A deleted (already answered) signal reads as empty instead of an error.
         allow read: if signedIn() && (resource == null || resource.data.uid == request.auth.uid || isGm(gameId));

@@ -148,6 +148,8 @@ export interface SignalDoc {
   offer: string;
   answer?: string;
   createdAt: number;
+  /** When Firestore deletes it if nothing else did (a TTL policy in firestore.indexes.json). */
+  expireAt?: Date;
 }
 
 // ---- Live table ----

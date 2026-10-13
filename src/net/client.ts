@@ -3,7 +3,7 @@
 import { collection, deleteDoc, doc, onSnapshot, setDoc, type DocumentReference } from "firebase/firestore";
 import type { HostMessage, PeerMessage, PlayerPopup, SessionDoc, SignalDoc, TableAction, TableState, View } from "../../shared/types.ts";
 import { db } from "../firebase.ts";
-import { gathered, newPeerConnection } from "./rtc.ts";
+import { gathered, newPeerConnection, SIGNAL_TTL_MS } from "./rtc.ts";
 
 export interface ClientSnapshot {
   /**
@@ -140,6 +140,7 @@ export class Client {
         sessionId: session.sessionId,
         offer: pc.localDescription!.sdp,
         createdAt: Date.now(),
+        expireAt: new Date(Date.now() + SIGNAL_TTL_MS),
       };
       await setDoc(ref, signal);
       attempt.cleanup.push(

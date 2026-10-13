@@ -11,6 +11,11 @@ const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
 /** The image types storage.rules accepts: raster images, no SVG (it can carry scripts). */
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp"];
 export const IMAGE_ACCEPT = IMAGE_TYPES.join(",");
+/**
+ * Every upload gets a new name and is never overwritten, so browsers may keep it for a year instead
+ * of downloading it again on every visit. "private": only the browser keeps it, not shared caches.
+ */
+export const IMAGE_CACHE_CONTROL = "private, max-age=31536000, immutable";
 
 /** Check, shrink to its displayed size (see `IMAGE_PRESETS`) and upload one image under `folder`; resolves to its download URL. */
 export async function uploadImage(folder: string, file: File, kind: ImageKind, crop?: ImageCrop): Promise<string> {
@@ -19,7 +24,7 @@ export async function uploadImage(folder: string, file: File, kind: ImageKind, c
   const blob = await resizeImage(file, kind, crop);
   if (blob.size > MAX_BYTES) throw new Error("Images must be under 5 MB.");
   const r = ref(storage, `${folder}/${newId()}.${extensionFor(blob.type)}`);
-  await uploadBytes(r, blob, { contentType: blob.type });
+  await uploadBytes(r, blob, { contentType: blob.type, cacheControl: IMAGE_CACHE_CONTROL });
   return getDownloadURL(r);
 }
 
