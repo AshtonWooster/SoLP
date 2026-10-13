@@ -12,8 +12,8 @@
     "build:functions": "npm --prefix functions run build",
     "typecheck": "tsc --noEmit && npm --prefix functions run typecheck",
     "deploy": "firebase deploy",
-    "test:rules": "firebase emulators:exec --project demo-solp --only firestore,storage \"node --test --test-concurrency=1 tests/rules.test.ts tests/deleteGameFn.test.ts tests/deleteAccountFn.test.ts\"",
-    "test:engine": "node --test tests/engine.test.ts tests/ruleset.test.ts tests/combat.test.ts tests/maps.test.ts tests/items.test.ts tests/arrows.test.ts tests/effects.test.ts tests/effects-cr.test.ts tests/ruina-passives.test.ts tests/permissions.test.ts tests/players.test.ts tests/tokenPreview.test.ts tests/invites.test.ts tests/formulas.test.ts tests/secrets.test.ts tests/fog.test.ts tests/account.test.ts tests/legal.test.ts tests/deleteGame.test.ts tests/clearLog.test.ts tests/deleteAccount.test.ts tests/popups.test.ts tests/imageSize.test.ts tests/speedRoll.test.ts tests/zoom.test.ts tests/tableLayers.test.ts tests/mapAssets.test.ts tests/mapFolders.test.ts tests/gmPopups.test.ts"
+    "test:rules": "firebase emulators:exec --project demo-solp --only firestore,storage \"node --test --test-concurrency=1 tests/rules.test.ts tests/deleteGameFn.test.ts tests/deleteAccountFn.test.ts tests/removePlayerFn.test.ts tests/sweepImagesFn.test.ts\"",
+    "test:engine": "node --test tests/engine.test.ts tests/ruleset.test.ts tests/combat.test.ts tests/maps.test.ts tests/items.test.ts tests/arrows.test.ts tests/effects.test.ts tests/effects-cr.test.ts tests/ruina-passives.test.ts tests/permissions.test.ts tests/players.test.ts tests/tokenPreview.test.ts tests/invites.test.ts tests/formulas.test.ts tests/secrets.test.ts tests/fog.test.ts tests/account.test.ts tests/legal.test.ts tests/deleteGame.test.ts tests/clearLog.test.ts tests/deleteAccount.test.ts tests/popups.test.ts tests/imageSize.test.ts tests/speedRoll.test.ts tests/zoom.test.ts tests/tableLayers.test.ts tests/mapAssets.test.ts tests/mapFolders.test.ts tests/gmPopups.test.ts tests/autosave.test.ts tests/imageRefs.test.ts"
   },
   "dependencies": {
     "firebase": "^12.19.0",

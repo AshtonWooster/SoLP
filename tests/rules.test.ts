@@ -317,6 +317,9 @@ test("signals: members ask to connect as themselves; only the GM answers", async
   await assertFails(updateDoc(ref("gm"), { offer: "changed" }));
   await assertSucceeds(updateDoc(ref("gm"), { answer: "sdp-answer" }));
   await assertSucceeds(deleteDoc(ref("p1")));
+  // A handshake may say when Firestore deletes it if it's left behind; that must be a date.
+  await assertSucceeds(setDoc(ref("p1"), { ...offer, expireAt: new Date(Date.now() + 86_400_000) }));
+  await assertFails(setDoc(doc(as("p1"), "games", GAME, "signals", "y"), { ...offer, expireAt: "tomorrow" }));
 });
 
 test("characters: players edit their own, the GM edits any and sets Rank", async () => {

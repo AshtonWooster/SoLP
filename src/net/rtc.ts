@@ -42,3 +42,6 @@ export function gathered(pc: RTCPeerConnection, timeoutMs = 4000): Promise<void>
 
 /** Signals older than this are ignored, so a stale request never connects. */
 export const SIGNAL_MAX_AGE_MS = 60_000;
+
+/** Handshakes left behind (a tab closed mid-connect) are deleted by Firestore after this long. */
+export const SIGNAL_TTL_MS = 24 * 60 * 60 * 1000;

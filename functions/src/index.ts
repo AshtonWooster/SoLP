@@ -1,5 +1,5 @@
 // Only the rare, trust-sensitive steps run here: creating a game, joining one, the GM changing its invite code,
-// the GM deleting the game, and someone deleting their account.
+// the GM deleting the game or removing a player, and someone deleting their account; plus a weekly cleanup of unused images.
 // Live play never calls a function; the GM's browser hosts the table (see src/net).
 import { randomInt } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
@@ -7,8 +7,12 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore, type Transaction } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
+import { defineBoolean } from "firebase-functions/params";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { deleteAccountData } from "./deleteAccount.ts";
 import { deleteGameAsGm } from "./deleteGame.ts";
+import { removePlayerAsGm } from "./removePlayer.ts";
+import { sweepImages } from "./sweepImages.ts";
 import { newTable } from "../../shared/engine.ts";
 import { afterWrongCode, type JoinAttempts, mayTryCode, minutesUntilRetry } from "../../shared/invites.ts";
 import { DEFAULT_STAT_FORMULAS } from "../../shared/formulas.ts";
@@ -133,9 +137,32 @@ export const deleteGame = onCall(async (req) => {
   return { ok: true };
 });
 
+/** The GM removes a player, with their character sheet, the items and effects they made, and their images. */
+export const removePlayer = onCall(async (req) => {
+  const uid = requireUid(req);
+  await removePlayerAsGm(db, getStorage().bucket(), uid, String(req.data?.gameId ?? ""), String(req.data?.uid ?? ""));
+  return { ok: true };
+});
+
 /** Someone deletes their account and data, after typing their email and entering their password again. */
 export const deleteAccount = onCall(async (req) => {
   const uid = requireUid(req);
   const { email, auth_time: authTime } = req.auth!.token;
   return deleteAccountData(db, getStorage().bucket(), getAuth(), { uid, email, authTime }, String(req.data?.email ?? ""));
+});
+
+/**
+ * Off at first: the weekly cleanup only logs the images it would delete. Set IMAGE_SWEEP_DELETE=true
+ * in functions/.env (or answer the deploy prompt) once a logged run looks right.
+ */
+const imageSweepDelete = defineBoolean("IMAGE_SWEEP_DELETE", { default: false });
+
+/** Weekly: deletes uploaded images nothing in the database uses any more (functions/src/sweepImages.ts). */
+export const sweepUnusedImages = onSchedule({ schedule: "every monday 04:00", timeoutSeconds: 540 }, async () => {
+  const result = await sweepImages(db, getStorage().bucket(), { remove: imageSweepDelete.value() });
+  const mb = (result.bytes / 1024 / 1024).toFixed(1);
+  console.log(
+    `${result.deleted ? "Deleted" : "Would delete"} ${result.unused.length} unused images (${mb} MB)` +
+      (result.unused.length ? `:\n${result.unused.slice(0, 200).join("\n")}` : ""),
+  );
 });

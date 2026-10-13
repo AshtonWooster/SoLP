@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { arrayRemove, deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
 import { deleteNameMatches } from "../../shared/deleteGame.ts";
 import { inviteLink } from "../../shared/invites.ts";
@@ -31,7 +31,7 @@ import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { CopyButton } from "../components/CopyButton.tsx";
 import { ImageUpload } from "../components/ImageUpload.tsx";
 import { TopBar } from "../components/TopBar.tsx";
-import { db, deleteGameFn, friendlyError, newInviteCodeFn } from "../firebase.ts";
+import { db, deleteGameFn, friendlyError, newInviteCodeFn, removePlayerFn } from "../firebase.ts";
 
 /** One player: their character at a glance, a link to the sheet, and Kick. */
 function PlayerCard({ gameId, uid, displayName, character, formulas, onKick }: { gameId: string; uid: string; displayName: string; character?: Character; formulas: StatFormulas; onKick: () => void }) {
@@ -420,8 +420,8 @@ export function Settings() {
 
   const kick = async (uid: string, name: string) => {
     try {
-      await updateDoc(ref, { memberIds: arrayRemove(uid), [`members.${uid}`]: deleteField() });
-      setMessage({ at: "players", text: `${name} was removed from the game.` });
+      await removePlayerFn({ gameId: id, uid });
+      setMessage({ at: "players", text: `${name} was removed from the game, with their character, items, effects and images.` });
     } catch (err) {
       setMessage({ at: "players", text: friendlyError(err) });
     }
@@ -487,7 +487,7 @@ export function Settings() {
             </ul>
           )}
           <p className="muted small">
-            Kicking removes a player from the game and disconnects them from the table. Their character is kept, so it comes back if they rejoin with the invite code. To keep them out, make a new code too.
+            Kicking removes a player from the game and disconnects them from the table. Their character sheet, the items and effects they made, and the images they uploaded are deleted for good. To keep them out, make a new code too.
           </p>
           {message?.at === "players" && <p className="muted settings-note" role="status">{message.text}</p>}
         </section>

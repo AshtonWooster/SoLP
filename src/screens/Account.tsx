@@ -1,13 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { EmailAuthProvider, reauthenticateWithCredential, signOut, updateProfile } from "firebase/auth";
+import { Link } from "react-router-dom";
+import { EmailAuthProvider, reauthenticateWithCredential, updateProfile } from "firebase/auth";
 import { collection, doc, getDocs, query, setDoc, where, writeBatch } from "firebase/firestore";
 import { cleanDisplayName, displayNameError, THEME_INFO, THEMES, themeOf, type ThemeId } from "../../shared/account.ts";
 import { deleteEmailMatches } from "../../shared/deleteAccount.ts";
 import type { GameDoc, User, UserDoc } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
 import { TopBar } from "../components/TopBar.tsx";
-import { auth, db, deleteAccountFn, friendlyError } from "../firebase.ts";
+import { auth, db, deleteAccountFn, friendlyError, logOut } from "../firebase.ts";
 import { applyTheme, savedTheme } from "../theme.ts";
 import { openConsent, useConsent } from "../consent.ts";
 import { Footer } from "../components/Footer.tsx";
@@ -148,7 +148,6 @@ export function Account() {
  * your email and enter your password again. deleteAccount (functions/src) does the deleting.
  */
 function DeleteAccountSection({ me }: { me: User }) {
-  const navigate = useNavigate();
   const [step, setStep] = useState<"idle" | "sure" | "confirm">("idle");
   const [gmGames, setGmGames] = useState<string[] | null>(null);
   const [typed, setTyped] = useState("");
@@ -178,9 +177,8 @@ function DeleteAccountSection({ me }: { me: User }) {
       // The server only deletes an account whose password was entered in the last few minutes.
       if (auth.currentUser) await reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(me.email, password));
       await deleteAccountFn({ email: typed });
-      // Leave this page before signing out, or the sign-in guard sends us to the login page without the notice.
-      navigate("/login?deleted=1", { replace: true });
-      await signOut(auth).catch(() => {});
+      // Logging out reloads the page straight onto the login page with the notice.
+      await logOut("/login?deleted=1");
     } catch (err) {
       setError(friendlyError(err));
       setBusy(false);
