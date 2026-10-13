@@ -205,8 +205,8 @@ button:disabled { opacity: 0.6; cursor: default; }
 .turn-popup-reopen { position: absolute; top: 8px; left: 8px; z-index: 21; border-color: var(--accent); }
 .combat-start { display: flex; flex-direction: column; gap: 8px; }
 .gm-map-area { flex: 1; min-height: 0; position: relative; container-type: size; display: grid; place-items: center; }
-.gm-map-area > .gm-map-frame { width: min(100cqw, calc(100cqh * var(--map-ratio, 1))); position: relative; }
-.gm-map-frame > .grid { width: 100%; }
+.gm-map-area > .gm-map-frame { width: min(100cqw, calc((100cqh - var(--map-bar)) * var(--map-ratio, 1))); position: relative; }
+.gm-map-frame > .map-view { width: 100%; }
 .gm-players { display: flex; gap: 10px; overflow-x: auto; flex: none; padding-bottom: 2px; }
 .gm-player { display: flex; flex-direction: column; gap: 4px; flex: none; min-width: 150px; max-width: 220px; }
 .gm-player .game-player-name { font-size: 0.85rem; display: flex; align-items: center; gap: 6px; }
@@ -246,6 +246,24 @@ div.tp-gear-kind { width: auto; margin-top: 4px; }
 .tp-copies { position: absolute; right: 2px; bottom: 2px; background: #000c; color: var(--accent); font-weight: 800; font-size: 0.75rem; padding: 0 5px; border-radius: 6px; }
 .token-popup textarea { min-height: 3rem; }
 .board-map { position: relative; min-width: 0; }
+
+/* Zooming and panning the map. The buttons sit above it; popups over the map start below them. */
+:root { --map-bar: 38px; }
+.map-view { display: flex; flex-direction: column; min-width: 0; }
+.map-zoom-bar { display: flex; align-items: center; justify-content: center; gap: 4px; height: calc(var(--map-bar) - 6px); margin-bottom: 6px; flex: none; }
+.map-zoom-bar button { padding: 0.2rem 0.6rem; line-height: 1.2; }
+.map-zoom-bar button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.map-zoom-level { min-width: 3.2em; text-align: center; font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.map-viewport { position: relative; overflow: hidden; border-radius: var(--t-ctl-radius, 8px); touch-action: pan-x pan-y; }
+.map-viewport.no-touch-scroll { touch-action: none; }
+.map-stage { transform-origin: 0 0; }
+.map-viewport.pan-mode, .map-viewport.pan-mode * { cursor: grab; }
+.map-viewport.dragging, .map-viewport.dragging * { cursor: grabbing; }
+.board-map > .token-popup { top: calc(8px + var(--map-bar)); max-height: calc(100% - 16px - var(--map-bar) - var(--drag-y, 0px)); }
+@media (min-width: 801px) {
+  .gm-map-area > :is(.token-popup, .turn-popup, .turn-popup-reopen) { top: calc(8px + var(--map-bar)); }
+  .gm-map-area > :is(.token-popup, .turn-popup) { max-height: calc(100% - 16px - var(--map-bar) - var(--drag-y, 0px)); }
+}
 
 /* Player phone */
 .play { max-width: 480px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 1.25rem; }
@@ -639,6 +657,14 @@ button.pv-card:hover { filter: brightness(1.12); }
 .fx-die.lose { animation: fx-shatter 0.6s ease-in forwards; }
 .fx-die.draw { opacity: 0.45; filter: grayscale(1); transform: scale(0.9); }
 .fx-die.hit { transform: scale(1.2); border-color: #fff; box-shadow: 0 0 22px 6px #e74c3caa; }
+.fx-die.speed { background: linear-gradient(160deg, #d9a43a, #6b4710); }
+.fx-die.settled { animation: fx-land 0.35s ease-out; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 4px 18px #000a; }
+@keyframes fx-land { 0% { transform: scale(1.3); } 60% { transform: scale(0.94); } 100% { transform: scale(1); } }
+.turn-order.rolling-speed { padding: 6px 8px; font-style: italic; }
+.turn-order.dealt li { animation: deal-in 0.3s ease-out backwards; }
+@keyframes deal-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.speed-roll-card { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); font-weight: 600; }
+.speed-roll-card .fx-die { width: 48px; height: 48px; flex: none; }
 .fx-tag { background: #000c; color: var(--muted); font-size: 0.7rem; padding: 0 6px; border-radius: 4px; }
 .fx-impact { font-size: 2.6rem; color: #ff6b4a; text-shadow: 0 0 12px #ff3b1f; animation: fx-impact 0.6s ease-out forwards; }
 @keyframes fx-roll {
@@ -657,7 +683,7 @@ button.pv-card:hover { filter: brightness(1.12); }
 @keyframes fx-impact { 0% { transform: scale(0.3); opacity: 0; } 40% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 0.9; } }
 @keyframes fx-pop { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .fx-die.rolling, .fx-die.lose, .fx-impact, .fx-page { animation: none; }
+  .fx-die.rolling, .fx-die.lose, .fx-die.settled, .fx-impact, .fx-page, .turn-order.dealt li { animation: none; }
 }
 .player-msg.staggered { border-color: var(--p-stagger); color: var(--p-stagger); }
 .stagger-badge { color: var(--p-stagger); border-color: var(--p-stagger); }

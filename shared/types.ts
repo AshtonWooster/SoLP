@@ -362,8 +362,16 @@ export interface CombatState {
   fx?: ClashFx[];
   /** Id of the newest entry in fx. */
   fxSeq?: number;
+  /** The latest Speed roll (combat starting, a re-roll, or someone joining), so screens can animate it. */
+  speedRoll?: SpeedRoll;
   /** Pages each character has used this round, by token id. */
   used?: Record<string, number>;
+}
+
+/** Who just rolled Speed. A new id each roll, so screens play each roll once. */
+export interface SpeedRoll {
+  id: string;
+  tokenIds: string[];
 }
 
 /** One die as it was rolled, for the clash animation. */

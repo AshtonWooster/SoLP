@@ -6,6 +6,8 @@ import type { MapItem, TableState, Token } from "../../shared/types.ts";
 import { arrowHitSegment, boardArrows } from "./arrows.ts";
 import { FxBubble, type FxStep } from "./ClashFx.tsx";
 import { SlotPages } from "./SlotPages.tsx";
+import { SpeedBubble } from "./SpeedRollFx.tsx";
+import type { SpeedStep } from "./speedRoll.ts";
 import { AssetLayer, PinLayer, type GrabItem } from "./maps/MapLayers.tsx";
 import { FogLayer } from "./maps/Fog.tsx";
 
@@ -20,6 +22,8 @@ interface Props {
   onCellClick?: (x: number, y: number) => void;
   /** The clash animation step to draw above the characters, if any. */
   fx?: FxStep | null;
+  /** The Speed roll to draw above the characters who rolled, if any. */
+  speed?: SpeedStep | null;
   /** How to draw fog of war: a tint the GM sees through, or the players' solid cover. Missing: no fog. */
   fog?: "gm" | "players";
   /**
@@ -51,7 +55,7 @@ export function aimTargets(table: TableState): { targetable: Set<string>; picked
  * The battle map: the background image, the assets layer, a tile grid with tokens on it, and pins on
  * top. Used full-screen on the board, smaller on the GM screen (where hidden things show faded).
  */
-export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, fog, layer = "tokens", snap = true, onMoveItem, children }: Props) {
+export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, speed, fog, layer = "tokens", snap = true, onMoveItem, children }: Props) {
   const { width, height } = state.map;
   const { targetable, picked } = aimTargets(state);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -257,6 +261,18 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
             </div>
           </div>
         ))}
+      {speed?.entries.map((entry) => {
+        const t = state.tokens[entry.tokenId];
+        if (!t) return null;
+        const place = state.combat?.order.findIndex((x) => x.tokenId === t.id) ?? -1;
+        return (
+          <div key={`${speed.id}-${t.id}`} className={"fx-anchor" + (t.y < 2 ? " below" : "")} style={{ gridColumn: t.x + 1, gridRow: t.y + 1 }} aria-hidden="true">
+            <div className="fx-float">
+              <SpeedBubble step={speed} entry={entry} place={place + 1} />
+            </div>
+          </div>
+        );
+      })}
       <PinLayer map={drawn} onGrab={editing && layer === "pins" ? grab : undefined} wasDragged={() => dragged.current} />
       {openSlots && <SlotPages state={state} slotIds={openSlots} onClose={() => setOpenSlots(null)} />}
       {children}
