@@ -424,6 +424,31 @@ export function moveRect(r: Rect, dx: number, dy: number, snap: boolean): Rect {
   return { ...r, x: snapValue(r.x + dx, snap), y: snapValue(r.y + dy, snap) };
 }
 
+/** A pin dragged by (dx, dy) tiles: to the middle of a tile when snapping, anywhere otherwise. */
+export function movePin(from: { x: number; y: number }, dx: number, dy: number, snap: boolean): { x: number; y: number } {
+  const at = (v: number) => (snap ? Math.floor(v) + 0.5 : snapValue(v, false));
+  return { x: at(from.x + dx), y: at(from.y + dy) };
+}
+
+/** The layers the GM can work on from the table: which kind of thing a click on the map grabs. */
+export type TableLayer = "tokens" | "assets" | "pins";
+export const TABLE_LAYERS: { key: TableLayer; label: string; hint: string }[] = [
+  { key: "tokens", label: "Tokens", hint: "Click a token, then a tile to move it" },
+  { key: "assets", label: "Assets", hint: "Drag images around the map" },
+  { key: "pins", label: "Pins & notes", hint: "Drag pins; click one to read it" },
+];
+
+/** The new spot for an asset or pin dragged on the table, or undefined when it can't move (locked, or not that layer's kind). */
+export function dragItemTo(item: MapItem, layer: TableLayer, dx: number, dy: number, snap: boolean): { x: number; y: number } | undefined {
+  if (item.locked) return undefined;
+  if (layer === "assets" && item.kind === "image") {
+    const r = moveRect({ x: item.x, y: item.y, w: item.w ?? 1, h: item.h ?? 1 }, dx, dy, snap);
+    return { x: r.x, y: r.y };
+  }
+  if (layer === "pins" && item.kind === "pin") return movePin(item, dx, dy, snap);
+  return undefined;
+}
+
 /**
  * An asset resized by dragging one corner by (dx, dy) tiles; the opposite corner stays put.
  * keepAspect keeps its shape (holding Shift in the editor).

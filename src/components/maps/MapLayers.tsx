@@ -15,44 +15,76 @@ export function placeStyle(map: MapInfo, x: number, y: number, w?: number, h?: n
   };
 }
 
-/** The middle layer: images and other assets. The GM sees hidden ones faded. */
-export function AssetLayer({ map }: { map: MapInfo }) {
+/** Hands an asset or pin to the GM's drag on the table. */
+export type GrabItem = (e: React.PointerEvent, item: MapItem) => void;
+
+/** The middle layer: images and other assets. The GM sees hidden ones faded, and can drag them with `onGrab`. */
+export function AssetLayer({ map, onGrab }: { map: MapInfo; onGrab?: GrabItem }) {
   const images = (map.items ?? []).filter((i) => i.kind === "image");
   if (!images.length) return null;
   return (
-    <div className="map-layer assets" aria-hidden="true">
+    <div className={"map-layer assets" + (onGrab ? " grabbable" : "")} aria-hidden={onGrab ? undefined : "true"}>
       {images.map((i) => (
         <img
           key={i.id}
           src={i.url}
-          alt=""
+          alt={onGrab ? (i.name ?? "Asset") : ""}
+          title={onGrab ? (i.locked ? `${i.name ?? "Asset"} (locked in the map editor)` : (i.name ?? "Asset")) : undefined}
           draggable={false}
-          className={"map-asset" + (i.hidden ? " is-hidden" : "")}
+          className={"map-asset" + (i.hidden ? " is-hidden" : "") + (i.locked ? " is-locked" : "")}
           style={{ ...placeStyle(map, i.x, i.y, i.w, i.h), rotate: i.rotation ? `${i.rotation}deg` : undefined }}
+          onPointerDown={onGrab && ((e) => onGrab(e, i))}
         />
       ))}
     </div>
   );
 }
 
-/** Pins and notes, drawn above the tokens. Tap one to read its note. */
-export function PinLayer({ map }: { map: MapInfo }) {
+/**
+ * Pins and notes, drawn above the tokens. Tap one to read its note. With `onGrab` the GM can drag
+ * them; `wasDragged` says a click is the end of a drag, not a tap.
+ */
+export function PinLayer({ map, onGrab, wasDragged }: { map: MapInfo; onGrab?: GrabItem; wasDragged?: () => boolean }) {
   const pins = (map.items ?? []).filter((i) => i.kind === "pin");
   const [open, setOpen] = useState<string | null>(null);
   if (!pins.length) return null;
   return (
-    <div className="map-layer pins">
+    <div className={"map-layer pins" + (onGrab ? " grabbable" : "")}>
       {pins.map((p) => (
-        <Pin key={p.id} map={map} pin={p} open={open === p.id} onClick={() => setOpen(open === p.id ? null : p.id)} />
+        <Pin
+          key={p.id}
+          map={map}
+          pin={p}
+          open={open === p.id}
+          onPointerDown={onGrab && ((e) => onGrab(e, p))}
+          onClick={() => {
+            if (wasDragged?.()) return;
+            setOpen(open === p.id ? null : p.id);
+          }}
+        />
       ))}
     </div>
   );
 }
 
-export function Pin({ map, pin, open, onClick, selected }: { map: MapInfo; pin: MapItem; open?: boolean; onClick?: (e: React.MouseEvent) => void; selected?: boolean }) {
+export function Pin({
+  map,
+  pin,
+  open,
+  onClick,
+  onPointerDown,
+  selected,
+}: {
+  map: MapInfo;
+  pin: MapItem;
+  open?: boolean;
+  onClick?: (e: React.MouseEvent) => void;
+  onPointerDown?: (e: React.PointerEvent) => void;
+  selected?: boolean;
+}) {
   return (
     <div className={"map-pin" + (pin.hidden ? " is-hidden" : "") + (selected ? " selected" : "")} style={{ ...placeStyle(map, pin.x, pin.y), color: pin.color ?? PIN_COLORS[0] }}>
-      <button type="button" className="pin-head" aria-label={pin.name || "Pin"} title={pin.name || "Pin"} onClick={onClick} />
+      <button type="button" className="pin-head" aria-label={pin.name || "Pin"} title={pin.name || "Pin"} onClick={onClick} onPointerDown={onPointerDown} />
       {pin.name && <span className="pin-label">{pin.name}</span>}
       {open && pin.note && <span className="pin-note">{pin.note}</span>}
     </div>
