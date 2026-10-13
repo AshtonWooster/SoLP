@@ -13,11 +13,13 @@ export interface ImagePreset {
   fit: ImageFit;
 }
 
-export type ImageKind = "portrait" | "art" | "mapImage" | "mapBackground";
+export type ImageKind = "portrait" | "photo" | "art" | "mapImage" | "mapBackground";
 
 export const IMAGE_PRESETS: Record<ImageKind, ImagePreset> = {
-  // Character and enemy portraits: the 170px license photo, list icons and tokens on the board (which zoom).
+  // Enemy and NPC portraits: the 170px license photo, list icons and tokens on the board (which zoom).
   portrait: { width: 512, height: 512, fit: "cover" },
+  // A player's 3:4 license photo (170px wide), also cropped square for their token and icons.
+  photo: { width: 432, height: 576, fit: "cover" },
   // Page and item art: 4:3, at most ~400px wide on a full card.
   art: { width: 800, height: 600, fit: "cover" },
   // Images placed on a map's asset layer: they can be stretched over several cells and zoomed.
@@ -61,6 +63,62 @@ export function extensionFor(type: string): string {
   return { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif", "image/bmp": "bmp" }[type] ?? "png";
 }
 
+/**
+ * How the uploader framed an image: turned by `rotation` degrees, zoomed in by `zoom` (1 = just
+ * filling the frame), with the source pixel (`cx`, `cy`) at the frame's center.
+ */
+export interface ImageCrop {
+  rotation: number;
+  zoom: number;
+  cx: number;
+  cy: number;
+}
+
+export const MAX_ZOOM = 5;
+
+/** A crop that shows the whole frame filled, centered and unturned: the same as uploading without adjusting. */
+export function defaultCrop(width: number, height: number): ImageCrop {
+  return { rotation: 0, zoom: 1, cx: width / 2, cy: height / 2 };
+}
+
+/** The frame's shape for an image: the kind's own shape, or for maps the image's own (turned a quarter if rotated sideways). */
+export function frameAspect(kind: ImageKind, width: number, height: number, rotation: number): number {
+  const preset = IMAGE_PRESETS[kind];
+  if (preset.fit === "cover") return preset.width / preset.height;
+  const sideways = Math.round(rotation / 90) % 2 !== 0;
+  return sideways ? height / width : width / height;
+}
+
+/** Frame pixels per source pixel at zoom 1: just enough that the turned image covers a `frameW`×`frameH` frame. */
+export function coverScale(width: number, height: number, rotation: number, frameW: number, frameH: number): number {
+  const a = (rotation * Math.PI) / 180;
+  const c = Math.abs(Math.cos(a));
+  const s = Math.abs(Math.sin(a));
+  return Math.max((frameW * c + frameH * s) / width, (frameW * s + frameH * c) / height);
+}
+
+/** Keep the frame on the picture: move the center back in so no empty corner shows, and keep zoom in range. */
+export function clampCrop(crop: ImageCrop, width: number, height: number, aspect: number): ImageCrop {
+  const zoom = Math.min(MAX_ZOOM, Math.max(1, crop.zoom));
+  const frameW = aspect;
+  const frameH = 1;
+  const scale = coverScale(width, height, crop.rotation, frameW, frameH) * zoom;
+  const a = (crop.rotation * Math.PI) / 180;
+  const c = Math.abs(Math.cos(a));
+  const s = Math.abs(Math.sin(a));
+  // Half the frame's bounding box, in source pixels along the image's own axes.
+  const ex = (frameW * c + frameH * s) / (2 * scale);
+  const ey = (frameW * s + frameH * c) / (2 * scale);
+  const clamp = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+  return { rotation: crop.rotation, zoom, cx: clamp(crop.cx, ex, width - ex), cy: clamp(crop.cy, ey, height - ey) };
+}
+
+/** The size to store a framed image at: the frame's area in source pixels, shrunk to the kind's preset. */
+export function croppedSize(width: number, height: number, crop: ImageCrop, aspect: number, kind: ImageKind): { width: number; height: number } {
+  const scale = coverScale(width, height, crop.rotation, aspect, 1) * crop.zoom;
+  return fitImageSize(aspect / scale, 1 / scale, IMAGE_PRESETS[kind]);
+}
+
 function encode(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 }
@@ -70,7 +128,7 @@ function encode(canvas: HTMLCanvasElement, type: string, quality: number): Promi
  * Falls back to JPEG or PNG where the browser can't write WebP, and to the original file when
  * shrinking wouldn't help or the browser can't decode it.
  */
-export async function resizeImage(file: Blob, kind: ImageKind): Promise<Blob> {
+export async function resizeImage(file: Blob, kind: ImageKind, crop?: ImageCrop): Promise<Blob> {
   if (!canResize(file.type) || typeof createImageBitmap !== "function") return file;
   let bitmap: ImageBitmap;
   try {
@@ -79,19 +137,28 @@ export async function resizeImage(file: Blob, kind: ImageKind): Promise<Blob> {
     return file;
   }
   try {
-    const size = fitImageSize(bitmap.width, bitmap.height, IMAGE_PRESETS[kind]);
+    const { width, height } = bitmap;
+    const framed = crop ?? defaultCrop(width, height);
+    const aspect = frameAspect(kind, width, height, framed.rotation);
+    const size = croppedSize(width, height, framed, aspect, kind);
     const canvas = document.createElement("canvas");
     canvas.width = size.width;
     canvas.height = size.height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return file;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(bitmap, 0, 0, size.width, size.height);
+    ctx.translate(size.width / 2, size.height / 2);
+    ctx.rotate((framed.rotation * Math.PI) / 180);
+    const scale = coverScale(width, height, framed.rotation, size.width, size.height) * framed.zoom;
+    ctx.scale(scale, scale);
+    ctx.drawImage(bitmap, -framed.cx, -framed.cy);
     let out = await encode(canvas, "image/webp", 0.85);
     // Browsers that can't write WebP hand back a PNG instead: use JPEG for photos, PNG for the rest.
     if (!out || out.type !== "image/webp") out = await encode(canvas, file.type === "image/jpeg" ? "image/jpeg" : "image/png", 0.85);
     if (!out) return file;
-    return keepResized({ width: bitmap.width, height: bitmap.height, bytes: file.size }, { ...size, bytes: out.size }) ? out : file;
+    // An untouched image that re-encoding wouldn't shrink goes up as it is; an adjusted one always uses the edit.
+    const edited = crop && (crop.rotation % 360 !== 0 || crop.zoom !== 1 || Math.abs(crop.cx - width / 2) > 0.5 || Math.abs(crop.cy - height / 2) > 0.5);
+    return edited || keepResized({ width, height, bytes: file.size }, { ...size, bytes: out.size }) ? out : file;
   } finally {
     bitmap.close();
   }
