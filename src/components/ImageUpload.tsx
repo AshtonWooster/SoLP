@@ -81,8 +81,8 @@ export function ImageUpload({
   value?: string;
   onChange: (url: string | undefined) => void;
   label?: string;
-  /** "page": 4:3 landscape, like Page art everywhere it's shown. */
-  shape?: "square" | "page";
+  /** "page": 4:3 landscape, like Page art everywhere it's shown. "cover": an 8:3 banner, like a game's image. */
+  shape?: "square" | "page" | "cover";
   /** A colored ring around the picture, like a token's color. */
   ring?: string;
 }) {

@@ -49,6 +49,8 @@ export interface GameDoc {
   memberIds: string[];
   members: Record<string, { displayName: string; role: GameRole }>;
   createdAt: number;
+  /** The game's image (a download URL), set by the GM in Game settings: shown on the game's page and its box on the front page. */
+  image?: string;
   /** Set by the GM on the game settings page. */
   settings?: GameSettings;
 }

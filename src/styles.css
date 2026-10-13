@@ -94,6 +94,12 @@ button:disabled { opacity: 0.6; cursor: default; }
 .game-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .game-card { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; color: var(--text); text-decoration: none; }
 .game-card:hover { border-color: var(--accent); }
+/* A game with an image: it fills the box, faded toward the text so the name stays readable. */
+.game-card.has-image { position: relative; overflow: hidden; min-height: 88px; align-content: center; }
+.game-card.has-image > * { position: relative; z-index: 2; }
+.game-card.has-image::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, var(--panel) 25%, color-mix(in srgb, var(--panel) 55%, transparent) 70%, transparent); z-index: 1; }
+.game-card.has-image > .game-card-image { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; }
+.game-cover { display: block; width: 100%; aspect-ratio: 8 / 3; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); }
 .game-name { font-weight: 600; font-size: 1.05rem; }
 .role-badge { font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 999px; align-self: center; vertical-align: middle; }
 .role-badge.role-gm { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
@@ -1396,8 +1402,10 @@ select.piece.add { color: #6fb4ff; }
 .me-pin-bubble textarea { min-height: 3.5rem; }
 .me-map-name { align-self: flex-start; font: inherit; font-size: 1.25rem; font-weight: 700; background: transparent; border: 1px dashed transparent; color: var(--text); padding: 2px 6px; margin-left: -6px; min-width: 12rem; }
 .me-map-name:hover, .me-map-name:focus { border-color: var(--line); outline: none; }
-.game-name-input { font: inherit; background: transparent; border: 1px dashed transparent; color: inherit; padding: 0 6px; margin-left: -6px; max-width: 100%; }
-.game-name-input:hover, .game-name-input:focus { border-color: var(--line); outline: none; }
+/* Game settings: the name with its Save button, and the game's 8:3 image. */
+.game-name-form { align-items: flex-end; margin-bottom: 12px; }
+.game-name-form .field { flex: 1 1 240px; max-width: 420px; }
+.image-upload.cover .image-preview { width: 256px; height: 96px; max-width: 100%; }
 .copy-button { padding: 0.2rem 0.6rem; }
 .settings-note { margin: 8px 0 0; padding: 6px 10px; border-left: 3px solid var(--accent); }
 .turn-order li.draggable { cursor: grab; }

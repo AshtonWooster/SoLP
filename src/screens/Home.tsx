@@ -29,6 +29,7 @@ export function Home() {
 interface GameSummary {
   id: string;
   name: string;
+  image?: string;
   role: GameRole;
   gmName: string;
   playerCount: number;
@@ -57,6 +58,7 @@ function Dashboard({ uid }: { uid: string }) {
                 return {
                   id: d.id,
                   name: g.name,
+                  image: g.image,
                   role: g.members[uid]?.role ?? "player",
                   gmName: g.members[g.gmId]?.displayName ?? "",
                   playerCount: Object.values(g.members).filter((m) => m.role === "player").length,
@@ -99,7 +101,8 @@ function Dashboard({ uid }: { uid: string }) {
           <ul className="game-list">
             {games?.map((g) => (
               <li key={g.id}>
-                <Link to={`/games/${g.id}`} className="game-card">
+                <Link to={`/games/${g.id}`} className={g.image ? "game-card has-image" : "game-card"}>
+                  {g.image && <img className="game-card-image" src={g.image} alt="" />}
                   <span className="game-name">{g.name}</span>
                   <span className={`role-badge role-${g.role}`}>{g.role === "gm" ? "GM" : "Player"}</span>
                   <span className="muted">
