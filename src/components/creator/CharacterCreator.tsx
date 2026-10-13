@@ -67,7 +67,7 @@ function PortraitPicker({ folder, value, onChange, readOnly }: { folder: string;
             setBusy(true);
             setError("");
             try {
-              onChange(await uploadImage(folder, file));
+              onChange(await uploadImage(folder, file, "portrait"));
             } catch (err) {
               setError(friendlyError(err));
             } finally {

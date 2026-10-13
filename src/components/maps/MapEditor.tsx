@@ -548,7 +548,7 @@ function UploadButton({ gameId, onUploaded, onError }: { gameId: string; onUploa
           setBusy(true);
           onError("");
           try {
-            onUploaded(await uploadImage(`games/${gameId}/assets/maps`, file), file.name);
+            onUploaded(await uploadImage(`games/${gameId}/assets/maps`, file, "mapImage"), file.name);
           } catch (err) {
             onError(friendlyError(err));
           } finally {
@@ -741,7 +741,7 @@ function MapSettings({ gameId, map, act }: { gameId: string; map: MapInfo & { id
           tiles ({MAP_MIN}–{MAP_MAX})
         </span>
       </div>
-      <ImageUpload folder={`games/${gameId}/assets/maps`} label="Background" value={map.background} onChange={(url) => act({ type: "updateMap", mapId: map.id, background: url ?? null })} />
+      <ImageUpload folder={`games/${gameId}/assets/maps`} kind="mapBackground" label="Background" value={map.background} onChange={(url) => act({ type: "updateMap", mapId: map.id, background: url ?? null })} />
       {map.background && <HiddenSwitch hidden={!!map.backgroundHidden} onChange={(backgroundHidden) => act({ type: "updateMap", mapId: map.id, backgroundHidden })} />}
       <label className="me-check">
         <input type="checkbox" checked={!map.hideGrid} onChange={(e) => act({ type: "updateMap", mapId: map.id, hideGrid: !e.target.checked })} /> Show grid lines

@@ -152,7 +152,7 @@ export function ArtPicker({ folder, image, fallback, onChange }: { folder?: stri
             setBusy(true);
             setError("");
             try {
-              onChange(await uploadImage(folder, file));
+              onChange(await uploadImage(folder, file, "art"));
             } catch (err) {
               setError(friendlyError(err));
             } finally {
