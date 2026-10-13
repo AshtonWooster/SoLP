@@ -5,9 +5,8 @@ import type { Character } from "../../shared/character.ts";
 import { characterChecks } from "../../shared/ruleset.ts";
 import { pendingCount } from "../../shared/permissions.ts";
 import { playerList } from "../../shared/players.ts";
-import { type GameDoc, type GmMeta, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
+import { type GameDoc, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
-import { CopyButton } from "../components/CopyButton.tsx";
 import { PlayerPreview } from "../components/PlayerPreview.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
@@ -18,7 +17,6 @@ export function GamePage() {
   const { user } = useAuth();
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
-  const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
   const characters = useCollection<Character>(game.data ? `games/${id}/characters` : null);
 
   if (game.error || (!game.loading && !game.data)) {
@@ -34,8 +32,6 @@ export function GamePage() {
   }
   if (!game.data) return <main className="center muted">Loading…</main>;
 
-  const inviteCode = meta.data?.inviteCode;
-  const inviteUrl = inviteCode ? `${location.origin}/join/${inviteCode}` : "";
   const players = playerList(id, game.data, characters, isGm);
 
   return (
@@ -79,22 +75,9 @@ export function GamePage() {
                 </Link>
                 <Link className="big-button secondary" to={`/games/${id}/settings`}>
                   Game settings
-                  <small>Players, kicking, and what players can edit</small>
+                  <small>Invite players, kick them, and choose what players can edit</small>
                 </Link>
               </div>
-              <section className="panel">
-                <h3>Invite players</h3>
-                <p className="row wrap">
-                  Invite code: <strong className="invite-code">{inviteCode ?? "…"}</strong>
-                  {inviteCode && <CopyButton text={inviteCode} label="Copy code" />}
-                </p>
-                {inviteUrl && (
-                  <p className="muted row wrap">
-                    Or share this link: <a href={inviteUrl}>{inviteUrl}</a>
-                    <CopyButton text={inviteUrl} label="Copy link" />
-                  </p>
-                )}
-              </section>
             </>
           ) : (
             <div className="screen-links">

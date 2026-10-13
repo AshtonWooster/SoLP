@@ -1,7 +1,7 @@
 // Limits on guessing invite codes. Run with `npm run test:engine`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { afterWrongCode, JOIN_MAX_FAILURES, JOIN_WINDOW_MS, type JoinAttempts, mayTryCode, minutesUntilRetry } from "../shared/invites.ts";
+import { afterWrongCode, inviteLink, JOIN_MAX_FAILURES, JOIN_WINDOW_MS, type JoinAttempts, mayTryCode, minutesUntilRetry } from "../shared/invites.ts";
 
 test("an account with no wrong codes may try", () => {
   assert.equal(mayTryCode(undefined, 0), true);
@@ -23,4 +23,14 @@ test("the count starts over once the hour is up", () => {
   assert.equal(mayTryCode(a, JOIN_WINDOW_MS), true);
   assert.deepEqual(afterWrongCode(a, JOIN_WINDOW_MS), { since: JOIN_WINDOW_MS, failures: 1 });
   assert.deepEqual(afterWrongCode({ since: 0, failures: 3 }, 10), { since: 0, failures: 4 });
+});
+
+test("the invite link points at the join page for the game's code", () => {
+  assert.equal(inviteLink("https://solp.example", "ABC123"), "https://solp.example/join/ABC123");
+  assert.equal(inviteLink("https://solp.example/", "ABC123"), "https://solp.example/join/ABC123");
+});
+
+test("there's no invite link until the code has loaded", () => {
+  assert.equal(inviteLink("https://solp.example", undefined), "");
+  assert.equal(inviteLink("https://solp.example", ""), "");
 });

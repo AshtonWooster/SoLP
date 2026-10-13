@@ -29,3 +29,8 @@ export function afterWrongCode(a: JoinAttempts | undefined, now: number): JoinAt
 export function minutesUntilRetry(a: JoinAttempts, now: number): number {
   return Math.max(1, Math.ceil((a.since + JOIN_WINDOW_MS - now) / 60000));
 }
+
+/** The link a player opens to join with this code (the /join/:code route). Empty until the code loads. */
+export function inviteLink(origin: string, code: string | undefined): string {
+  return code ? `${origin.replace(/\/+$/, "")}/join/${encodeURIComponent(code)}` : "";
+}
