@@ -261,6 +261,8 @@ test("only the GM's hosting tab can save the table", async () => {
   await assertFails(setDoc(doc(as("gm"), "games", GAME, "table", "state"), { ...table, extra: 1 }));
   // The GM's map folders are saved with the table.
   await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "table", "state"), { ...table, mapFolders: { a: { name: "District 23" } } }));
+  // So are the popups the GM sent players.
+  await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "table", "state"), { ...table, popups: [{ id: "p", text: "A letter", sentAt: 1 }] }));
   // Autosave while combat is running.
   const combat = { round: 1, order: [], turn: 0, movementLeft: 3 };
   await assertSucceeds(setDoc(doc(as("gm"), "games", GAME, "table", "state"), { ...table, combat }));

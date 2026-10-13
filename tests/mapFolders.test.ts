@@ -127,5 +127,5 @@ test("players and the board never get the folders, not even the one their map is
 
 test("the saved table may hold the folders", () => {
   const rules = readFileSync(new URL("../firestore.rules", import.meta.url), "utf8");
-  assert.match(rules, /hasOnly\(\["map", "maps", "mapFolders", "tokens", "log", "combat"\]\)/);
+  assert.match(rules, /hasOnly\(\["map", "maps", "mapFolders", "tokens", "log", "combat", "popups"\]\)/);
 });
