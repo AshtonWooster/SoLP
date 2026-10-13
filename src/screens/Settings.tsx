@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { arrayRemove, deleteField, doc, updateDoc } from "firebase/firestore";
+import { arrayRemove, deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
 import { deleteNameMatches } from "../../shared/deleteGame.ts";
 import { blankCharacter, characterChecks, maxResources, RANKS } from "../../shared/ruleset.ts";
@@ -193,6 +193,55 @@ function StatFormulasSection({ game, note, onSave }: { game: GameDoc; note: stri
           {note}
         </p>
       )}
+    </section>
+  );
+}
+
+/** Clearing the table log: the GM says they're sure first, since the lines can't come back. */
+function ClearLogSection({ gameId }: { gameId: string }) {
+  const [sure, setSure] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const clear = async () => {
+    setBusy(true);
+    setNote("");
+    try {
+      // Empty the saved log, then stamp the game so a GM screen hosting right now empties its live log too.
+      await setDoc(doc(db, "games", gameId, "table", "state"), { log: [] }, { merge: true });
+      await updateDoc(doc(db, "games", gameId), { "settings.logClearedAt": Date.now() });
+      setNote("Log cleared for everyone.");
+      setSure(false);
+    } catch (err) {
+      setNote(friendlyError(err));
+    }
+    setBusy(false);
+  };
+  return (
+    <section className="panel settings-section" aria-label="Table log">
+      <h2>Table log</h2>
+      <p className="muted small">Clears every line of the log on the GM screen, the board and players' phones. This can't be undone.</p>
+      {sure ? (
+        <div className="clear-log-step" role="alertdialog" aria-label="Clear the log?">
+          <p>
+            <strong>Clear the whole log?</strong> Rolls, damage and everything else in it so far will be gone.
+          </p>
+          <div className="row wrap">
+            <button type="button" className="danger" onClick={clear} disabled={busy}>
+              {busy ? "Clearing…" : "Yes, clear it"}
+            </button>
+            <button type="button" onClick={() => setSure(false)} disabled={busy}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="row wrap">
+          <button type="button" className="danger" onClick={() => (setSure(true), setNote(""))}>
+            Clear log…
+          </button>
+        </div>
+      )}
+      {note && <p className="muted settings-note" role="status">{note}</p>}
     </section>
   );
 }
@@ -452,6 +501,8 @@ export function Settings() {
             }
           }}
         />
+
+        <ClearLogSection gameId={id} />
 
         <DeleteGameSection gameId={id} name={g.name} />
       </main>

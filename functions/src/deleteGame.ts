@@ -12,6 +12,15 @@ export interface GameFiles {
 
 export async function deleteGameAsGm(db: Firestore, files: GameFiles | undefined, uid: string, gameId: string, typedName: string): Promise<void> {
   if (!gameId || gameId.includes("/")) throw new HttpsError("invalid-argument", "No such game.");
+  await removeGame(db, files, gameId, (game) => {
+    if (!game) throw new HttpsError("not-found", "No such game.");
+    if (game.gmId !== uid) throw new HttpsError("permission-denied", "Only the GM can delete this game.");
+    if (!deleteNameMatches(typedName, game.name)) throw new HttpsError("invalid-argument", "That isn't the game's name, so nothing was deleted.");
+  });
+}
+
+/** Removes a game and everything in it. `check` runs on the game inside the transaction and throws to stop. */
+export async function removeGame(db: Firestore, files: GameFiles | undefined, gameId: string, check?: (game: GameDoc | undefined) => void): Promise<void> {
   const gameRef = db.doc(`games/${gameId}`);
   const metaRef = gameRef.collection("gm").doc("meta");
 
@@ -19,9 +28,7 @@ export async function deleteGameAsGm(db: Firestore, files: GameFiles | undefined
   // GM tab still hosting can't save the table back while the rest is being removed.
   await db.runTransaction(async (tx) => {
     const game = (await tx.get(gameRef)).data() as GameDoc | undefined;
-    if (!game) throw new HttpsError("not-found", "No such game.");
-    if (game.gmId !== uid) throw new HttpsError("permission-denied", "Only the GM can delete this game.");
-    if (!deleteNameMatches(typedName, game.name)) throw new HttpsError("invalid-argument", "That isn't the game's name, so nothing was deleted.");
+    check?.(game);
     const code = ((await tx.get(metaRef)).data() as GmMeta | undefined)?.inviteCode;
     if (code) tx.delete(db.doc(`inviteCodes/${code}`));
     tx.delete(gameRef);
