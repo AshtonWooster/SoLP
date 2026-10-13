@@ -1313,7 +1313,7 @@ select.piece.add { color: #6fb4ff; }
 /* Game settings: deleting the game */
 .delete-game { border-color: var(--hp); }
 .delete-game h2 { color: var(--hp); }
-.delete-game-step { display: flex; flex-direction: column; gap: 10px; }
+.delete-game-step, .clear-log-step { display: flex; flex-direction: column; gap: 10px; }
 .delete-game-step .field { flex: none; }
 .delete-game-name { color: var(--text); user-select: all; }
 

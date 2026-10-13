@@ -94,6 +94,22 @@ test("game settings: only the GM changes them and kicks players; the GM can't be
   await assertFails(getDoc(doc(as("p1"), "games", GAME, "table", "state")));
 });
 
+test("clearing the log: only the GM empties the saved log and stamps the game", async () => {
+  const state = (who: string) => doc(as(who), "games", GAME, "table", "state");
+  const game = (who: string) => doc(as(who), "games", GAME);
+  await assertFails(setDoc(state("p1"), { log: [] }, { merge: true }));
+  await assertFails(setDoc(state("stranger"), { log: [] }, { merge: true }));
+  await assertFails(updateDoc(game("p1"), { "settings.logClearedAt": 1000 }));
+  await assertFails(updateDoc(game("stranger"), { "settings.logClearedAt": 1000 }));
+  await assertSucceeds(setDoc(state("gm"), { log: [] }, { merge: true }));
+  await assertSucceeds(updateDoc(game("gm"), { "settings.logClearedAt": 1000 }));
+  // A game whose table was never saved: clearing makes a table with just an empty log, which the host fills in.
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await deleteDoc(doc(ctx.firestore(), "games", GAME, "table", "state"));
+  });
+  await assertSucceeds(setDoc(state("gm"), { log: [] }, { merge: true }));
+});
+
 test("renaming a game: only the GM, to a name of 1-60 characters that isn't blank", async () => {
   const game = (who: string) => doc(as(who), "games", GAME);
   await assertFails(updateDoc(game("p1"), { name: "Mine now" }));
