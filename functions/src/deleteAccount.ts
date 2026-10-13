@@ -7,6 +7,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { deleteEmailMatches, signedInRecently } from "../../shared/deleteAccount.ts";
 import type { GameDoc } from "../../shared/types.ts";
 import { removeGame, type GameFiles } from "./deleteGame.ts";
+import { removePlayerData } from "./removePlayer.ts";
 
 /** Just the part of Firebase Authentication this needs. */
 export interface AccountLogins {
@@ -45,7 +46,7 @@ export async function deleteAccountData(
       await removeGame(db, files, snap.id);
       deletedGames++;
     } else {
-      await leaveGame(db, files, snap.id, uid);
+      await removePlayerData(db, files, snap.id, uid, { keepApproved: true });
     }
   }
 
@@ -56,30 +57,4 @@ export async function deleteAccountData(
     if (err?.code !== "auth/user-not-found") throw err;
   });
   return { deletedGames };
-}
-
-/** Removes a player and what's theirs from someone else's game. Approved items and effects stay with the game. */
-async function leaveGame(db: Firestore, files: GameFiles | undefined, gameId: string, uid: string): Promise<void> {
-  const gameRef = db.doc(`games/${gameId}`);
-  await db.runTransaction(async (tx) => {
-    const game = (await tx.get(gameRef)).data() as GameDoc | undefined;
-    if (!game) return;
-    const members = { ...game.members };
-    delete members[uid];
-    tx.update(gameRef, { memberIds: game.memberIds.filter((m) => m !== uid), members });
-  });
-  await db.recursiveDelete(gameRef.collection("characters").doc(uid));
-
-  const batch = db.batch();
-  const [items, effects, signals] = await Promise.all([
-    gameRef.collection("items").where("createdBy", "==", uid).get(),
-    gameRef.collection("effects").where("createdBy", "==", uid).get(),
-    gameRef.collection("signals").where("uid", "==", uid).get(),
-  ]);
-  items.docs.filter((d) => d.get("pending") === true).forEach((d) => batch.delete(d.ref));
-  effects.docs.filter((d) => d.get("approved") !== true).forEach((d) => batch.delete(d.ref));
-  signals.docs.forEach((d) => batch.delete(d.ref));
-  await batch.commit();
-
-  await files?.deleteFiles({ prefix: `games/${gameId}/users/${uid}/` }).catch((err) => console.error(`Couldn't delete images of ${uid} in game ${gameId}`, err));
 }
