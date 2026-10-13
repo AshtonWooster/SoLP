@@ -13,7 +13,7 @@ export interface ImagePreset {
   fit: ImageFit;
 }
 
-export type ImageKind = "portrait" | "photo" | "art" | "mapImage" | "mapBackground";
+export type ImageKind = "portrait" | "photo" | "art" | "gameCover" | "mapImage" | "mapBackground";
 
 export const IMAGE_PRESETS: Record<ImageKind, ImagePreset> = {
   // Enemy and NPC portraits: the 170px license photo, list icons and tokens on the board (which zoom).
@@ -22,6 +22,8 @@ export const IMAGE_PRESETS: Record<ImageKind, ImagePreset> = {
   photo: { width: 432, height: 576, fit: "cover" },
   // Page and item art: 4:3, at most ~400px wide on a full card.
   art: { width: 800, height: 600, fit: "cover" },
+  // A game's image: 8:3, a banner up to ~740px wide on the game's page and behind its box on the front page.
+  gameCover: { width: 1600, height: 600, fit: "cover" },
   // Images placed on a map's asset layer: they can be stretched over several cells and zoomed.
   mapImage: { width: 2048, height: 2048, fit: "contain" },
   // Whole map backgrounds: generous, so they stay sharp when zoomed in.

@@ -59,12 +59,21 @@ test("stored files get an extension matching their type", () => {
   assert.equal(extensionFor("image/gif"), "gif");
 });
 
+test("a game's image is stored no bigger than its 1600×600 banner needs", () => {
+  assert.deepEqual(fitImageSize(4000, 1500, IMAGE_PRESETS.gameCover), { width: 1600, height: 600 });
+  assert.deepEqual(fitImageSize(4000, 3000, IMAGE_PRESETS.gameCover), { width: 1600, height: 1200 });
+  // A small image is never stretched up.
+  assert.deepEqual(fitImageSize(800, 300, IMAGE_PRESETS.gameCover), { width: 800, height: 300 });
+});
+
 const near = (a: number, b: number, msg?: string) => assert.ok(Math.abs(a - b) < 1e-6, msg ?? `${a} ≈ ${b}`);
 
 test("the framing box takes the shape the image is shown in", () => {
   assert.equal(frameAspect("portrait", 4000, 3000, 0), 1);
   assert.equal(frameAspect("photo", 4000, 3000, 0), 3 / 4);
   assert.equal(frameAspect("art", 100, 900, 0), 4 / 3);
+  // A game's image is an 8:3 banner, whatever shape the photo is.
+  assert.equal(frameAspect("gameCover", 3000, 4000, 0), 8 / 3);
   // Maps keep their own shape, turned with the image.
   assert.equal(frameAspect("mapBackground", 4000, 3000, 0), 4 / 3);
   assert.equal(frameAspect("mapBackground", 4000, 3000, 90), 3 / 4);

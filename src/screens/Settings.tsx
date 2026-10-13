@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { arrayRemove, deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
@@ -29,6 +29,7 @@ import {
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { CopyButton } from "../components/CopyButton.tsx";
+import { ImageUpload } from "../components/ImageUpload.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, deleteGameFn, friendlyError, newInviteCodeFn } from "../firebase.ts";
 
@@ -63,6 +64,62 @@ function PlayerCard({ gameId, uid, displayName, character, formulas, onKick }: {
         </ConfirmButton>
       </div>
     </li>
+  );
+}
+
+/** The game's name and image: the name titles the game everywhere, the image shows on its page and its box on the front page. */
+function GameSection({ gameId, game }: { gameId: string; game: GameDoc }) {
+  const [draft, setDraft] = useState(game.name);
+  const [note, setNote] = useState("");
+  // Follow a rename from elsewhere unless the GM is typing a new name here.
+  const [lastName, setLastName] = useState(game.name);
+  if (game.name !== lastName) {
+    if (draft === lastName) setDraft(game.name);
+    setLastName(game.name);
+  }
+  const next = draft.trim();
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!next || next === game.name) return;
+    try {
+      await updateDoc(doc(db, "games", gameId), { name: next });
+      setDraft(next);
+      setNote("Name saved.");
+    } catch (err) {
+      setNote(friendlyError(err));
+    }
+  };
+  const setImage = async (url: string | undefined) => {
+    try {
+      await updateDoc(doc(db, "games", gameId), { image: url ?? deleteField() });
+      setNote(url ? "Image saved. It shows on the game's page and on everyone's front page." : "Image removed.");
+    } catch (err) {
+      setNote(friendlyError(err));
+    }
+  };
+  return (
+    <section className="panel settings-section" aria-label="Game">
+      <h2>Game</h2>
+      <form className="row wrap game-name-form" onSubmit={save}>
+        <label className="field">
+          <span>Name</span>
+          <input aria-label="Game name" value={draft} maxLength={60} required onChange={(e) => (setDraft(e.target.value), setNote(""))} />
+        </label>
+        <button type="submit" disabled={!next || next === game.name}>
+          Save name
+        </button>
+      </form>
+      <div className="field">
+        <span>Image</span>
+        <span className="muted small">Shown at the top of the game's page and behind its box on everyone's front page.</span>
+        <ImageUpload folder={`games/${gameId}/assets/cover`} kind="gameCover" shape="cover" label="Game image" value={game.image} onChange={setImage} />
+      </div>
+      {note && (
+        <p className="muted settings-note" role="status">
+          {note}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -330,7 +387,7 @@ function DeleteGameSection({ gameId, name }: { gameId: string; name: string }) {
 
 type Area = "invite" | "players" | "permissions" | "items" | "effects" | "formulas";
 
-/** The GM's game settings: inviting players, the players (open their sheets, kick them) and what players may edit. */
+/** The GM's game settings: the game's name and image, inviting players, the players (open their sheets, kick them) and what players may edit. */
 export function Settings() {
   const { id = "" } = useParams();
   const { user } = useAuth();
@@ -395,6 +452,8 @@ export function Settings() {
           </Link>
           <h1>Game settings</h1>
         </header>
+
+        <GameSection gameId={id} game={g} />
 
         <section className="panel settings-section" aria-label="Invite players">
           <h2>Invite players</h2>
