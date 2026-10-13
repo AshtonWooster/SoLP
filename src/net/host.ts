@@ -30,6 +30,7 @@ import { currentMapId, playerView } from "../../shared/maps.ts";
 import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
 import { effectsClearAfterCombat, emotionLevelsOn } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
+import { clearLog, logClearedAt, logClearRequested } from "../../shared/clearLog.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
@@ -81,12 +82,16 @@ export class Host {
   private stopped = false;
   private snapshot: HostSnapshot = { status: "starting", notes: {}, online: [] };
   private listeners = new Set<(s: HostSnapshot) => void>();
+  /** The last Clear log stamp this host acted on (the saved table it loads is already cleared). */
+  private logClearSeen: number;
 
   constructor(
     private gameId: string,
     private me: Actor,
     private game: GameDoc,
-  ) {}
+  ) {
+    this.logClearSeen = logClearedAt(game);
+  }
 
   /** Keeps the member list current, e.g. when someone joins mid-session. */
   setGame(game: GameDoc) {
@@ -97,6 +102,14 @@ export class Host {
     }
     // The GM may have changed the stat formulas: seated players' max Resources follow.
     this.syncSeatedPlayers();
+    // The GM cleared the log from game settings: empty the live one too, or autosave would bring it back.
+    if (logClearRequested(this.logClearSeen, game)) {
+      this.logClearSeen = logClearedAt(game);
+      if (this.table && clearLog(this.table)) {
+        this.changed();
+        this.publish();
+      }
+    }
   }
 
   subscribe(fn: (s: HostSnapshot) => void): () => void {
