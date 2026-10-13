@@ -16,6 +16,7 @@ import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { MapEditor } from "../components/maps/MapEditor.tsx";
 import { MapList, MapPreview, NewMapForm } from "../components/maps/MapsList.tsx";
+import { MapView } from "../components/maps/MapView.tsx";
 import { FogDraw, FogTools, type FogMode } from "../components/maps/Fog.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
@@ -230,31 +231,33 @@ export function Gm() {
         )}
         <div className={"gm-map-area" + (placing ? " placing" : "")} style={table ? ({ "--map-ratio": `${table.map.width / table.map.height}` } as React.CSSProperties) : undefined}>
           {table && (
-            <Grid
-              state={mapTable ?? table}
-              fx={fx}
-              selectedId={selectedId}
-              activeId={table.combat ? activeToken(table)?.id : undefined}
-              onTokenClick={(t) => {
-                // While a Page is being aimed, clicking a lit token targets it.
-                const aim = table.combat?.aim;
-                if (aim && aimTargets(table).targetable.has(t.id)) {
-                  const page = table.combat!.pages[aim.pageId] ?? table.tokens[aim.tokenId]?.pages?.find((p) => p.id === aim.pageId);
-                  act(page && isMassAttack(page.type) ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
-                  return;
-                }
-                setSelectedId(t.id === selectedId ? null : t.id);
-              }}
-              onCellClick={(x, y) => {
-                if (placing) {
-                  act({ type: "spawnEnemy", templateId: placing.templateId, template: npcSpawnData(placing.template, formulas), x, y });
-                  setPlacing(null);
-                } else if (selectedId) act({ type: "move", tokenId: selectedId, x, y });
-              }}
-              fog="gm"
-            >
-              {fogMode && <FogDraw map={table.map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId: table.map.id!, ...r })} />}
-            </Grid>
+            <MapView key={(mapTable ?? table).map.id ?? ""}>
+              <Grid
+                state={mapTable ?? table}
+                fx={fx}
+                selectedId={selectedId}
+                activeId={table.combat ? activeToken(table)?.id : undefined}
+                onTokenClick={(t) => {
+                  // While a Page is being aimed, clicking a lit token targets it.
+                  const aim = table.combat?.aim;
+                  if (aim && aimTargets(table).targetable.has(t.id)) {
+                    const page = table.combat!.pages[aim.pageId] ?? table.tokens[aim.tokenId]?.pages?.find((p) => p.id === aim.pageId);
+                    act(page && isMassAttack(page.type) ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
+                    return;
+                  }
+                  setSelectedId(t.id === selectedId ? null : t.id);
+                }}
+                onCellClick={(x, y) => {
+                  if (placing) {
+                    act({ type: "spawnEnemy", templateId: placing.templateId, template: npcSpawnData(placing.template, formulas), x, y });
+                    setPlacing(null);
+                  } else if (selectedId) act({ type: "move", tokenId: selectedId, x, y });
+                }}
+                fog="gm"
+              >
+                {fogMode && <FogDraw map={table.map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId: table.map.id!, ...r })} />}
+              </Grid>
+            </MapView>
           )}
           {table?.combat && <EnemyTurnPopup table={table} act={act} />}
           {selected && (
