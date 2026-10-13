@@ -18,8 +18,9 @@ export function GamePage() {
   const { user } = useAuth();
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
-  const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
   const characters = useCollection<Character>(game.data ? `games/${id}/characters` : null);
+  // Only the GM can read the invite code; the full invite (link, New code) lives in Game settings.
+  const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
 
   if (game.error || (!game.loading && !game.data)) {
     return (
@@ -34,8 +35,6 @@ export function GamePage() {
   }
   if (!game.data) return <main className="center muted">Loading…</main>;
 
-  const inviteCode = meta.data?.inviteCode;
-  const inviteUrl = inviteCode ? `${location.origin}/join/${inviteCode}` : "";
   const players = playerList(id, game.data, characters, isGm);
 
   return (
@@ -79,22 +78,9 @@ export function GamePage() {
                 </Link>
                 <Link className="big-button secondary" to={`/games/${id}/settings`}>
                   Game settings
-                  <small>Players, kicking, and what players can edit</small>
+                  <small>Invite players, kick them, and choose what players can edit</small>
                 </Link>
               </div>
-              <section className="panel">
-                <h3>Invite players</h3>
-                <p className="row wrap">
-                  Invite code: <strong className="invite-code">{inviteCode ?? "…"}</strong>
-                  {inviteCode && <CopyButton text={inviteCode} label="Copy code" />}
-                </p>
-                {inviteUrl && (
-                  <p className="muted row wrap">
-                    Or share this link: <a href={inviteUrl}>{inviteUrl}</a>
-                    <CopyButton text={inviteUrl} label="Copy link" />
-                  </p>
-                )}
-              </section>
             </>
           ) : (
             <div className="screen-links">
@@ -127,7 +113,10 @@ export function GamePage() {
         </div>
 
         <aside className="game-players">
-          <h3>Players ({players.length})</h3>
+          <div className="row-between">
+            <h3>Players ({players.length})</h3>
+            {isGm && meta.data?.inviteCode && <CopyButton text={meta.data.inviteCode} label="Copy invite code" />}
+          </div>
           {players.length === 0 && <p className="muted">No players yet.</p>}
           <ul className="plain">
             {players.map((p) => {

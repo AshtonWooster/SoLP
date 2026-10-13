@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { arrayRemove, deleteField, doc, setDoc, updateDoc } from "firebase/firestore";
 import type { Character } from "../../shared/character.ts";
 import { deleteNameMatches } from "../../shared/deleteGame.ts";
+import { inviteLink } from "../../shared/invites.ts";
 import { blankCharacter, characterChecks, maxResources, RANKS } from "../../shared/ruleset.ts";
 import {
   DEFAULT_STAT_FORMULAS,
@@ -327,9 +328,9 @@ function DeleteGameSection({ gameId, name }: { gameId: string; name: string }) {
   );
 }
 
-type Area = "players" | "permissions" | "items" | "effects" | "formulas";
+type Area = "invite" | "players" | "permissions" | "items" | "effects" | "formulas";
 
-/** The GM's game settings: the players (open their sheets, kick them) and what players may edit. */
+/** The GM's game settings: inviting players, the players (open their sheets, kick them) and what players may edit. */
 export function Settings() {
   const { id = "" } = useParams();
   const { user } = useAuth();
@@ -357,6 +358,8 @@ export function Settings() {
     .filter(([, m]) => m.role === "player")
     .sort((a, b) => a[1].displayName.localeCompare(b[1].displayName));
   const ref = doc(db, "games", id);
+  const inviteCode = meta.data?.inviteCode;
+  const inviteUrl = inviteLink(location.origin, inviteCode);
 
   const kick = async (uid: string, name: string) => {
     try {
@@ -369,9 +372,9 @@ export function Settings() {
   const newCode = async () => {
     try {
       const { data } = await newInviteCodeFn({ gameId: id });
-      setMessage({ at: "players", text: `New invite code: ${data.code}. The old one no longer works.` });
+      setMessage({ at: "invite", text: `New invite code: ${data.code}. The old one no longer works.` });
     } catch (err) {
-      setMessage({ at: "players", text: friendlyError(err) });
+      setMessage({ at: "invite", text: friendlyError(err) });
     }
   };
   const setEdit = async (key: PlayerEditKey, on: boolean) => {
@@ -393,18 +396,28 @@ export function Settings() {
           <h1>Game settings</h1>
         </header>
 
-        <section className="panel settings-section" aria-label="Players">
-          <div className="row-between">
-            <h2>Players ({players.length})</h2>
-            {meta.data?.inviteCode && (
-              <span className="muted small">
-                Invite code <strong className="invite-code">{meta.data.inviteCode}</strong> <CopyButton text={meta.data.inviteCode} label="Copy" />{" "}
-                <ConfirmButton className="link small" confirmLabel="Old code stops working. Confirm?" ms={3000} onConfirm={newCode}>
-                  New code
-                </ConfirmButton>
-              </span>
+        <section className="panel settings-section" aria-label="Invite players">
+          <h2>Invite players</h2>
+          <p className="row wrap">
+            Invite code: <strong className="invite-code">{inviteCode ?? "…"}</strong>
+            {inviteCode && <CopyButton text={inviteCode} label="Copy code" />}
+            {inviteCode && (
+              <ConfirmButton className="link small" confirmLabel="Old code stops working. Confirm?" ms={3000} onConfirm={newCode}>
+                New code
+              </ConfirmButton>
             )}
-          </div>
+          </p>
+          {inviteUrl && (
+            <p className="muted row wrap">
+              Or share this link: <a href={inviteUrl}>{inviteUrl}</a>
+              <CopyButton text={inviteUrl} label="Copy link" />
+            </p>
+          )}
+          {message?.at === "invite" && <p className="muted settings-note" role="status">{message.text}</p>}
+        </section>
+
+        <section className="panel settings-section" aria-label="Players">
+          <h2>Players ({players.length})</h2>
           {players.length === 0 ? (
             <p className="muted">No players yet. Share the invite code to bring some in.</p>
           ) : (
