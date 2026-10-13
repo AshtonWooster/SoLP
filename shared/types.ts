@@ -87,6 +87,11 @@ export interface GameSettings {
    * its old numbers until the GM changes them.
    */
   statFormulas?: Partial<StatFormulas>;
+  /**
+   * When the GM last cleared the table log (ms since 1970), from the Clear log button. Not a toggle:
+   * a game that never cleared its log has none (shared/clearLog.ts).
+   */
+  logClearedAt?: number;
 }
 
 export function playersCanCreateItems(game: GameDoc | undefined): boolean {
