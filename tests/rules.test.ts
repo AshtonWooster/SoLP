@@ -336,6 +336,24 @@ test("enemy templates are GM-only", async () => {
   await assertSucceeds(deleteDoc(ref("gm")));
 });
 
+test("map asset library is GM-only and holds just an image's url, name and date", async () => {
+  const ref = (who: string) => doc(as(who), "games", GAME, "mapAssets", "a1");
+  await assertSucceeds(setDoc(ref("gm"), { url: "https://x/a.png", name: "Tree", addedAt: 1 }));
+  await assertSucceeds(getDoc(ref("gm")));
+  await assertSucceeds(getDocs(collection(as("gm"), "games", GAME, "mapAssets")));
+  await assertFails(getDoc(ref("p1")));
+  await assertFails(getDocs(collection(as("p1"), "games", GAME, "mapAssets")));
+  await assertFails(setDoc(doc(as("p1"), "games", GAME, "mapAssets", "a2"), { url: "https://x/b.png", name: "Mine", addedAt: 1 }));
+  await assertFails(setDoc(doc(as("stranger"), "games", GAME, "mapAssets", "a2"), { url: "https://x/b.png", name: "Mine", addedAt: 1 }));
+  await assertFails(setDoc(ref("gm"), { url: "https://x/a.png", name: "Tree", addedAt: 1, extra: true }));
+  await assertFails(setDoc(ref("gm"), { url: "", name: "Tree", addedAt: 1 }));
+  await assertFails(setDoc(ref("gm"), { url: "https://x/a.png", name: "x".repeat(61), addedAt: 1 }));
+  await assertFails(setDoc(ref("gm"), { url: "https://x/a.png", name: "Tree", addedAt: 1, removed: "yes" }));
+  await assertSucceeds(setDoc(ref("gm"), { url: "https://x/a.png", name: "Tree", addedAt: 1, removed: true }));
+  await assertFails(deleteDoc(ref("p1")));
+  await assertSucceeds(deleteDoc(ref("gm")));
+});
+
 test("item library: members browse it; only the GM edits items that aren't theirs", async () => {
   const ref = (who: string) => doc(as(who), "games", GAME, "items", "potion");
   await assertSucceeds(setDoc(ref("gm"), { name: "Potion", kind: "item", stacking: true, maxStack: 3 }));

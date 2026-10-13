@@ -10,6 +10,8 @@ import { NumberField } from "../NumberField.tsx";
 import { PIN_COLORS, Pin } from "./MapLayers.tsx";
 import { FogDraw, FogLayer, FogTools, type FogMode } from "./Fog.tsx";
 import { fogMask, itemInView, tokenInView } from "../../../shared/fog.ts";
+import { assetName } from "../../../shared/mapAssets.ts";
+import { ASSET_DRAG_TYPE, AssetLibrary, saveToLibrary } from "./AssetLibrary.tsx";
 
 type Act = (a: TableAction) => boolean;
 type LayerKey = "pins" | "tokens" | "assets" | "background";
@@ -159,7 +161,8 @@ export function MapEditor({
     };
   };
 
-  const addImage = async (url: string, name?: string) => {
+  /** Put an image on the asset layer, centered on `at` (in tiles) or the middle of the view. */
+  const addImage = async (url: string, name?: string, at?: { x: number; y: number }) => {
     if (!map) return;
     // Sized from the picture's own shape: its longer side a quarter of the map, at least a tile.
     const ratio = await new Promise<number>((resolve) => {
@@ -173,9 +176,9 @@ export function MapEditor({
     let h = ratio >= 1 ? long / ratio : long;
     w = Math.max(snap ? 1 : 0.25, snapValue(w, snap));
     h = Math.max(snap ? 1 : 0.25, snapValue(h, snap));
-    const c = viewCenter();
+    const c = at ?? viewCenter();
     const item: Partial<MapItem> = { id: newId(), kind: "image", url, x: snapValue(c.x - w / 2, snap), y: snapValue(c.y - h / 2, snap), w, h };
-    if (name) item.name = name.replace(/\.[a-z0-9]+$/i, "").slice(0, 60);
+    if (name) item.name = name.slice(0, 60);
     if (change({ type: "addMapItem", mapId, item })) {
       setSel({ type: "item", id: item.id! });
       setLayers((l) => ({ ...l, assets: { ...l.assets, show: true } }));
@@ -277,9 +280,8 @@ export function MapEditor({
   const pins = items.filter((i) => i.kind === "pin" && shown(i.hidden) && itemInView(map, mask, i)).map(live);
   const tokens = scope.tokens.filter((t) => shown(t.hidden) && tokenInView(map, mask, t));
   const px = (n: number) => `${n * cell}px`;
-  // Images already on any of the game's maps, to reuse with a click.
+  // Every map in the game, for the asset library to count where each image is used.
   const allMaps = [table.map, ...Object.values(table.maps ?? {})];
-  const reused = [...new Set(allMaps.flatMap((m) => (m.items ?? []).filter((i) => i.kind === "image").map((i) => i.url!)))].slice(0, 24);
   const hiddenCount = items.filter((i) => i.hidden).length + scope.tokens.filter((t) => t.hidden).length + (map.background && map.backgroundHidden ? 1 : 0);
 
   return (
@@ -299,7 +301,7 @@ export function MapEditor({
             📍 Pin
           </button>
         </div>
-        <UploadButton gameId={gameId} onUploaded={addImage} onError={setError} />
+        <UploadButton gameId={gameId} onUploaded={(url, file) => (saveToLibrary(gameId, url, file).catch(() => {}), addImage(url, assetName(file)))} onError={setError} />
         <FogTools
           mode={fogMode}
           setMode={(m) => {
@@ -335,6 +337,7 @@ export function MapEditor({
       </div>
 
       <div className="me-body">
+        <AssetLibrary gameId={gameId} maps={allMaps} onPlace={(url, name) => addImage(url, name)} onUploaded={(url, file) => addImage(url, assetName(file))} />
         <div
           className="me-canvas-wrap"
           ref={wrapRef}
@@ -348,6 +351,19 @@ export function MapEditor({
             ref={canvasRef}
             className={"me-canvas" + (tool === "pin" ? " placing" : "") + (drag ? " dragging" : "")}
             style={{ width: px(map.width), height: px(map.height) }}
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes(ASSET_DRAG_TYPE)) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }}
+            onDrop={(e) => {
+              const raw = e.dataTransfer.getData(ASSET_DRAG_TYPE);
+              if (!raw) return;
+              e.preventDefault();
+              const { url, name } = JSON.parse(raw) as { url: string; name: string };
+              const r = canvasRef.current!.getBoundingClientRect();
+              addImage(url, name, { x: (e.clientX - r.left) / cell, y: (e.clientY - r.top) / cell });
+            }}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
               if (tool !== "pin") return setSel(null);
@@ -509,18 +525,6 @@ export function MapEditor({
           <MapSettings gameId={gameId} map={map} act={act} />
           <PlaceCharacters gameId={gameId} map={map} act={act} />
 
-          {reused.length > 0 && (
-            <section className="me-section">
-              <h4>Images in this game</h4>
-              <div className="me-reuse">
-                {reused.map((url) => (
-                  <button key={url} onClick={() => addImage(url)} title="Add to this map" aria-label="Add this image to the map">
-                    <img src={url} alt="" />
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
           <p className="muted small me-help">
             Drag to move; drag a corner to resize (Shift keeps the shape, Alt flips snapping). Arrows nudge, Delete removes, Ctrl+D duplicates, H hides. Ctrl+scroll zooms.
           </p>

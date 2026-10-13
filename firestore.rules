@@ -195,6 +195,18 @@ service cloud.firestore {
         allow read, write: if isGm(gameId);
       }
 
+      // The map asset library (shared/mapAssets.ts): images uploaded for the maps, placed again
+      // from the map editor. Only the GM sees or edits it; removing one keeps a marker.
+      match /mapAssets/{assetId} {
+        allow read, delete: if isGm(gameId);
+        allow create, update: if isGm(gameId)
+          && request.resource.data.keys().hasOnly(["url", "name", "addedAt", "removed"])
+          && request.resource.data.url is string && request.resource.data.url.size() > 0 && request.resource.data.url.size() <= 2048
+          && request.resource.data.name is string && request.resource.data.name.size() <= 60
+          && request.resource.data.addedAt is number
+          && request.resource.data.get("removed", false) is bool;
+      }
+
       match /gm/meta {
         allow read: if isGm(gameId);
       }
