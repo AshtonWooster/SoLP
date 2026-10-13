@@ -126,7 +126,7 @@ function LayerCard({ layer, index, count, onChange, onMove, onRemove }: { layer:
       </div>
       <div className="row wrap vfx-controls">
         {layer.type === "particles" && <Slider label="Amount" value={layer.count ?? 8} min={1} max={MAX_PARTICLES} step={1} onChange={(count) => set({ count })} />}
-        <Slider label={layer.type === "motion" ? "Strength" : "Size"} value={layer.size} min={0.25} max={3} step={0.05} show={times} onChange={(size) => set({ size })} />
+        {layer.type !== "tint" && <Slider label={layer.type === "motion" ? "Strength" : "Size"} value={layer.size} min={0.25} max={3} step={0.05} show={times} onChange={(size) => set({ size })} />}
         <Slider label="Speed" value={layer.speed} min={0.25} max={3} step={0.05} show={times} onChange={(speed) => set({ speed })} />
         {layer.type !== "motion" && <Slider label="Strength" value={layer.opacity} min={0.1} max={1} step={0.05} show={percent} onChange={(opacity) => set({ opacity })} />}
       </div>
@@ -425,7 +425,7 @@ export function Vfx() {
               </li>
               {current && (
                 <li>
-                  <button type="button" className="equip-add-page library-new" onClick={() => setSelected(null)}>
+                  <button type="button" className="vfx-back" onClick={() => setSelected(null)}>
                     Start from a ready-made look
                   </button>
                 </li>

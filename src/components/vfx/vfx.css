@@ -65,9 +65,9 @@
   position: absolute;
   left: var(--x);
   top: 50%;
-  width: calc(var(--size) * var(--s) * 16cqmin);
-  height: calc(var(--size) * var(--s) * 16cqmin);
-  margin: calc(var(--size) * var(--s) * -8cqmin) 0 0 calc(var(--size) * var(--s) * -8cqmin);
+  width: calc(var(--size) * var(--s) * 20cqmin);
+  height: calc(var(--size) * var(--s) * 20cqmin);
+  margin: calc(var(--size) * var(--s) * -10cqmin) 0 0 calc(var(--size) * var(--s) * -10cqmin);
   opacity: 0;
   animation-duration: calc(var(--dur) * (0.8 + var(--s) * 0.3));
   animation-timing-function: ease-in-out;

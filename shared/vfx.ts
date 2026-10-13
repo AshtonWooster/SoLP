@@ -242,7 +242,7 @@ export const VFX_TEMPLATES: { key: string; name: string; make: () => VfxDef }[] 
       statuses: [],
       layers: [
         L("aura", { aura: "glow", color: "#ff6a1a", opacity: 0.6 }),
-        L("particles", { shape: "flame", flow: "rise", color: "#ff8a3d", color2: "#ffd23d", count: 12, speed: 1.2 }),
+        L("particles", { shape: "flame", flow: "rise", color: "#ff8a3d", color2: "#ffd23d", count: 14, speed: 1.2, size: 1.5 }),
       ],
     }),
   },

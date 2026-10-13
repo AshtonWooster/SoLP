@@ -221,6 +221,16 @@
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": []
+    },
+    {
+      "collectionGroup": "vfx",
+      "fieldPath": "layers",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "vfx",
+      "fieldPath": "statuses",
+      "indexes": []
     }
   ]
 }

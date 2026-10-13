@@ -1558,7 +1558,12 @@ select.piece.add { color: #6fb4ff; }
 .vfx-slider b { color: var(--text, inherit); font-weight: 600; margin-left: 4px; }
 .vfx-slider input { width: 100%; }
 .vfx-color { flex: 0 0 auto !important; }
-.vfx-color input[type="color"] { width: 44px; height: 32px; padding: 2px; }
+.vfx-color input[type="color"] { width: 44px; height: 34px; padding: 2px; flex: none; cursor: pointer; }
+.vfx-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.vfx-color input[type="color"]::-webkit-color-swatch { border: none; border-radius: 5px; }
+.vfx-color input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
+.vfx-editor > .field { flex: none; }
+.vfx-back { align-self: stretch; }
 .vfx-glyph input { width: 4.5rem; font-size: 1.1rem; text-align: center; }
 .vfx-glyph { flex: 0 0 auto !important; }
 .vfx-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; border: 1px solid #0006; }
