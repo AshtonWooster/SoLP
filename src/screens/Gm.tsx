@@ -5,6 +5,8 @@ import { useAuth, useCollection, useDoc, useStatFormulas } from "../api.ts";
 import { activeToken } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
+import { useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
+import type { SpeedStep } from "../components/speedRoll.ts";
 import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { isMassAttack, normalizeNpc, NPC_SIDES, npcSpawnData } from "../../shared/ruleset.ts";
 import type { Character, NpcTemplate } from "../../shared/character.ts";
@@ -34,6 +36,8 @@ export function Gm() {
   const { snapshot, host } = useHost(id, user, game.data);
   // The map shows clash damage once its die has played; the panels show the live values.
   const { step: fx, table: mapTable } = useClashPlayback(snapshot.table);
+  // Speed rolls tumble on the map and the turn order deals out once they land.
+  const speed = useSpeedRollPlayback(snapshot.table);
   const online = new Set(snapshot.online);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
@@ -235,6 +239,7 @@ export function Gm() {
               <Grid
                 state={mapTable ?? table}
                 fx={fx}
+                speed={speed}
                 selectedId={selectedId}
                 activeId={table.combat ? activeToken(table)?.id : undefined}
                 onTokenClick={(t) => {
@@ -259,7 +264,7 @@ export function Gm() {
               </Grid>
             </MapView>
           )}
-          {table?.combat && <EnemyTurnPopup table={table} act={act} />}
+          {table?.combat && !(speed?.whole && speed.stage === "roll") && <EnemyTurnPopup table={table} act={act} />}
           {selected && (
             <TokenPopup
               key={selected.id}
@@ -284,7 +289,7 @@ export function Gm() {
       </section>
 
       <section className="gm-side">
-        {table?.combat && <CombatPanel table={table} act={act} />}
+        {table?.combat && <CombatPanel table={table} act={act} speed={speed} />}
         <div className="gm-log">
           <h3>Log</h3>
           <ol className="log">
@@ -413,7 +418,7 @@ function EnemyTurnPopup({ table, act }: { table: TableState; act: (action: Table
 }
 
 /** Run the turn order and end combat. */
-function CombatPanel({ table, act }: { table: TableState; act: (action: TableAction) => boolean }) {
+function CombatPanel({ table, act, speed }: { table: TableState; act: (action: TableAction) => boolean; speed: SpeedStep | null }) {
   const tokens = Object.values(table.tokens);
   const combat = table.combat!;
 
@@ -439,6 +444,7 @@ function CombatPanel({ table, act }: { table: TableState; act: (action: TableAct
       )}
       <TurnOrder
         table={table}
+        speed={speed}
         onMove={(tokenId, to) => act({ type: "reorderCombatant", tokenId, to })}
         controls={(tokenId, i) => (
           <>

@@ -2,9 +2,8 @@ import { type ReactNode, useRef, useState } from "react";
 import type { Character } from "../../../shared/character.ts";
 import { type Check, maxResources, PRIMARY_STATS, proficiencyCount, RANKS, rankTable, SECONDARY_STATS } from "../../../shared/ruleset.ts";
 import { useStatFormulas } from "../../api.ts";
-import { friendlyError } from "../../firebase.ts";
 import { Stepper } from "../Fields.tsx";
-import { IMAGE_ACCEPT, uploadImage } from "../ImageUpload.tsx";
+import { IMAGE_ACCEPT, useImageUpload } from "../ImageUpload.tsx";
 import { SecondaryStatIcon, StatIcon } from "../LorIcons.tsx";
 
 export type CreatorStep = "intro" | "license" | "stats" | "story" | "summary";
@@ -46,8 +45,7 @@ interface Props {
 
 /** The character's photo on the license: tap it to upload a new one. */
 function PortraitPicker({ folder, value, onChange, readOnly }: { folder: string; value?: string; onChange: (url: string | undefined) => void; readOnly?: boolean }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, pick, editor } = useImageUpload(folder, "photo", (url) => onChange(url));
   const photo = value ? <img src={value} alt="Character photo" /> : <span className="license-photo-hint">{readOnly ? "No photo" : busy ? "Uploading…" : "Tap to add a photo"}</span>;
   if (readOnly) return <div className="license-photo">{photo}</div>;
   return (
@@ -60,19 +58,10 @@ function PortraitPicker({ folder, value, onChange, readOnly }: { folder: string;
           hidden
           aria-label="Character photo"
           disabled={busy}
-          onChange={async (e) => {
+          onChange={(e) => {
             const file = e.target.files?.[0];
             e.target.value = "";
-            if (!file) return;
-            setBusy(true);
-            setError("");
-            try {
-              onChange(await uploadImage(folder, file));
-            } catch (err) {
-              setError(friendlyError(err));
-            } finally {
-              setBusy(false);
-            }
+            pick(file);
           }}
         />
       </label>
@@ -82,6 +71,7 @@ function PortraitPicker({ folder, value, onChange, readOnly }: { folder: string;
         </button>
       )}
       {error && <span className="error small">{error}</span>}
+      {editor}
     </div>
   );
 }

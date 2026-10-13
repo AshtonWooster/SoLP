@@ -136,6 +136,11 @@ export function rollSpeed(table: TableState, token: Token, dice = SPEED_DICE): C
   return { tokenId: token.id, roll, bonus, speed: roll + bonus, dice: total, ...(total !== dice ? { baseDice: dice } : {}) };
 }
 
+/** Notes who just rolled Speed, so every screen plays the roll. */
+export function markSpeedRoll(c: CombatState, tokenIds: string[]) {
+  c.speedRoll = { id: newId(), tokenIds };
+}
+
 export function speedText(t: Token, c: Combatant) {
   return `${t.name} ${c.speed}${secret(t, "justice", ` (${c.roll}${c.bonus >= 0 ? "+" : ""}${c.bonus})`)}`;
 }
@@ -1029,6 +1034,7 @@ export function startCombat(table: TableState, ids: string[], ctx?: EngineContex
   const c: CombatState = { round: 1, order: [], turn: 0, phase: "resolve", movementLeft: 0, pages: {}, decks: {}, slots: [], counters: {} };
   table.combat = c;
   c.order = sortOrder(table, ids.map((id) => rollSpeed(table, table.tokens[id])));
+  markSpeedRoll(c, ids);
   for (const id of ids) setUpDeck(c, table.tokens[id], ctx);
   log(table, `Combat started. Speed: ${c.order.map((x) => speedText(table.tokens[x.tokenId], x)).join(", ")}.`);
   for (const x of c.order) trigger(table, "combatStart", table.tokens[x.tokenId]);
@@ -1062,6 +1068,7 @@ export function addCombatant(table: TableState, token: Token, ctx?: EngineContex
   const activeId = c.order[c.turn].tokenId;
   c.order = sortOrder(table, [...c.order, entry]);
   c.turn = c.order.findIndex((x) => x.tokenId === activeId);
+  markSpeedRoll(c, [token.id]);
   setUpDeck(c, token, ctx);
   log(table, `${speedText(token, entry)} joined the turn order.`);
 }

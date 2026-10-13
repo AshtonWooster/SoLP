@@ -11,6 +11,7 @@ import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { Waiting } from "../components/Waiting.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
+import { SpeedRollCard, useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
 import { CycleCharacters, EffectsView, Portrait } from "../components/player/CombatViews.tsx";
 import { InfoPanel, PANELS, type PanelKey } from "../components/player/InfoPanels.tsx";
 import { AnyStatIcon } from "../components/LorIcons.tsx";
@@ -78,6 +79,7 @@ export function Play() {
 
   // Clash damage shows once its die has played on the board.
   const { table } = useClashPlayback(snapshot.table);
+  const speed = useSpeedRollPlayback(snapshot.table);
   const combat = table?.combat;
   const mine = table ? Object.values(table.tokens).find((t) => t.ownerId === user?.id) : undefined;
   const library = useCollection<ItemTemplate>(`games/${id}/items`);
@@ -285,6 +287,7 @@ export function Play() {
         )}
         <ConnectionBadge status={snapshot.status} />
       </div>
+      {speed && combat && <SpeedRollCard step={speed} tokenId={mine?.id} order={combat.order} />}
       {mine?.status?.staggered && (
         <div className="player-msg staggered" role="status">
           <strong>Staggered.</strong> You can't act and your Resistances are {STAGGERED_RESISTANCE}x.{" "}
