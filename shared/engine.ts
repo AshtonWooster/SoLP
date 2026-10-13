@@ -18,6 +18,7 @@ import {
   slot,
   sortOrder,
   storyRoll,
+  markSpeedRoll,
   speedText,
   startCombat,
   withContext,
@@ -441,6 +442,7 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
           .map((x) => rollSpeed(table, table.tokens[x.tokenId], x.baseDice ?? x.dice)),
       );
       c.turn = Math.max(0, c.order.findIndex((x) => x.tokenId === activeId));
+      markSpeedRoll(c, c.order.map((x) => x.tokenId));
       say(`Speed re-rolled: ${c.order.map((x) => speedText(table.tokens[x.tokenId], x)).join(", ")}.`);
       return true;
     }

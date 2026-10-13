@@ -10,6 +10,7 @@ import { isMassAttack } from "../../shared/ruleset.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { aimTargets, Grid } from "../components/Grid.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
+import { useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
 import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
@@ -37,6 +38,7 @@ export function Board() {
   const characters = useCollection<Character>(isMember ? `games/${id}/characters` : null);
   // Damage from a clash shows once its die has played on the board.
   const { step: fx, table } = useClashPlayback(snapshot.table);
+  const speed = useSpeedRollPlayback(snapshot.table);
   const active = table ? activeToken(table) : undefined;
   const combat = table?.combat;
   // Players take their turns at the board; the GM runs enemies from the GM screen.
@@ -91,6 +93,7 @@ export function Board() {
             selectedId={moving ? playerTurn?.id : carrying}
             reachable={reachable}
             fx={fx}
+            speed={speed}
             fog="players"
             onTokenClick={(t) => {
               if (aiming && targetable.has(t.id)) {
@@ -154,7 +157,7 @@ export function Board() {
               )}
               {error && <span className="error">{error}</span>}
             </div>
-            <TurnOrder table={table} />
+            <TurnOrder table={table} speed={speed} />
             <ol className="combat-log">
               {recent.map((line, i) => (
                 <li key={`${table.log.length}-${i}`} className={line.startsWith(" ") ? "detail" : ""}>
