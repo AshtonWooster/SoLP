@@ -1,5 +1,6 @@
 // Several maps per game. Run with `npm run test:engine`.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { applyAction, type Actor } from "../shared/engine.ts";
 import { MAP_MIN, moveRect, playerView, resizeRect } from "../shared/maps.ts";
@@ -157,6 +158,19 @@ test("pins and notes keep their label, note and color", () => {
   act(t, { type: "updateMapItem", mapId: "library", itemId: "trap", patch: { color: "red; background:url(x)", kind: "image" } });
   assert.equal(t.map.items![0].kind, "pin", "kind doesn't change");
   assert.equal(t.map.items![0].color, undefined, "only #rrggbb colors");
+});
+
+test("editing a pin's color changes it, and the pin head is drawn in that color", () => {
+  const { t } = twoMaps();
+  act(t, { type: "addMapItem", mapId: "library", item: { id: "door", kind: "pin", x: 1, y: 1, name: "Door", color: "#e0b04f" } });
+  assert.equal(act(t, { type: "updateMapItem", mapId: "library", itemId: "door", patch: { color: "#5c8fe0" } }), true);
+  assert.equal(t.map.items![0].color, "#5c8fe0");
+  assert.equal(t.map.items![0].name, "Door", "the rest of the pin stays");
+  // The head is a <button> painted with currentColor; buttons set their own text color, so it must inherit the pin's.
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const head = css.match(/\.map-pin \.pin-head \{([^}]*)\}/)?.[1] ?? "";
+  assert.match(head, /background: currentColor/);
+  assert.match(head, /color: inherit/);
 });
 
 test("players never receive what the GM hid: background, assets, pins or tokens", () => {
