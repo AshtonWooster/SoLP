@@ -490,6 +490,37 @@ export interface TableState {
   tokens: Record<string, Token>;
   log: string[];
   combat?: CombatState;
+  /** Popups the GM sent to players: text, an image, a Story Roll prompt (shared/popups.ts). Newest last. */
+  popups?: GmPopup[];
+}
+
+/** A popup the GM sends to every player or to some of them. Any mix of text, an image and a Story Roll prompt. */
+export interface GmPopup {
+  id: string;
+  title?: string;
+  text?: string;
+  /** An image URL (uploaded to the game's assets). */
+  image?: string;
+  /** Asks for a Story Roll: the Stat to roll, or "any" to let the player pick. */
+  roll?: { stat: string };
+  /** Players (user ids) it's for. Missing: every player, including ones who join later. */
+  to?: string[];
+  sentAt: number;
+  /** Players who closed it. */
+  closedBy?: string[];
+  /** Each player's Story Roll total, by user id. */
+  rolls?: Record<string, number>;
+}
+
+/** What a player's screen gets of a popup sent to them: nothing about anyone else. */
+export interface PlayerPopup {
+  id: string;
+  title?: string;
+  text?: string;
+  image?: string;
+  roll?: { stat: string };
+  /** Their own Story Roll total, once they've rolled. */
+  rolled?: number;
 }
 
 /** What a placed copy of a GM-made character starts with (worked out by npcSpawnData in shared/ruleset.ts). */
@@ -591,6 +622,15 @@ export type TableAction =
   | { type: "dash" }
   /** Roll a Story Roll with one of the character's Stats; the result goes in the log. */
   | { type: "storyRoll"; tokenId: string; stat: string }
+  // GM popups (shared/popups.ts).
+  /** GM: show players a popup. `to` missing or empty: every player. */
+  | { type: "sendPopup"; id?: string; title?: string; text?: string; image?: string; roll?: { stat: string }; to?: string[] }
+  /** GM: take a popup down from every screen. */
+  | { type: "removePopup"; popupId: string }
+  /** A player closes a popup sent to them. */
+  | { type: "closePopup"; popupId: string }
+  /** A player makes the Story Roll a popup asks for. `stat`: their pick, when the popup lets them choose. */
+  | { type: "popupRoll"; popupId: string; stat?: string }
   | { type: "setEffects"; tokenId: string; effects: Effect[] }
   /** Pick a Page to use, so the board can show its valid targets. */
   | { type: "aim"; source: PageSource; cardId?: string; pageId?: string; die?: number }
@@ -620,6 +660,8 @@ export type HostMessage =
       online: string[];
       /** Only sent to the GM's own devices. */
       notes?: Record<string, string>;
+      /** A player's phone: the GM's popups for them that they haven't closed (shared/popups.ts). */
+      popups?: PlayerPopup[];
     }
   | { t: "ack"; id: number; error?: string }
   | { t: "bye"; reason: string };

@@ -169,7 +169,8 @@ function concealCombat(c: CombatState, tokens: Record<string, Token>): CombatSta
  * about their characters is either.
  */
 export function tableForPlayers(full: TableState): TableState {
-  const { maps: _maps, mapFolders: _folders, ...table } = full;
+  // Popups go only to the players they're for (shared/popups.ts), not in the shared table.
+  const { maps: _maps, mapFolders: _folders, popups: _popups, ...table } = full;
   const tokens = table.tokens;
   const hidden = (id: string, part: SheetPart) => {
     const t = tokens[id];

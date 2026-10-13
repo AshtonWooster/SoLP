@@ -1,7 +1,7 @@
 // A board or phone connecting to the table hosted in the GM's browser.
 // Finds the host through Firestore once, then talks to it directly over WebRTC.
 import { collection, deleteDoc, doc, onSnapshot, setDoc, type DocumentReference } from "firebase/firestore";
-import type { HostMessage, PeerMessage, SessionDoc, SignalDoc, TableAction, TableState, View } from "../../shared/types.ts";
+import type { HostMessage, PeerMessage, PlayerPopup, SessionDoc, SignalDoc, TableAction, TableState, View } from "../../shared/types.ts";
 import { db } from "../firebase.ts";
 import { gathered, newPeerConnection } from "./rtc.ts";
 
@@ -15,6 +15,8 @@ export interface ClientSnapshot {
   table?: TableState;
   online: string[];
   notes?: Record<string, string>;
+  /** The GM's popups for this player that they haven't closed (phones only). */
+  popups?: PlayerPopup[];
 }
 
 const CONNECT_TIMEOUT_MS = 15_000;
@@ -156,7 +158,7 @@ export class Client {
 
   private onMessage(msg: HostMessage) {
     if (msg.t === "state") {
-      this.update({ status: "connected", message: undefined, table: msg.table, online: msg.online, notes: msg.notes });
+      this.update({ status: "connected", message: undefined, table: msg.table, online: msg.online, notes: msg.notes, popups: msg.popups });
     } else if (msg.t === "ack") {
       const p = this.pending.get(msg.id);
       this.pending.delete(msg.id);

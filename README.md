@@ -14,6 +14,8 @@ Everyone has one kind of account. Creating a game makes you its GM; joining one 
 
 The GM can override any token's Health, Stagger Resist, Light and Sanity, move any token, add or remove enemies, and keep notes only the GM sees.
 
+**Popups for players:** from the GM screen's **Popups** menu, the GM sends a popup to every player or to the ones they pick. It can hold a title, text, an image and a Story Roll prompt (a set Stat, or the player picks), in any mix. It shows on each player's phone until they close it; a Story Roll made from it goes in the table log, and the GM's list shows who rolled what and who still has it open. **Take down** removes it from every screen. Nothing about a popup goes in the shared log or to the board, so one sent to a single player stays between them and the GM (`shared/popups.ts`).
+
 ### How it's built
 
 **During play, the GM's browser is the game server.** When the GM opens "Run the game", that tab holds the live table. The board and every player's phone connect straight to it over WebRTC (the peer-to-peer tech video calls use), which works across the internet, not just on the same Wi-Fi. Moving tokens, changing health and adding enemies go device-to-device, with no Cloud Function call and no database write per action.

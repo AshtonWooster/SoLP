@@ -27,6 +27,7 @@ import { TableError } from "../components/TableError.tsx";
 import { useHost } from "../net/hooks.ts";
 import { useDrag } from "../components/drag.ts";
 import { gmTurnToken } from "../../shared/combat.ts";
+import { BLANK_DRAFT, GmPopups, type PopupDraft } from "../components/GmPopups.tsx";
 
 /** The GM's laptop: runs the table and can override anything. */
 export function Gm() {
@@ -60,6 +61,8 @@ export function Gm() {
   const formulas = useStatFormulas(id);
   // A GM character picked from the Characters menu, waiting for the GM to click a tile for it.
   const [placing, setPlacing] = useState<{ templateId: string; template: NpcTemplate } | null>(null);
+  // A popup to players being written in the Popups menu, kept while the menu is closed.
+  const [popupDraft, setPopupDraft] = useState<PopupDraft>(BLANK_DRAFT);
   useEffect(() => {
     if (!placing) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPlacing(null);
@@ -232,6 +235,17 @@ export function Gm() {
                 />
               )}
             </ToolbarMenu>
+            <ToolbarMenu
+              title="Popups for players"
+              label={
+                <>
+                  Popups{table.popups?.length ? <span className="muted small"> · {table.popups.length} up</span> : null}
+                </>
+              }
+              wide
+            >
+              {() => <GmPopups gameId={id} table={table} players={players} act={act} draft={popupDraft} setDraft={setPopupDraft} />}
+            </ToolbarMenu>
             {!table.combat && <ToolbarMenu title="Start combat" label="Start combat">{(close) => <CombatStart table={table} act={act} onStarted={close} />}</ToolbarMenu>}
             <FogTools mode={fogMode} setMode={setFogMode} onAll={(hidden) => act({ type: "fogAll", mapId: table.map.id!, hidden })} />
             <span className="muted small gm-hint">
@@ -341,7 +355,7 @@ export function Gm() {
 }
 
 /** A button above the map that opens a dropdown; clicking outside closes it. */
-function ToolbarMenu({ title, label, children }: { title: string; label: React.ReactNode; children: (close: () => void) => React.ReactNode }) {
+function ToolbarMenu({ title, label, wide, children }: { title: string; label: React.ReactNode; wide?: boolean; children: (close: () => void) => React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const drag = useDrag<HTMLDivElement>();
@@ -362,7 +376,7 @@ function ToolbarMenu({ title, label, children }: { title: string; label: React.R
         {label} <span className="muted">▾</span>
       </button>
       {open && (
-        <div className="toolbar-dropdown" role="dialog" aria-label={title} ref={drag.ref} style={drag.style}>
+        <div className={"toolbar-dropdown" + (wide ? " wide" : "")} role="dialog" aria-label={title} ref={drag.ref} style={drag.style}>
           <header className="popup-head" {...drag.handle}>
             <strong>{title}</strong>
             <button type="button" className="icon" aria-label="Close" onClick={() => setOpen(false)}>
