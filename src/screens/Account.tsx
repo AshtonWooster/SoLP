@@ -1,17 +1,18 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { updateProfile } from "firebase/auth";
+import { Link, useNavigate } from "react-router-dom";
+import { EmailAuthProvider, reauthenticateWithCredential, signOut, updateProfile } from "firebase/auth";
 import { collection, doc, getDocs, query, setDoc, where, writeBatch } from "firebase/firestore";
 import { cleanDisplayName, displayNameError, THEME_INFO, THEMES, themeOf, type ThemeId } from "../../shared/account.ts";
-import type { UserDoc } from "../../shared/types.ts";
+import { deleteEmailMatches } from "../../shared/deleteAccount.ts";
+import type { GameDoc, User, UserDoc } from "../../shared/types.ts";
 import { useAuth, useDoc } from "../api.ts";
 import { TopBar } from "../components/TopBar.tsx";
-import { auth, db, friendlyError } from "../firebase.ts";
+import { auth, db, deleteAccountFn, friendlyError } from "../firebase.ts";
 import { applyTheme, savedTheme } from "../theme.ts";
 import { openConsent, useConsent } from "../consent.ts";
 import { Footer } from "../components/Footer.tsx";
 
-/** Account settings, from the gear in the top bar: your display name and the app's look. */
+/** Account settings, from the gear in the top bar: your display name, the app's look, and deleting your account. */
 export function Account() {
   const { user, setUser } = useAuth();
   const me = user!;
@@ -131,11 +132,137 @@ export function Account() {
             </button>
           </p>
           <p className="muted small">
-            To download or delete your account and its data, see the <Link to="/privacy">Privacy Policy</Link>.
+            To download a copy of your data, see the <Link to="/privacy">Privacy Policy</Link>. To delete your account, use the section below.
           </p>
         </section>
+
+        <DeleteAccountSection me={me} />
       </main>
       <Footer />
     </>
+  );
+}
+
+/**
+ * Deleting your account: you say you're sure (seeing which of your games go with it), then type
+ * your email and enter your password again. deleteAccount (functions/src) does the deleting.
+ */
+function DeleteAccountSection({ me }: { me: User }) {
+  const navigate = useNavigate();
+  const [step, setStep] = useState<"idle" | "sure" | "confirm">("idle");
+  const [gmGames, setGmGames] = useState<string[] | null>(null);
+  const [typed, setTyped] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const cancel = () => {
+    setStep("idle");
+    setTyped("");
+    setPassword("");
+    setError("");
+  };
+  const start = async () => {
+    setStep("sure");
+    setGmGames(null);
+    try {
+      const games = await getDocs(query(collection(db, "games"), where("memberIds", "array-contains", me.id)));
+      setGmGames(games.docs.filter((g) => (g.data() as GameDoc).gmId === me.id).map((g) => (g.data() as GameDoc).name));
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  };
+  const remove = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      // The server only deletes an account whose password was entered in the last few minutes.
+      if (auth.currentUser) await reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(me.email, password));
+      await deleteAccountFn({ email: typed });
+      // Leave this page before signing out, or the sign-in guard sends us to the login page without the notice.
+      navigate("/login?deleted=1", { replace: true });
+      await signOut(auth).catch(() => {});
+    } catch (err) {
+      setError(friendlyError(err));
+      setBusy(false);
+    }
+  };
+  const ready = deleteEmailMatches(typed, me.email) && password !== "" && !busy;
+  return (
+    <section className="panel settings-section delete-game" aria-label="Delete account">
+      <h2>Delete account</h2>
+      <p className="muted small">
+        Deletes your login and your data: your account settings, your characters and uploaded images in every game, your items and effects still waiting for approval, and every game you
+        GM, for all its players. Items and effects a GM already approved stay in their game. This can't be undone.
+      </p>
+      {step === "idle" && (
+        <div className="row wrap">
+          <button type="button" className="danger" onClick={start}>
+            Delete account…
+          </button>
+        </div>
+      )}
+      {step === "sure" && (
+        <div className="delete-game-step" role="alertdialog" aria-label="Are you sure?">
+          <p>
+            <strong>Are you sure you want to delete your account?</strong>
+          </p>
+          {gmGames === null && !error && <p className="muted small">Checking your games…</p>}
+          {gmGames && gmGames.length === 0 && <p className="muted small">You don't GM any games, so no games will be deleted. You'll leave the games you play in.</p>}
+          {gmGames && gmGames.length > 0 && (
+            <>
+              <p>
+                You GM {gmGames.length === 1 ? "this game" : `these ${gmGames.length} games`}. {gmGames.length === 1 ? "It" : "They"} will be deleted for everyone, and your players lose their characters in{" "}
+                {gmGames.length === 1 ? "it" : "them"}:
+              </p>
+              <ul className="delete-account-games">
+                {gmGames.map((n, i) => (
+                  <li key={i}>
+                    <strong>{n}</strong>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {error && <p className="error small">{error}</p>}
+          <div className="row wrap">
+            <button type="button" className="danger" disabled={gmGames === null} onClick={() => setStep("confirm")}>
+              Yes, I'm sure
+            </button>
+            <button type="button" onClick={cancel}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {step === "confirm" && (
+        <form
+          className="delete-game-step"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (ready) remove();
+          }}
+        >
+          <label className="field">
+            <span>
+              Type your email, <strong className="delete-game-name">{me.email}</strong>, to delete your account
+            </span>
+            <input aria-label="Your email" value={typed} autoFocus autoComplete="off" spellCheck={false} onChange={(e) => setTyped(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Your password</span>
+            <input aria-label="Your password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </label>
+          {error && <p className="error small">{error}</p>}
+          <div className="row wrap">
+            <button type="submit" className="danger" disabled={!ready}>
+              {busy ? "Deleting…" : "Delete my account forever"}
+            </button>
+            <button type="button" onClick={cancel} disabled={busy}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }

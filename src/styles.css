@@ -1313,7 +1313,8 @@ select.piece.add { color: #6fb4ff; }
 .delete-game h2 { color: var(--hp); }
 .delete-game-step { display: flex; flex-direction: column; gap: 10px; }
 .delete-game-step .field { flex: none; }
-.delete-game-name { color: var(--text); user-select: all; }
+.delete-game-name { color: var(--text); user-select: all; overflow-wrap: anywhere; }
+.delete-account-games { margin: 0; padding-left: 20px; }
 
 /* Legal pages, footer links and the cookie banner */
 .site-footer { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px 16px 32px; margin-top: 24px; border-top: 1px solid var(--line); text-align: center; }

@@ -119,6 +119,9 @@ test("account settings: you set your own display name and theme, within limits",
   await assertFails(updateDoc(me, { admin: true }));
   await assertFails(setDoc(doc(as("p2"), "users", "p1"), { displayName: "Hijack", email: "p1@x.test", theme: "library" }));
   await assertFails(getDoc(doc(as("gm"), "users", "p1")));
+  // Deleting an account goes through deleteAccount (functions/src), never straight from a browser.
+  await assertFails(deleteDoc(doc(as("p2"), "users", "p1")));
+  await assertFails(deleteDoc(me));
 });
 
 test("a member renames only themselves in a game, and can't change roles or anyone else", async () => {

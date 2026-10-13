@@ -26,7 +26,7 @@ Firebase handles everything around that:
 | Accounts | Authentication (email/password) | `src/screens/Auth.tsx` |
 | Games list, saved tables | Firestore | `shared/types.ts` lists the layout |
 | Helping devices find the GM | Firestore (a few writes per connection) | `src/net/` |
-| Creating and joining games | Cloud Functions (once per game, not during play) | `functions/src/index.ts` |
+| Creating, joining and deleting games; deleting accounts | Cloud Functions (never during play) | `functions/src/index.ts` |
 | Game rules | Run in the GM's browser | `shared/engine.ts` |
 | Who can read what | Security rules | `firestore.rules`, `storage.rules` |
 | Uploaded maps and art | Cloud Storage (rules ready; upload screens coming) | `storage.rules` |
