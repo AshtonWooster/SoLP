@@ -23,8 +23,10 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Just deleted: the page shows the notice while the old login signs out.
+  const deleted = mode === "login" && params.get("deleted") === "1";
   // During signup the account exists before its display name is saved; wait for both.
-  if (user && !busy) return <Navigate to={next} replace />;
+  if (user && !busy && !deleted) return <Navigate to={next} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -58,6 +60,11 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
     <main className="center">
       <Link to="/" className="brand">SoLP</Link>
       <h1>{mode === "login" ? "Log in" : "Create an account"}</h1>
+      {deleted && (
+        <p className="notice small" role="status">
+          Your account and its data were deleted.
+        </p>
+      )}
       <form className="stack" onSubmit={submit}>
         <label>
           Email

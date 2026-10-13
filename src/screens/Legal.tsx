@@ -120,19 +120,48 @@ export function Privacy() {
 
       <h2>How long we keep it</h2>
       <p>
-        We keep your account and game content until you ask us to delete it. A game's content is kept while the game exists;
-        content you added to someone else's game stays in that game unless you ask us to remove it. Connection details are
-        removed once they're no longer needed. The wrong invite-code count starts over after an hour.
+        We keep your account and game content until you delete your account (see below) or ask us to delete it. A game's
+        content is kept while the game exists. Connection details are removed once they're no longer needed. The wrong
+        invite-code count starts over after an hour. Deleted data may stay in our hosting provider's backups until they're
+        cleared on their normal schedule.
       </p>
 
       <h2>Your rights</h2>
       <p>
         Depending on where you live, you may have the right to access, correct, download, or delete your personal
         information, to object to or restrict how we use it, and to withdraw consent. You can change your display name and
-        theme in Settings. For anything else, including deleting your account, email <Email />. We'll respond within the
+        theme in Settings, and delete your account yourself (see below). For anything else, email <Email />. We'll respond within the
         time the law requires (usually one month). If you're in the EU or UK, you can also complain to your local data
         protection authority. If you're in California, we don't sell or share personal information, and we won't treat you
         differently for using your rights.
+      </p>
+
+      <h2 id="delete-account">Deleting your account</h2>
+      <p>You can delete your account and its data yourself at any time:</p>
+      <ol>
+        <li>
+          Log in and open <Link to="/settings">Settings</Link> (the gear in the top bar).
+        </li>
+        <li>
+          Under <strong>Delete account</strong>, press <strong>Delete account…</strong>. You'll see which games you GM, since
+          those are deleted too.
+        </li>
+        <li>
+          Press <strong>Yes, I'm sure</strong>, type your email address, enter your password, and press{" "}
+          <strong>Delete my account forever</strong>.
+        </li>
+      </ol>
+      <p>This deletes, right away and for good:</p>
+      <ul>
+        <li>your login, email address, display name and theme;</li>
+        <li>every game you GM, with everything in it (character sheets, maps, items, effects, enemies, notes, invite code and uploaded images), for all its players;</li>
+        <li>in other people's games: your character, the images you uploaded, items and effects of yours still waiting for the GM's approval, and your place in the game;</li>
+        <li>your wrong invite-code count.</li>
+      </ul>
+      <p>
+        Items and effects a GM already approved into their game's library stay in that game, without your name or email on
+        them. If you want them removed too, or can't log in to delete your account, email <Email /> from the address on your
+        account and we'll delete it for you. Copies in our hosting provider's backups are cleared on their normal schedule.
       </p>
 
       <h2>Children</h2>
@@ -210,7 +239,8 @@ export function Terms() {
 
       <h2>Ending</h2>
       <p>
-        You can stop using SoLP at any time and ask us to delete your account by emailing <Email />. We may close accounts
+        You can stop using SoLP at any time and delete your account in <Link to="/settings">Settings</Link> (see the{" "}
+        <Link to="/privacy#delete-account">Privacy Policy</Link>), or ask us to by emailing <Email />. We may close accounts
         that break these terms.
       </p>
 
