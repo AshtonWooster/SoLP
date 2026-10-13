@@ -9,6 +9,7 @@ import { activeToken, reachableTiles } from "../../shared/engine.ts";
 import { isMassAttack } from "../../shared/ruleset.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { aimTargets, Grid } from "../components/Grid.tsx";
+import { MapView } from "../components/maps/MapView.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
 import { useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
 import { TurnOrder } from "../components/TurnOrder.tsx";
@@ -87,32 +88,34 @@ export function Board() {
       </header>
       <div className={combat ? "board-layout" : ""}>
         <div className="board-map">
-          <Grid
-            state={table}
-            activeId={active?.id}
-            selectedId={moving ? playerTurn?.id : carrying}
-            reachable={reachable}
-            fx={fx}
-            speed={speed}
-            fog="players"
-            onTokenClick={(t) => {
-              if (aiming && targetable.has(t.id)) {
-                send(mass ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
-                return;
-              }
-              if (mayAct && playerTurn && t.id === playerTurn.id) return setMoving((m) => !m);
-              if (!combat && (isGm || t.ownerId === user?.id)) return setCarrying((c) => (c === t.id ? null : t.id));
-              setPeekId((p) => (p === t.id ? null : t.id));
-            }}
-            onCellClick={(x, y) => {
-              if (!combat && carrying) {
-                send({ type: "move", tokenId: carrying, x, y });
-                return setCarrying(null);
-              }
-              if (!reachable?.has(`${x},${y}`)) return setMoving(false);
-              send({ type: "turnMove", x, y })?.then(() => setMoving(false));
-            }}
-          />
+          <MapView key={table.map.id ?? ""}>
+            <Grid
+              state={table}
+              activeId={active?.id}
+              selectedId={moving ? playerTurn?.id : carrying}
+              reachable={reachable}
+              fx={fx}
+              speed={speed}
+              fog="players"
+              onTokenClick={(t) => {
+                if (aiming && targetable.has(t.id)) {
+                  send(mass ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
+                  return;
+                }
+                if (mayAct && playerTurn && t.id === playerTurn.id) return setMoving((m) => !m);
+                if (!combat && (isGm || t.ownerId === user?.id)) return setCarrying((c) => (c === t.id ? null : t.id));
+                setPeekId((p) => (p === t.id ? null : t.id));
+              }}
+              onCellClick={(x, y) => {
+                if (!combat && carrying) {
+                  send({ type: "move", tokenId: carrying, x, y });
+                  return setCarrying(null);
+                }
+                if (!reachable?.has(`${x},${y}`)) return setMoving(false);
+                send({ type: "turnMove", x, y })?.then(() => setMoving(false));
+              }}
+            />
+          </MapView>
           {peek && (
             <TokenPopup
               key={peek.id}
