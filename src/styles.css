@@ -1428,3 +1428,13 @@ select.piece.add { color: #6fb4ff; }
 .grid.layer-pins .pin-head { cursor: grab; }
 .grid.dragging-item, .grid.dragging-item * { cursor: grabbing !important; user-select: none; }
 .grid.layer-assets .map-asset, .grid.layer-pins .pin-head { touch-action: none; }
+
+/* Framing an image before upload */
+.image-editor { width: min(460px, 100%); }
+.ie-frame { position: relative; overflow: hidden; margin: 0 auto; touch-action: none; cursor: grab; border-radius: 6px; outline: 2px solid var(--accent); background: repeating-conic-gradient(#8882 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+.ie-frame:active { cursor: grabbing; }
+.ie-frame img { position: absolute; left: 50%; top: 50%; max-width: none; transform-origin: 0 0; user-select: none; pointer-events: none; }
+.ie-loading { position: absolute; inset: 0; display: grid; place-items: center; }
+.ie-controls { display: flex; flex-direction: column; gap: 8px; }
+.ie-slider { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 8px; }
+.ie-actions { justify-content: flex-end; }
