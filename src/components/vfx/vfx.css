@@ -1,0 +1,169 @@
+/* VFX on tokens (shared/vfx.ts, VfxView.tsx). Sizes are in cqmin: shares of the token, so a VFX
+   looks the same on a phone, the GM's map and a TV. Colors and timing come in as custom properties. */
+
+.vfx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  container-type: size;
+  --vfx-iter: infinite;
+}
+.vfx.once { --vfx-iter: 1; }
+.vfx-layer { position: absolute; inset: 0; border-radius: inherit; }
+.vfx-layer, .vfx-layer i { animation-iteration-count: var(--vfx-iter); }
+
+/* Auras */
+.vfx-aura.glow {
+  box-shadow: 0 0 calc(var(--size) * 22cqmin) calc(var(--size) * 8cqmin) var(--c);
+  opacity: var(--op);
+  animation: vfx-breathe var(--dur) ease-in-out var(--vfx-iter);
+}
+.vfx-aura.ring {
+  inset: calc(var(--size) * -14cqmin);
+  border-radius: 50%;
+  border: calc(var(--size) * 5cqmin) dashed var(--c);
+  opacity: var(--op);
+  filter: drop-shadow(0 0 3cqmin var(--c));
+  animation: vfx-spin calc(var(--dur) * 3) linear var(--vfx-iter);
+}
+.vfx-aura.ripple i {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: calc(var(--size) * 5cqmin) solid var(--c);
+  opacity: 0;
+  animation: vfx-ripple var(--dur) ease-out var(--vfx-iter);
+}
+
+/* Tints */
+.vfx-tint {
+  background: radial-gradient(circle, color-mix(in srgb, var(--c) 60%, transparent) 0%, var(--c) 100%);
+  mix-blend-mode: hard-light;
+  opacity: var(--op);
+}
+.vfx-tint.pulse { animation: vfx-breathe var(--dur) ease-in-out var(--vfx-iter); }
+.vfx-tint.flicker { animation: vfx-flicker var(--dur) steps(1) var(--vfx-iter); }
+
+/* Icons */
+.vfx-icon {
+  inset: auto;
+  font-size: calc(var(--size) * 34cqmin);
+  line-height: 1;
+  color: var(--c);
+  opacity: var(--op);
+  text-shadow: 0 0 4cqmin #000, 0 0 8cqmin var(--c);
+  animation: vfx-bob var(--dur) ease-in-out var(--vfx-iter);
+}
+.vfx-icon.top { left: 50%; top: -18%; margin-left: calc(var(--size) * -17cqmin); }
+.vfx-icon.topRight { right: -12%; top: -12%; }
+.vfx-icon.bottomRight { right: -12%; bottom: -8%; }
+.vfx-icon.center { left: 50%; top: 50%; margin: calc(var(--size) * -17cqmin) 0 0 calc(var(--size) * -17cqmin); }
+
+/* Particles: each is an <i>; its shape is drawn by ::before so the <i> is free to move. */
+.vfx-particles i {
+  position: absolute;
+  left: var(--x);
+  top: 50%;
+  width: calc(var(--size) * var(--s) * 20cqmin);
+  height: calc(var(--size) * var(--s) * 20cqmin);
+  margin: calc(var(--size) * var(--s) * -10cqmin) 0 0 calc(var(--size) * var(--s) * -10cqmin);
+  opacity: 0;
+  animation-duration: calc(var(--dur) * (0.8 + var(--s) * 0.3));
+  animation-timing-function: ease-in-out;
+}
+.vfx-particles i::before {
+  content: attr(data-g);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.vfx-particles.dot i::before { border-radius: 50%; background: radial-gradient(circle, var(--c) 0 35%, transparent 70%); }
+.vfx-particles.spark i::before { inset: 0 32%; border-radius: 50%; background: var(--c); box-shadow: 0 0 4cqmin var(--c); }
+.vfx-particles.flame i::before {
+  border-radius: 50% 0 50% 50%;
+  rotate: -45deg;
+  scale: 0.8;
+  background: radial-gradient(circle at 60% 40%, #fff8 0 15%, var(--c) 45%, transparent 75%);
+  filter: blur(0.6cqmin);
+}
+.vfx-particles.bubble i::before { border-radius: 50%; border: max(1px, 2.5cqmin) solid var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
+.vfx-particles.star i::before { background: var(--c); clip-path: polygon(50% 0, 61% 38%, 100% 50%, 61% 62%, 50% 100%, 39% 62%, 0 50%, 39% 38%); filter: drop-shadow(0 0 2cqmin var(--c)); }
+.vfx-particles.drop i::before { inset: 10% 20%; border-radius: 0 50% 50% 50%; rotate: 45deg; background: var(--c); }
+.vfx-particles.glyph i::before { color: var(--c); font-size: calc(var(--size) * var(--s) * 15cqmin); line-height: 1; text-shadow: 0 0 3cqmin var(--c); }
+
+.vfx-particles.rise i { top: 75%; animation-name: vfx-rise; }
+.vfx-particles.fall i { top: 0%; animation-name: vfx-fall; }
+.vfx-particles.swirl i { top: 85%; animation-name: vfx-swirl; }
+.vfx-particles.orbit i { left: 50%; animation-name: vfx-orbit; animation-timing-function: linear; }
+.vfx-particles.burst i { left: 50%; animation-name: vfx-burst; animation-timing-function: ease-out; }
+
+@keyframes vfx-rise {
+  0% { opacity: 0; translate: 0 0; }
+  20% { opacity: var(--op); }
+  100% { opacity: 0; translate: calc(var(--drift) * 18cqmin) -95cqh; }
+}
+@keyframes vfx-fall {
+  0% { opacity: 0; translate: 0 -10cqh; }
+  20% { opacity: var(--op); }
+  100% { opacity: 0; translate: calc(var(--drift) * 10cqmin) 95cqh; }
+}
+@keyframes vfx-swirl {
+  0% { opacity: 0; translate: 0 0; }
+  20% { opacity: var(--op); }
+  25% { translate: calc(var(--drift) * 30cqmin + 14cqmin) -25cqh; }
+  50% { translate: calc(var(--drift) * 30cqmin - 14cqmin) -50cqh; }
+  75% { translate: calc(var(--drift) * 30cqmin + 14cqmin) -75cqh; }
+  100% { opacity: 0; translate: calc(var(--drift) * 30cqmin) -100cqh; }
+}
+@keyframes vfx-orbit {
+  0% { opacity: var(--op); transform: rotate(var(--a)) translateX(calc(var(--size) * 62cqmin)); }
+  100% { opacity: var(--op); transform: rotate(calc(var(--a) + 360deg)) translateX(calc(var(--size) * 62cqmin)); }
+}
+@keyframes vfx-burst {
+  0% { opacity: 0; transform: rotate(var(--a)) translateX(10cqmin) scale(0.4); }
+  15% { opacity: var(--op); }
+  100% { opacity: 0; transform: rotate(var(--a)) translateX(calc(var(--size) * 85cqmin)) scale(1); }
+}
+@keyframes vfx-breathe {
+  0%, 100% { opacity: calc(var(--op) * 0.55); }
+  50% { opacity: var(--op); }
+}
+@keyframes vfx-flicker {
+  0%, 30%, 55%, 100% { opacity: var(--op); }
+  20%, 45%, 80% { opacity: calc(var(--op) * 0.3); }
+}
+@keyframes vfx-spin { to { rotate: 360deg; } }
+@keyframes vfx-ripple {
+  0% { opacity: var(--op); scale: 1; }
+  100% { opacity: 0; scale: 1.7; }
+}
+
+/* Motion: on the token itself (motionStyle in VfxView.tsx). --amp is the layer's size times its stack strength. */
+@keyframes vfx-shake {
+  0%, 100% { translate: 0 0; }
+  20% { translate: calc(var(--amp) * -3%) 0; }
+  40% { translate: calc(var(--amp) * 3%) calc(var(--amp) * 1%); }
+  60% { translate: calc(var(--amp) * -2%) calc(var(--amp) * -1%); }
+  80% { translate: calc(var(--amp) * 2%) 0; }
+}
+@keyframes vfx-bob {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 calc(var(--amp) * -8%); }
+}
+@keyframes vfx-sway {
+  0%, 100% { rotate: 0deg; }
+  25% { rotate: calc(var(--amp) * -8deg); }
+  75% { rotate: calc(var(--amp) * 8deg); }
+}
+@keyframes vfx-throb {
+  0%, 100% { scale: 1; }
+  50% { scale: calc(1 + var(--amp) * 0.08); }
+}
+
+/* People who ask for less motion get the look without the movement: everything holds still mid-way. */
+@media (prefers-reduced-motion: reduce) {
+  .vfx, .vfx * { animation-play-state: paused !important; }
+  .token[style*="vfx-"] { animation: none !important; }
+}

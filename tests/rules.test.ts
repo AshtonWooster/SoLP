@@ -458,6 +458,31 @@ test("effect library: members read it; players' effects need the GM's approval u
   await assertFails(setDoc(fx("stranger", "s"), { ...burn, createdBy: "stranger" }));
 });
 
+test("VFX library: members read it; only the GM makes, changes and deletes VFX, kept small", async () => {
+  const v = (who: string, id: string) => doc(as(who), "games", GAME, "vfx", id);
+  const layer = { id: "l1", type: "aura", color: "#ff8a3d", size: 1, speed: 1, opacity: 0.8, aura: "glow" };
+  const flames = { name: "Flames", layers: [layer], statuses: ["preset:burn"], play: "loop", updatedAt: 1 };
+  await assertSucceeds(setDoc(v("gm", "flames"), flames));
+  await assertSucceeds(getDocs(collection(as("p1"), "games", GAME, "vfx")));
+  await assertFails(getDocs(collection(as("stranger"), "games", GAME, "vfx")));
+  await assertFails(setDoc(v("p1", "mine"), flames));
+  await assertFails(updateDoc(v("p1", "flames"), { name: "Mine now" }));
+  await assertFails(deleteDoc(v("p1", "flames")));
+  // Only small data: no unknown fields (like rendered media), and a cap on layers and status links.
+  await assertFails(setDoc(v("gm", "video"), { ...flames, video: "data:video/mp4;base64,AAAA" }));
+  await assertFails(setDoc(v("gm", "many"), { ...flames, layers: Array(7).fill(layer) }));
+  await assertFails(setDoc(v("gm", "odd"), { ...flames, play: "sometimes" }));
+  await assertSucceeds(updateDoc(v("gm", "flames"), { play: "gain", scaleWithStacks: true }));
+  await assertSucceeds(updateDoc(v("gm", "flames"), { play: "proc" }));
+  await assertSucceeds(updateDoc(v("gm", "flames"), { play: "end" }));
+  await assertSucceeds(deleteDoc(v("gm", "flames")));
+});
+
+test("Status effect VFX is a Game setting only the GM changes", async () => {
+  await assertFails(updateDoc(doc(as("p1"), "games", GAME), { "settings.statusVfx": true }));
+  await assertSucceeds(updateDoc(doc(as("gm"), "games", GAME), { "settings.statusVfx": true }));
+});
+
 test("only the GM sees the invite code and GM notes", async () => {
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "meta")));
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "notes")));

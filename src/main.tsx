@@ -20,6 +20,7 @@ import { Npcs } from "./screens/Npcs.tsx";
 import { Settings } from "./screens/Settings.tsx";
 import { Items } from "./screens/Items.tsx";
 import { Effects } from "./screens/Effects.tsx";
+import { Vfx } from "./screens/Vfx.tsx";
 import { Account } from "./screens/Account.tsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { CookieBanner } from "./components/CookieBanner.tsx";
@@ -87,6 +88,7 @@ function App() {
           <Route path="/games/:id/enemies" element={<OldEnemiesLink />} />
           <Route path="/games/:id/items" element={authed(<Items />)} />
           <Route path="/games/:id/effects" element={authed(<Effects />)} />
+          <Route path="/games/:id/vfx" element={authed(<Vfx />)} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <CookieBanner />

@@ -28,6 +28,7 @@ import { useHost } from "../net/hooks.ts";
 import { useDrag } from "../components/drag.ts";
 import { gmTurnToken } from "../../shared/combat.ts";
 import { BLANK_DRAFT, GmPopups, type PopupDraft } from "../components/GmPopups.tsx";
+import { useStatusVfx } from "../components/vfx/useVfx.ts";
 
 /** The GM's laptop: runs the table and can override anything. */
 export function Gm() {
@@ -41,6 +42,8 @@ export function Gm() {
   const { step: fx, table: mapTable } = useClashPlayback(snapshot.table);
   // Speed rolls tumble on the map and the turn order deals out once they land.
   const speed = useSpeedRollPlayback(snapshot.table);
+  // Status effect VFX, when they're on in Game settings.
+  const vfx = useStatusVfx(isGm ? id : "", game.data);
   const online = new Set(snapshot.online);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
@@ -268,6 +271,7 @@ export function Gm() {
                   state={mapTable ?? table}
                   fx={fx}
                   speed={speed}
+                  vfx={vfx}
                   selectedId={selectedId}
                   activeId={table.combat ? activeToken(table)?.id : undefined}
                   onTokenClick={(t) => {

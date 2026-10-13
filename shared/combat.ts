@@ -475,6 +475,7 @@ function effectOps(table: TableState): EffectOps<Token> {
       if (moved) log(table, `  ${t.name} is ${n > 0 ? "pushed" : "pulled"} ${moved} ${moved === 1 ? "tile" : "tiles"}.`);
     },
     log: (line) => log(table, line),
+    proc: (t, defId) => table.combat && recordProc(table.combat, t.id, defId),
     speed: (t) => table.combat?.order.find((x) => x.tokenId === t.id)?.speed ?? 0,
     resource: (t, key) => t.resources[key],
     hand: (t) => table.combat?.decks[t.id]?.hand.length ?? 0,
@@ -677,11 +678,20 @@ const fxDie = (d: Dice, power: number): FxDie => ({ kind: d.kind, sides: d.sides
 const fxState = (...tokens: Token[]): FxState =>
   Object.fromEntries(tokens.map((t) => [t.id, { resources: { ...t.resources }, ...(t.status ? { status: { ...t.status } } : {}) }]));
 
+/** Status Effects going off kept for screens to catch up on: enough for one busy clash. */
+export const MAX_PROCS = 16;
+
 /** Remember a resolution for the clash animation; only the latest few are kept. */
 function recordFx(c: CombatState, fx: Omit<ClashFx, "id">) {
   if (fx.rounds.length === 0) return;
   c.fxSeq = (c.fxSeq ?? 0) + 1;
   c.fx = [...(c.fx ?? []), { ...fx, id: c.fxSeq }].slice(-8);
+}
+
+/** Remember a status Effect going off, for its VFX; only the latest few are kept. */
+export function recordProc(c: CombatState, tokenId: string, defId: string) {
+  c.procSeq = (c.procSeq ?? 0) + 1;
+  c.procs = [...(c.procs ?? []), { id: c.procSeq, tokenId, defId }].slice(-MAX_PROCS);
 }
 
 /** Unused Defensive Dice become Counter Dice on their owner. */

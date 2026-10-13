@@ -17,6 +17,7 @@
 //   games/{gameId}/signals/{id}     SignalDoc          connection handshakes (see src/net)
 //   games/{gameId}/characters/{uid} Character          members read; owner or GM write (shared/character.ts)
 //   games/{gameId}/enemies/{id}     NpcTemplate        GM only (shared/character.ts)
+//   games/{gameId}/vfx/{id}         VfxDef             members read; GM write (shared/vfx.ts)
 
 import type { ThemeId } from "./account.ts";
 import type { DeckEntry, Dice, NpcSide, Page, ResistanceSet } from "./character.ts";
@@ -83,6 +84,11 @@ export interface GameSettings {
    * effects can check and react to. Off unless the GM turns it on: then nobody gains Emotion.
    */
   emotionLevels?: boolean;
+  /**
+   * Status Effects play the VFX the GM built for them in the VFX editor (shared/vfx.ts) on the map.
+   * Off unless the GM turns it on: then the map looks as it always did and loads no VFX.
+   */
+  statusVfx?: boolean;
   /**
    * How Rank and Stats set max Health, Stagger Resist, Sanity and Light (shared/formulas.ts). New
    * games start with the standard formulas; a game from before formulas has none saved and keeps
@@ -368,8 +374,20 @@ export interface CombatState {
   fxSeq?: number;
   /** The latest Speed roll (combat starting, a re-roll, or someone joining), so screens can animate it. */
   speedRoll?: SpeedRoll;
+  /** Status Effects that just went off (their rules fired), newest last, so screens can play their VFX (shared/vfx.ts). */
+  procs?: EffectProc[];
+  /** Id of the newest entry in procs. */
+  procSeq?: number;
   /** Pages each character has used this round, by token id. */
   used?: Record<string, number>;
+}
+
+/** A status Effect going off on a character: its rules fired. */
+export interface EffectProc {
+  id: number;
+  tokenId: string;
+  /** The Effect's library id. */
+  defId: string;
 }
 
 /** Who just rolled Speed. A new id each roll, so screens play each roll once. */
