@@ -5,8 +5,9 @@ import type { Character } from "../../shared/character.ts";
 import { characterChecks } from "../../shared/ruleset.ts";
 import { pendingCount } from "../../shared/permissions.ts";
 import { playerList } from "../../shared/players.ts";
-import { type GameDoc, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
+import { type GameDoc, type GmMeta, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
+import { CopyButton } from "../components/CopyButton.tsx";
 import { PlayerPreview } from "../components/PlayerPreview.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
@@ -18,6 +19,8 @@ export function GamePage() {
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
   const characters = useCollection<Character>(game.data ? `games/${id}/characters` : null);
+  // Only the GM can read the invite code; the full invite (link, New code) lives in Game settings.
+  const meta = useDoc<GmMeta>(isGm ? `games/${id}/gm/meta` : null);
 
   if (game.error || (!game.loading && !game.data)) {
     return (
@@ -110,7 +113,10 @@ export function GamePage() {
         </div>
 
         <aside className="game-players">
-          <h3>Players ({players.length})</h3>
+          <div className="row-between">
+            <h3>Players ({players.length})</h3>
+            {isGm && meta.data?.inviteCode && <CopyButton text={meta.data.inviteCode} label="Copy invite code" />}
+          </div>
           {players.length === 0 && <p className="muted">No players yet.</p>}
           <ul className="plain">
             {players.map((p) => {
