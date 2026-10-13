@@ -1,11 +1,12 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { validTargets } from "../../shared/engine.ts";
 import { withheld } from "../../shared/secrets.ts";
-import type { TableState, Token } from "../../shared/types.ts";
+import { dragItemTo, type TableLayer } from "../../shared/maps.ts";
+import type { MapItem, TableState, Token } from "../../shared/types.ts";
 import { arrowHitSegment, boardArrows } from "./arrows.ts";
 import { FxBubble, type FxStep } from "./ClashFx.tsx";
 import { SlotPages } from "./SlotPages.tsx";
-import { AssetLayer, PinLayer } from "./maps/MapLayers.tsx";
+import { AssetLayer, PinLayer, type GrabItem } from "./maps/MapLayers.tsx";
 import { FogLayer } from "./maps/Fog.tsx";
 
 interface Props {
@@ -21,9 +22,20 @@ interface Props {
   fx?: FxStep | null;
   /** How to draw fog of war: a tint the GM sees through, or the players' solid cover. Missing: no fog. */
   fog?: "gm" | "players";
+  /**
+   * The GM's layer: on "assets" or "pins" those can be dragged around (tokens can't be clicked then).
+   * Missing or "tokens": the map works as usual.
+   */
+  layer?: TableLayer;
+  /** Snap dragged assets and pins to the grid (Alt flips it for one drag). */
+  snap?: boolean;
+  /** An asset or pin was dragged to a new spot, in tiles. */
+  onMoveItem?: (itemId: string, to: { x: number; y: number }) => void;
   /** Drawn over the whole map (the GM's fog drawing tool). */
   children?: ReactNode;
 }
+
+type ItemDrag = { item: MapItem; pointer: number; sx: number; sy: number; to?: { x: number; y: number } };
 
 /** Tokens the Page being aimed can target, and those already picked (Mass Attacks). */
 export function aimTargets(table: TableState): { targetable: Set<string>; picked: Set<string> } {
@@ -39,7 +51,7 @@ export function aimTargets(table: TableState): { targetable: Set<string>; picked
  * The battle map: the background image, the assets layer, a tile grid with tokens on it, and pins on
  * top. Used full-screen on the board, smaller on the GM screen (where hidden things show faded).
  */
-export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, fog, children }: Props) {
+export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, fog, layer = "tokens", snap = true, onMoveItem, children }: Props) {
   const { width, height } = state.map;
   const { targetable, picked } = aimTargets(state);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -69,6 +81,51 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
     }
     last.current = { mapId: state.map.id, at: new Map(Object.values(state.tokens).map((t) => [t.id, { x: t.x, y: t.y }])) };
   });
+  // Dragging an asset or pin: it follows the pointer, and is saved once on release.
+  const [drag, setDrag] = useState<ItemDrag | null>(null);
+  const dragged = useRef(false);
+  const editing = layer !== "tokens" && !!onMoveItem;
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerId !== drag.pointer) return;
+      // Measured each time, so it stays right however the map is zoomed or scaled.
+      const r = gridRef.current?.getBoundingClientRect();
+      if (!r || !r.width) return;
+      if (!drag.to && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) <= 3) return;
+      const to = dragItemTo(drag.item, layer, ((e.clientX - drag.sx) / r.width) * width, ((e.clientY - drag.sy) / r.height) * height, e.altKey ? !snap : snap);
+      if (to) setDrag({ ...drag, to });
+    };
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId !== drag.pointer) return;
+      setDrag(null);
+      dragged.current = !!drag.to;
+      if (drag.to && (drag.to.x !== drag.item.x || drag.to.y !== drag.item.y)) onMoveItem?.(drag.item.id, drag.to);
+    };
+    // A second finger (a pinch to zoom) drops the drag without moving anything.
+    const onDown = (e: PointerEvent) => e.pointerId !== drag.pointer && setDrag(null);
+    const onCancel = (e: PointerEvent) => e.pointerId === drag.pointer && setDrag(null);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("pointerdown", onDown, true);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("pointerdown", onDown, true);
+    };
+  });
+  const grab: GrabItem = (e, item) => {
+    if (e.button !== 0 || !dragItemTo(item, layer, 0, 0, false)) return;
+    e.stopPropagation();
+    e.preventDefault();
+    dragged.current = false;
+    setDrag({ item, pointer: e.pointerId, sx: e.clientX, sy: e.clientY });
+  };
+  // The map as drawn, with the item being dragged where the pointer has it.
+  const drawn = drag?.to ? { ...state.map, items: state.map.items?.map((i) => (i.id === drag.item.id ? { ...i, ...drag.to } : i)) } : state.map;
+
   const cells = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -94,7 +151,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
   return (
     <div
       ref={gridRef}
-      className={"grid" + (state.map.hideGrid ? " no-lines" : "")}
+      className={"grid" + (state.map.hideGrid ? " no-lines" : "") + (editing ? ` layer-${layer}` : "") + (drag?.to ? " dragging-item" : "")}
       style={{
         gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
         gridTemplateRows: `repeat(${height}, minmax(0, 1fr))`,
@@ -102,7 +159,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
         ...(state.map.background ? { backgroundImage: `url("${state.map.background}")`, backgroundSize: "100% 100%" } : {}),
       }}
     >
-      <AssetLayer map={state.map} />
+      <AssetLayer map={drawn} onGrab={editing && layer === "assets" ? grab : undefined} />
       {cells}
       {fog && <FogLayer map={state.map} gm={fog === "gm"} />}
       {Object.values(state.tokens).map((t) => {
@@ -200,7 +257,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
             </div>
           </div>
         ))}
-      <PinLayer map={state.map} />
+      <PinLayer map={drawn} onGrab={editing && layer === "pins" ? grab : undefined} wasDragged={() => dragged.current} />
       {openSlots && <SlotPages state={state} slotIds={openSlots} onClose={() => setOpenSlots(null)} />}
       {children}
     </div>

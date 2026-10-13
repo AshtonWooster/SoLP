@@ -14,7 +14,9 @@ import { PlayerPreview } from "../components/PlayerPreview.tsx";
 import { TokenPopup } from "../components/TokenPopup.tsx";
 import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
-import { MapEditor } from "../components/maps/MapEditor.tsx";
+import { MapEditor, useSnap } from "../components/maps/MapEditor.tsx";
+import { LayerSwitch } from "../components/maps/LayerSwitch.tsx";
+import type { TableLayer } from "../../shared/maps.ts";
 import { MapList, MapPreview, NewMapForm } from "../components/maps/MapsList.tsx";
 import { FogDraw, FogTools, type FogMode } from "../components/maps/Fog.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
@@ -44,6 +46,9 @@ export function Gm() {
   const [previewId, setPreviewId] = useState<string | null>(null);
   // Drawing fog of war over the table's map, when it's on in Game settings.
   const [fogMode, setFogMode] = useState<FogMode>(null);
+  // Which layer clicks on the table's map work on: tokens as usual, or dragging assets or pins.
+  const [layer, setLayer] = useState<TableLayer>("tokens");
+  const [snap, setSnap] = useSnap();
   // Player characters (for the player list and their tokens' gear) and the GM's own characters.
   const characters = useCollection<Character>(isGm ? `games/${id}/characters` : null);
   const templates = useCollection<NpcTemplate>(isGm ? `games/${id}/enemies` : null);
@@ -215,6 +220,7 @@ export function Gm() {
                   table={table}
                   onPlace={(templateId, template) => {
                     setPlacing({ templateId, template });
+                    setLayer("tokens");
                     setSelectedId(null);
                     close();
                   }}
@@ -224,37 +230,62 @@ export function Gm() {
             {!table.combat && <ToolbarMenu title="Start combat" label="Start combat">{(close) => <CombatStart table={table} act={act} onStarted={close} />}</ToolbarMenu>}
             <FogTools mode={fogMode} setMode={setFogMode} onAll={(hidden) => act({ type: "fogAll", mapId: table.map.id!, hidden })} />
             <span className="muted small gm-hint">
-              {fogMode ? `Drag across the map to ${fogMode} an area. Esc to stop.` : "Click a token to see it; with it open, click a tile to move it."}
+              {fogMode
+                ? `Drag across the map to ${fogMode} an area. Esc to stop.`
+                : layer === "assets"
+                  ? "Drag an asset to move it. Hold Alt to flip snapping."
+                  : layer === "pins"
+                    ? "Drag a pin to move it, or click it to read its note."
+                    : "Click a token to see it; with it open, click a tile to move it."}
             </span>
           </div>
         )}
         <div className={"gm-map-area" + (placing ? " placing" : "")} style={table ? ({ "--map-ratio": `${table.map.width / table.map.height}` } as React.CSSProperties) : undefined}>
           {table && (
-            <Grid
-              state={mapTable ?? table}
-              fx={fx}
-              selectedId={selectedId}
-              activeId={table.combat ? activeToken(table)?.id : undefined}
-              onTokenClick={(t) => {
-                // While a Page is being aimed, clicking a lit token targets it.
-                const aim = table.combat?.aim;
-                if (aim && aimTargets(table).targetable.has(t.id)) {
-                  const page = table.combat!.pages[aim.pageId] ?? table.tokens[aim.tokenId]?.pages?.find((p) => p.id === aim.pageId);
-                  act(page && isMassAttack(page.type) ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
-                  return;
-                }
-                setSelectedId(t.id === selectedId ? null : t.id);
-              }}
-              onCellClick={(x, y) => {
-                if (placing) {
-                  act({ type: "spawnEnemy", templateId: placing.templateId, template: npcSpawnData(placing.template, formulas), x, y });
-                  setPlacing(null);
-                } else if (selectedId) act({ type: "move", tokenId: selectedId, x, y });
-              }}
-              fog="gm"
-            >
-              {fogMode && <FogDraw map={table.map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId: table.map.id!, ...r })} />}
-            </Grid>
+            // The map and its layer switch, which sits on the map's bottom-left corner.
+            <div className="gm-map-frame">
+              <Grid
+                state={mapTable ?? table}
+                fx={fx}
+                selectedId={selectedId}
+                activeId={table.combat ? activeToken(table)?.id : undefined}
+                onTokenClick={(t) => {
+                  // While a Page is being aimed, clicking a lit token targets it.
+                  const aim = table.combat?.aim;
+                  if (aim && aimTargets(table).targetable.has(t.id)) {
+                    const page = table.combat!.pages[aim.pageId] ?? table.tokens[aim.tokenId]?.pages?.find((p) => p.id === aim.pageId);
+                    act(page && isMassAttack(page.type) ? { type: "aimTarget", tokenId: t.id } : { type: "slot", targets: [t.id] });
+                    return;
+                  }
+                  setSelectedId(t.id === selectedId ? null : t.id);
+                }}
+                layer={layer}
+                snap={snap}
+                onMoveItem={(itemId, to) => act({ type: "updateMapItem", mapId: table.map.id!, itemId, patch: to })}
+                onCellClick={(x, y) => {
+                  if (layer !== "tokens") return;
+                  if (placing) {
+                    act({ type: "spawnEnemy", templateId: placing.templateId, template: npcSpawnData(placing.template, formulas), x, y });
+                    setPlacing(null);
+                  } else if (selectedId) act({ type: "move", tokenId: selectedId, x, y });
+                }}
+                fog="gm"
+              >
+                {fogMode && <FogDraw map={table.map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId: table.map.id!, ...r })} />}
+              </Grid>
+              <LayerSwitch
+                layer={layer}
+                onLayer={(l) => {
+                  setLayer(l);
+                  if (l !== "tokens") {
+                    setSelectedId(null);
+                    setPlacing(null);
+                  }
+                }}
+                snap={snap}
+                onSnap={setSnap}
+              />
+            </div>
           )}
           {table?.combat && <EnemyTurnPopup table={table} act={act} />}
           {selected && (
