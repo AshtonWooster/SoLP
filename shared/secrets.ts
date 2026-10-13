@@ -165,11 +165,11 @@ function concealCombat(c: CombatState, tokens: Record<string, Token>): CombatSta
 
 /**
  * The table a player's phone, or the shared board, gets from the host (after `playerView` has taken
- * out what the GM hid on the map): the GM's other maps aren't sent, and nothing the GM keeps secret
+ * out what the GM hid on the map): the GM's other maps and map folders aren't sent, and nothing the GM keeps secret
  * about their characters is either.
  */
 export function tableForPlayers(full: TableState): TableState {
-  const { maps: _maps, ...table } = full;
+  const { maps: _maps, mapFolders: _folders, ...table } = full;
   const tokens = table.tokens;
   const hidden = (id: string, part: SheetPart) => {
     const t = tokens[id];

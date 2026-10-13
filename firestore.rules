@@ -102,7 +102,7 @@ service cloud.firestore {
         allow read: if isGm(gameId) || (doc == "status" && isMember(gameId));
         // Autosave from the GM's hosting tab.
         allow write: if doc == "state" && isGm(gameId)
-          && request.resource.data.keys().hasOnly(["map", "maps", "tokens", "log", "combat"]);
+          && request.resource.data.keys().hasOnly(["map", "maps", "mapFolders", "tokens", "log", "combat"]);
         allow write: if doc == "status" && isGm(gameId)
           && request.resource.data.keys().hasOnly(["combat"])
           && request.resource.data.combat is bool;

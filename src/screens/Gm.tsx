@@ -138,7 +138,7 @@ export function Gm() {
           <>
             <aside className="gm-maps-list">
               <h3>Maps</h3>
-              <MapList table={table} editingId={editing} onPick={setPreviewId} />
+              <MapList table={table} editingId={editing} onPick={setPreviewId} act={act} />
               <NewMapForm act={act} onCreated={setEditingId} />
             </aside>
             <section className="gm-maps-editor">

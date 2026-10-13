@@ -432,6 +432,13 @@ export interface MapInfo {
   items?: MapItem[];
   /** Fog of war over this map (shared/fog.ts). Missing: nothing is hidden. */
   fog?: Fog;
+  /** The GM's folder this map is sorted into (shared/mapFolders.ts). Missing: the top level. */
+  folder?: string;
+}
+
+/** A folder in the map editor's list of maps. */
+export interface MapFolder {
+  name: string;
 }
 
 /** An image on a map's asset layer, or a pin with a note. Positions and sizes are in tiles. */
@@ -478,6 +485,8 @@ export interface TableState {
   map: MapInfo;
   /** The GM's other maps, by id. The current one is `map`, with its tokens in `tokens`. */
   maps?: Record<string, SavedMap>;
+  /** Folders the GM sorts the maps into, by id (shared/mapFolders.ts). */
+  mapFolders?: Record<string, MapFolder>;
   tokens: Record<string, Token>;
   log: string[];
   combat?: CombatState;
@@ -560,6 +569,12 @@ export type TableAction =
   /** Move the players to another map. */
   | { type: "switchMap"; mapId: string }
   | { type: "deleteMap"; mapId: string }
+  /** Folders for sorting maps (shared/mapFolders.ts). Deleting one moves its maps to the top level. */
+  | { type: "createMapFolder"; id?: string; name: string }
+  | { type: "renameMapFolder"; folderId: string; name: string }
+  | { type: "deleteMapFolder"; folderId: string }
+  /** folderId null: back to the top level. */
+  | { type: "setMapFolder"; mapId: string; folderId: string | null }
   // Combat (Act 8). The GM runs it; whoever's turn it is can move, use Pages and end their turn.
   | { type: "startCombat"; tokenIds: string[] }
   | { type: "endCombat" }

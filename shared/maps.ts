@@ -94,6 +94,8 @@ export function createMap(
     // A copy takes the source's look (background, assets, pins) but none of its tokens.
     if (source.backgroundHidden) map.backgroundHidden = true;
     if (source.hideGrid) map.hideGrid = true;
+    // A duplicate lands next to the original, in the same folder.
+    if (source.folder && table.mapFolders?.[source.folder]) map.folder = source.folder;
     if (source.items?.length) map.items = source.items.map((i) => ({ ...structuredClone(i), id: newId() }));
     if (source.fog) {
       map.fog = structuredClone(source.fog);
@@ -374,7 +376,7 @@ export function arrivalSpot(map: SavedMap, tokenId: string, index: number) {
  * the fog. The fog comes along so screens can cover it.
  */
 export function visibleMap<M extends MapInfo>(map: M): M {
-  const { background, backgroundHidden: _hidden, items, fog, ...rest } = map;
+  const { background, backgroundHidden: _hidden, items, fog, folder: _folder, ...rest } = map;
   const out = { ...rest } as M;
   if (background && !map.backgroundHidden) out.background = background;
   const mask = fogMask(map);
