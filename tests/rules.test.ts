@@ -1,4 +1,5 @@
 // Security rules tests. Run with `npm run test:rules` (starts the emulators for you).
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, before, beforeEach, test } from "node:test";
 import {
@@ -121,6 +122,28 @@ test("renaming a game: only the GM, to a name of 1-60 characters that isn't blan
   await assertSucceeds(updateDoc(game("gm"), { name: "x".repeat(60) }));
   // Renaming goes with other GM changes, but still can't hand the game over.
   await assertFails(updateDoc(game("gm"), { name: "Taken", gmId: "p1" }));
+});
+
+test("the game's image: only the GM sets or removes it, as a link to an uploaded image", async () => {
+  const game = (who: string) => doc(as(who), "games", GAME);
+  const url = "https://firebasestorage.googleapis.com/v0/b/demo-solp.appspot.com/o/games%2Fgame1%2Fassets%2Fcover%2Fa.jpg?alt=media";
+  await assertFails(updateDoc(game("p1"), { image: url }));
+  await assertFails(updateDoc(game("stranger"), { image: url }));
+  // A player changing their own display name can't slip an image in with it.
+  await assertFails(updateDoc(game("p1"), { "members.p1.displayName": "Ok", image: url }));
+  await assertSucceeds(updateDoc(game("gm"), { image: url }));
+  // The emulators serve images over plain http.
+  await assertSucceeds(updateDoc(game("gm"), { image: "http://127.0.0.1:9199/v0/b/demo-solp.appspot.com/o/a.jpg" }));
+  await assertFails(updateDoc(game("gm"), { image: "javascript:alert(1)" }));
+  await assertFails(updateDoc(game("gm"), { image: "" }));
+  await assertFails(updateDoc(game("gm"), { image: 42 }));
+  await assertFails(updateDoc(game("gm"), { image: "https://x.test/" + "a".repeat(2048) }));
+  // Renaming and changing settings still work on a game with an image.
+  await assertSucceeds(updateDoc(game("gm"), { name: "With a picture", "settings.emotionLevels": true }));
+  await assertFails(updateDoc(game("p1"), { image: deleteField() }));
+  await assertSucceeds(updateDoc(game("gm"), { image: deleteField() }));
+  const after = await getDoc(game("gm"));
+  assert.equal(after.data()?.image, undefined);
 });
 
 test("account settings: you set your own display name and theme, within limits", async () => {
@@ -460,6 +483,16 @@ test("storage: GM uploads game images, members view, others can't", async () => 
     uploadBytes(ref(env.authenticatedContext("gm").storage(), `games/${GAME}/assets/map.svg`), png, { contentType: "image/svg+xml" }),
   );
   await assertSucceeds(uploadBytes(ref(env.authenticatedContext("gm").storage(), `games/${GAME}/assets/map.webp`), png, { contentType: "image/webp" }));
+  await assertSucceeds(getBytes(ref(env.authenticatedContext("p1").storage(), path)));
+  await assertFails(getBytes(ref(env.authenticatedContext("stranger").storage(), path)));
+});
+
+test("storage: only the GM uploads the game's image; members can view it", async () => {
+  const png = new Uint8Array([137, 80, 78, 71]);
+  const path = `games/${GAME}/assets/cover/a.jpg`;
+  await assertSucceeds(uploadBytes(ref(env.authenticatedContext("gm").storage(), path), png, { contentType: "image/jpeg" }));
+  await assertFails(uploadBytes(ref(env.authenticatedContext("p1").storage(), `games/${GAME}/assets/cover/b.jpg`), png, { contentType: "image/jpeg" }));
+  await assertFails(uploadBytes(ref(env.authenticatedContext("stranger").storage(), `games/${GAME}/assets/cover/c.jpg`), png, { contentType: "image/jpeg" }));
   await assertSucceeds(getBytes(ref(env.authenticatedContext("p1").storage(), path)));
   await assertFails(getBytes(ref(env.authenticatedContext("stranger").storage(), path)));
 });

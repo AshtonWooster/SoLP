@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { NpcTemplate } from "../../../shared/character.ts";
 import { newId } from "../../../shared/engine.ts";
-import { arrivalSpot, type Corner, MAP_MAX, MAP_MIN, moveRect, type Rect, resizeRect, snapValue, travels } from "../../../shared/maps.ts";
+import { arrivalSpot, type Corner, MAP_MAX, MAP_MIN, movePin, moveRect, type Rect, resizeRect, snapValue, travels } from "../../../shared/maps.ts";
 import { normalizeNpc, npcSpawnData } from "../../../shared/ruleset.ts";
 import type { MapInfo, MapItem, SavedMap, TableAction, TableState, Token } from "../../../shared/types.ts";
 import { useCollection, useStatFormulas } from "../../api.ts";
@@ -29,7 +29,7 @@ const BASE_CELL = 44;
 const HISTORY_LIMIT = 60;
 
 /** The GM's choice to snap to the grid, remembered on this device. */
-function useSnap(): [boolean, (on: boolean) => void] {
+export function useSnap(): [boolean, (on: boolean) => void] {
   const [snap, setSnap] = useState(() => {
     try {
       return localStorage.getItem("solp.mapSnap") !== "off";
@@ -240,8 +240,7 @@ export function MapEditor({
       if (drag.kind === "move") setDrag({ ...drag, moved, to: moveRect(drag.from, dx, dy, snapNow) });
       else if (drag.kind === "resize") setDrag({ ...drag, moved, to: resizeRect(drag.from, drag.corner!, dx, dy, { snap: snapNow, keepAspect: e.shiftKey }) });
       else if (drag.kind === "pin") {
-        const at = (v: number) => (snapNow ? Math.floor(v) + 0.5 : snapValue(v, false));
-        setDrag({ ...drag, moved, to: { x: at(drag.from.x + dx), y: at(drag.from.y + dy) } });
+        setDrag({ ...drag, moved, to: movePin(drag.from, dx, dy, snapNow) });
       } else if (drag.kind === "token") {
         const tile = (v: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(v)));
         setDrag({ ...drag, moved, to: { x: tile(drag.from.x + dx, map.width), y: tile(drag.from.y + dy, map.height) } });
