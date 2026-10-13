@@ -145,6 +145,7 @@ function ProfileTab({ t, update, gameId }: { t: NpcTemplate; update: Update; gam
         <div className="npc-id-top">
           <ImageUpload
             folder={`games/${gameId}/assets/enemies`}
+            kind="portrait"
             label="Portrait"
             ring={t.color}
             value={t.portrait}

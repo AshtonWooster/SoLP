@@ -5,8 +5,7 @@ import { arrivalSpot, type Corner, MAP_MAX, MAP_MIN, moveRect, type Rect, resize
 import { normalizeNpc, npcSpawnData } from "../../../shared/ruleset.ts";
 import type { MapInfo, MapItem, SavedMap, TableAction, TableState, Token } from "../../../shared/types.ts";
 import { useCollection, useStatFormulas } from "../../api.ts";
-import { friendlyError } from "../../firebase.ts";
-import { ImageUpload, IMAGE_ACCEPT, uploadImage } from "../ImageUpload.tsx";
+import { ImageUpload, IMAGE_ACCEPT, useImageUpload } from "../ImageUpload.tsx";
 import { NumberField } from "../NumberField.tsx";
 import { PIN_COLORS, Pin } from "./MapLayers.tsx";
 import { FogDraw, FogLayer, FogTools, type FogMode } from "./Fog.tsx";
@@ -532,31 +531,25 @@ export function MapEditor({
 }
 
 function UploadButton({ gameId, onUploaded, onError }: { gameId: string; onUploaded: (url: string, name: string) => void; onError: (m: string) => void }) {
-  const [busy, setBusy] = useState(false);
+  const { busy, pick, editor } = useImageUpload(`games/${gameId}/assets/maps`, "mapImage", (url, file) => onUploaded(url, file.name), onError);
   return (
-    <label className={"button-like" + (busy ? " disabled" : "")} title="Add an image to the asset layer">
-      {busy ? "Uploading…" : "🖼 Add image"}
-      <input
-        type="file"
-        accept={IMAGE_ACCEPT}
-        hidden
-        disabled={busy}
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (!file) return;
-          setBusy(true);
-          onError("");
-          try {
-            onUploaded(await uploadImage(`games/${gameId}/assets/maps`, file), file.name);
-          } catch (err) {
-            onError(friendlyError(err));
-          } finally {
-            setBusy(false);
-          }
-        }}
-      />
-    </label>
+    <>
+      <label className={"button-like" + (busy ? " disabled" : "")} title="Add an image to the asset layer">
+        {busy ? "Uploading…" : "🖼 Add image"}
+        <input
+          type="file"
+          accept={IMAGE_ACCEPT}
+          hidden
+          disabled={busy}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            pick(file);
+          }}
+        />
+      </label>
+      {editor}
+    </>
   );
 }
 
@@ -741,7 +734,7 @@ function MapSettings({ gameId, map, act }: { gameId: string; map: MapInfo & { id
           tiles ({MAP_MIN}–{MAP_MAX})
         </span>
       </div>
-      <ImageUpload folder={`games/${gameId}/assets/maps`} label="Background" value={map.background} onChange={(url) => act({ type: "updateMap", mapId: map.id, background: url ?? null })} />
+      <ImageUpload folder={`games/${gameId}/assets/maps`} kind="mapBackground" label="Background" value={map.background} onChange={(url) => act({ type: "updateMap", mapId: map.id, background: url ?? null })} />
       {map.background && <HiddenSwitch hidden={!!map.backgroundHidden} onChange={(backgroundHidden) => act({ type: "updateMap", mapId: map.id, backgroundHidden })} />}
       <label className="me-check">
         <input type="checkbox" checked={!map.hideGrid} onChange={(e) => act({ type: "updateMap", mapId: map.id, hideGrid: !e.target.checked })} /> Show grid lines
