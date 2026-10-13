@@ -1505,3 +1505,23 @@ select.piece.add { color: #6fb4ff; }
 .ie-controls { display: flex; flex-direction: column; gap: 8px; }
 .ie-slider { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 8px; }
 .ie-actions { justify-content: flex-end; }
+
+/* ---- GM popups to players ---- */
+.toolbar-dropdown.wide { width: min(420px, calc(100vw - 24px)); max-height: calc(80vh - var(--drag-y, 0px)); }
+.gm-popups { display: flex; flex-direction: column; gap: 10px; }
+.gm-popups .field { flex: none; }
+.gm-popups textarea { resize: vertical; }
+.gm-popups h3 { margin: 6px 0 0; font-size: 1rem; }
+.popup-to { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 10px; display: flex; flex-direction: column; gap: 4px; }
+.popup-to legend { color: var(--muted); font-size: 0.85rem; padding: 0 4px; }
+.popup-to > label { display: flex; align-items: center; gap: 8px; }
+.popup-sent { display: flex; flex-direction: column; gap: 6px; }
+.popup-sent-item { display: flex; flex-direction: column; gap: 2px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.popup-sent-item .row-between { flex-wrap: nowrap; gap: 8px; }
+.popup-sent-item .row-between button { flex: none; white-space: nowrap; }
+.popup-sent-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gm-popup { display: flex; flex-direction: column; gap: 12px; }
+.gm-popup-image { display: block; max-width: 100%; max-height: 60vh; margin: 0 auto; border-radius: 8px; object-fit: contain; }
+.gm-popup-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.gm-popup-roll { display: flex; flex-direction: column; gap: 6px; }
+.gm-popup-roll p { margin: 0; }

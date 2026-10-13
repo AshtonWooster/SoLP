@@ -27,6 +27,7 @@ import {
 } from "../../shared/engine.ts";
 import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
+import { popupsFor } from "../../shared/popups.ts";
 import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
 import { effectsClearAfterCombat, emotionLevelsOn } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
@@ -437,6 +438,8 @@ export class Host {
         table,
         online: unique,
         notes: gm ? this.notes : undefined,
+        // A phone gets only the GM's popups meant for its player.
+        popups: peer.view === "play" && !gm ? popupsFor(this.table, peer.actor.uid) : undefined,
       });
     }
     // Hand the GM screen a fresh copy so React sees the change.

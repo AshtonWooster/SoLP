@@ -16,6 +16,7 @@ import { CycleCharacters, EffectsView, Portrait } from "../components/player/Com
 import { InfoPanel, PANELS, type PanelKey } from "../components/player/InfoPanels.tsx";
 import { AnyStatIcon } from "../components/LorIcons.tsx";
 import { Overlay } from "../components/player/Overlay.tsx";
+import { GmPopupView } from "../components/player/GmPopupView.tsx";
 import { PvCard } from "../components/player/LorCard.tsx";
 import { PageView } from "../components/player/PageView.tsx";
 import { SlotChoice } from "../components/player/SlotChoice.tsx";
@@ -74,6 +75,8 @@ export function Play() {
   const [target, setTarget] = useState<string | undefined>(undefined);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // GM popups this player just closed, hidden before the host confirms.
+  const [closedPopups, setClosedPopups] = useState<string[]>([]);
   // The start of the log line we're waiting for after a Story Roll.
   const [awaitingRoll, setAwaitingRoll] = useState<{ prefix: string; tail: string } | null>(null);
 
@@ -238,6 +241,7 @@ export function Play() {
     ...SECONDARY_STATS.map((s) => ({ key: s.key, label: s.label, v: c?.secondary[s.key] ?? 0 })),
   ];
   const cards = cardsIn(category);
+  const gmPopups = (snapshot.popups ?? []).filter((p) => !closedPopups.includes(p.id));
 
   return (
     <main className="player-screen">
@@ -477,6 +481,22 @@ export function Play() {
             ))}
           </div>
         </Overlay>
+      )}
+      {/* The GM's popups, oldest first, one at a time. */}
+      {gmPopups[0] && (
+        <GmPopupView
+          key={gmPopups[0].id}
+          popup={gmPopups[0]}
+          more={gmPopups.length - 1}
+          stats={Object.fromEntries(stats.map((s) => [s.key, s.v]))}
+          canRoll={!!mine}
+          onRoll={(stat) => void act({ type: "popupRoll", popupId: gmPopups[0].id, stat })}
+          onClose={() => {
+            const popupId = gmPopups[0].id;
+            setClosedPopups((x) => [...x, popupId]);
+            void act({ type: "closePopup", popupId }).then((ok) => !ok && setClosedPopups((x) => x.filter((y) => y !== popupId)));
+          }}
+        />
       )}
       {/* Last, so a Page opened from another popup (e.g. Cycle characters) shows on top of it. */}
       {viewing && (

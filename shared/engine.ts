@@ -42,6 +42,7 @@ import {
   updateMapItem,
 } from "./maps.ts";
 import { newId } from "./id.ts";
+import { closePopup, popupRoll, removePopup, sendPopup } from "./popups.ts";
 import { createMapFolder, deleteMapFolder, renameMapFolder, setMapFolder } from "./mapFolders.ts";
 import { moveCost } from "./ruleset.ts";
 import { cleanSecrets } from "./secrets.ts";
@@ -479,6 +480,21 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       return true;
     case "storyRoll":
       storyRoll(table, actor, tokenOf(action.tokenId), action.stat, ctx);
+      return true;
+    // Nothing in the log: the log is shared, and a popup may be meant for some players only.
+    case "sendPopup":
+      gmOnly();
+      sendPopup(table, action);
+      return true;
+    case "removePopup":
+      gmOnly();
+      return removePopup(table, action.popupId);
+    case "closePopup":
+      if (isGm) throw new ActionError("Take a popup down instead.");
+      return closePopup(table, actor, action.popupId);
+    case "popupRoll":
+      if (isGm) throw new ActionError("Players roll for their own popups.");
+      popupRoll(table, actor, action.popupId, action.stat, ctx);
       return true;
     case "setEffects": {
       gmOnly();
