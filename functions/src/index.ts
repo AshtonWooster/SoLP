@@ -7,7 +7,6 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore, type Transaction } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
-import { defineBoolean } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { deleteAccountData } from "./deleteAccount.ts";
 import { deleteGameAsGm } from "./deleteGame.ts";
@@ -152,17 +151,13 @@ export const deleteAccount = onCall(async (req) => {
 });
 
 /**
- * Off at first: the weekly cleanup only logs the images it would delete. Set IMAGE_SWEEP_DELETE=true
- * in functions/.env (or answer the deploy prompt) once a logged run looks right.
+ * Weekly: logs uploaded images nothing in the database uses any more, and deletes the ones last
+ * week's run logged that are still unused (functions/src/sweepImages.ts).
  */
-const imageSweepDelete = defineBoolean("IMAGE_SWEEP_DELETE", { default: false });
-
-/** Weekly: deletes uploaded images nothing in the database uses any more (functions/src/sweepImages.ts). */
 export const sweepUnusedImages = onSchedule({ schedule: "every monday 04:00", timeoutSeconds: 540 }, async () => {
-  const result = await sweepImages(db, getStorage().bucket(), { remove: imageSweepDelete.value() });
-  const mb = (result.bytes / 1024 / 1024).toFixed(1);
-  console.log(
-    `${result.deleted ? "Deleted" : "Would delete"} ${result.unused.length} unused images (${mb} MB)` +
-      (result.unused.length ? `:\n${result.unused.slice(0, 200).join("\n")}` : ""),
-  );
+  const r = await sweepImages(db, getStorage().bucket());
+  const mb = (n: number) => (n / 1024 / 1024).toFixed(1);
+  const list = (names: string[]) => (names.length ? `:\n${names.slice(0, 200).join("\n")}` : "");
+  console.log(`Deleted ${r.deleted.length} unused images logged last week (${mb(r.deletedBytes)} MB)${list(r.deleted)}`);
+  console.log(`Will delete next week if still unused: ${r.flagged.length} images (${mb(r.flaggedBytes)} MB)${list(r.flagged)}`);
 });
