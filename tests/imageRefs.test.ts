@@ -1,7 +1,7 @@
 // Finding the images a game still uses, for the weekly image cleanup. Run with `npm run test:engine`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { collectStoragePaths, storagePaths, SWEEP_GRACE_MS, unusedFiles } from "../shared/imageRefs.ts";
+import { collectStoragePaths, storagePaths, SWEEP_GRACE_MS, sweepPlan, unusedFiles } from "../shared/imageRefs.ts";
 
 const url = (path: string) => `https://firebasestorage.googleapis.com/v0/b/solp.appspot.com/o/${encodeURIComponent(path)}?alt=media&token=abc`;
 
@@ -33,4 +33,12 @@ test("only files nothing uses and older than a week are unused", () => {
     { name: "just-uploaded.png", created: now - 1000, size: 3 },
   ];
   assert.deepEqual(unusedFiles(files, new Set(["used.png"]), now).map((f) => f.name), ["orphan.png"]);
+});
+
+test("a run deletes what the last run logged and logs what's newly unused", () => {
+  const f = (name: string) => ({ name, created: 0, size: 1 });
+  const plan = sweepPlan([f("old.png"), f("new.png")], ["old.png", "back-in-use.png"]);
+  assert.deepEqual(plan.remove.map((x) => x.name), ["old.png"]);
+  assert.deepEqual(plan.flag.map((x) => x.name), ["new.png"]);
+  assert.deepEqual(sweepPlan([f("a.png")], []).remove, []);
 });

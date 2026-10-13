@@ -44,3 +44,18 @@ export interface StoredFile {
 export function unusedFiles(files: StoredFile[], used: Set<string>, now: number, graceMs = SWEEP_GRACE_MS): StoredFile[] {
   return files.filter((f) => !used.has(f.name) && now - f.created > graceMs);
 }
+
+/** Most images one run marks for deletion; the rest wait for a later run. Keeps the saved list well under Firestore's 1 MiB. */
+export const MAX_FLAGGED = 5000;
+
+/**
+ * Two steps, a week apart: a run logs the unused images it finds, and the next run deletes the
+ * ones still unused. Anything put back on a map or sheet in between is kept.
+ */
+export function sweepPlan(unused: StoredFile[], flaggedBefore: Iterable<string>): { remove: StoredFile[]; flag: StoredFile[] } {
+  const before = new Set(flaggedBefore);
+  return {
+    remove: unused.filter((f) => before.has(f.name)),
+    flag: unused.filter((f) => !before.has(f.name)).slice(0, MAX_FLAGGED),
+  };
+}

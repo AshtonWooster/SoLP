@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { before, beforeEach, test } from "node:test";
-import { sweepImages } from "../functions/src/sweepImages.ts";
+import { SWEEP_STATE, sweepImages } from "../functions/src/sweepImages.ts";
 
 // firebase-admin lives with the functions.
 const require = createRequire(new URL("../functions/package.json", import.meta.url));
@@ -29,6 +29,7 @@ const files = async () => (await bucket.getFiles({ prefix: "games/" }))[0].map((
 
 beforeEach(async () => {
   await db.recursiveDelete(db.collection("games"));
+  await db.doc(SWEEP_STATE).delete();
   await bucket.deleteFiles({ prefix: "games/" });
   await db.doc("games/g1").set({ name: "One", image: url("games/g1/assets/cover/c.jpg"), gmId: "gm", memberIds: ["gm"], members: {} });
   await db.doc("games/g1/table/state").set({ map: { background: url("games/g1/assets/maps/bg.png"), items: [] }, tokens: {}, log: [] });
@@ -42,16 +43,19 @@ beforeEach(async () => {
   await put("games/g1/users/p1/portrait/old.png");
 });
 
-test("reports unused images without deleting them unless asked", async () => {
-  const before = await files();
-  const r = await sweepImages(db, bucket, { remove: false, now: WEEK_LATER });
-  assert.deepEqual(r.unused.sort(), ["games/g1/assets/maps/removed.png", "games/g1/assets/maps/replaced.png", "games/g1/users/p1/portrait/old.png"]);
-  assert.equal(r.deleted, false);
-  assert.deepEqual(await files(), before);
-});
+const UNUSED = ["games/g1/assets/maps/removed.png", "games/g1/assets/maps/replaced.png", "games/g1/users/p1/portrait/old.png"];
 
-test("deletes only unused images; ones another game copied stay", async () => {
-  await sweepImages(db, bucket, { remove: true, now: WEEK_LATER });
+test("the first run only logs unused images; the next run deletes them", async () => {
+  const before = await files();
+  const first = await sweepImages(db, bucket, { now: WEEK_LATER });
+  assert.deepEqual(first.flagged.sort(), UNUSED);
+  assert.deepEqual(first.deleted, []);
+  assert.deepEqual(await files(), before);
+
+  const second = await sweepImages(db, bucket, { now: WEEK_LATER + 7 * 86_400_000 });
+  assert.deepEqual(second.deleted.sort(), UNUSED);
+  assert.deepEqual(second.flagged, []);
+  // Images still in use stay, including one another game copied.
   assert.deepEqual(await files(), [
     "games/g1/assets/cover/c.jpg",
     "games/g1/assets/enemies/thug.png",
@@ -60,8 +64,18 @@ test("deletes only unused images; ones another game copied stay", async () => {
   ]);
 });
 
+test("an image put back to use during the week isn't deleted", async () => {
+  await sweepImages(db, bucket, { now: WEEK_LATER });
+  await db.doc("games/g1/characters/p1").set({ portrait: url("games/g1/users/p1/portrait/old.png") });
+  const second = await sweepImages(db, bucket, { now: WEEK_LATER + 7 * 86_400_000 });
+  assert.deepEqual(second.deleted.sort(), ["games/g1/assets/maps/removed.png", "games/g1/assets/maps/replaced.png"]);
+  assert.ok((await files()).includes("games/g1/users/p1/portrait/old.png"));
+});
+
 test("images uploaded this week are left alone", async () => {
-  const r = await sweepImages(db, bucket, { remove: true });
-  assert.deepEqual(r.unused, []);
+  await sweepImages(db, bucket);
+  const r = await sweepImages(db, bucket);
+  assert.deepEqual(r.flagged, []);
+  assert.deepEqual(r.deleted, []);
   assert.equal((await files()).length, 7);
 });
