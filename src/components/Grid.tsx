@@ -67,7 +67,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
   const last = useRef<{ mapId?: string; at: Map<string, { x: number; y: number }> }>({ at: new Map() });
   // The arrow tapped to see its Page(s), by the slots it stands for.
   const [openSlots, setOpenSlots] = useState<string[] | null>(null);
-  const bursts = useVfxBursts(state.tokens, vfx);
+  const bursts = useVfxBursts(state.tokens, vfx, state.combat?.procs);
 
   // Moving tokens slide in a straight line from their old tile to the new one.
   useLayoutEffect(() => {
@@ -186,7 +186,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
         ].filter(Boolean);
         // Looping VFX for the Effects on it, and any "When gained" ones playing right now.
         const looks = [
-          ...(vfx ? tokenVfx(t.effects, vfx).filter((v) => v.def.play === "loop") : []).map((v) => ({ ...v, once: false, key: v.id })),
+          ...(vfx ? tokenVfx(t.effects, vfx) : []).map((v) => ({ ...v, once: false, key: v.id })),
           ...(bursts[t.id] ?? []).map((v) => ({ ...v, once: true, key: `${v.id}-${v.key}` })),
         ];
         return (

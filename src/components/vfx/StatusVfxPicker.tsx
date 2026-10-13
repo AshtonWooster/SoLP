@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { doc, setDoc } from "firebase/firestore";
-import { cleanVfx, linkStatus, type VfxDef } from "../../../shared/vfx.ts";
+import { cleanVfx, linkStatus, playLabel, type VfxDef } from "../../../shared/vfx.ts";
 import { db, friendlyError } from "../../firebase.ts";
 
 /**
@@ -26,6 +26,7 @@ export function StatusVfxPicker({ gameId, statusId, library }: { gameId: string;
       {linked.map(([id, d]) => (
         <span key={id} className="chip static">
           {d.name || "Unnamed"}
+          {d.play !== "loop" && <span className="muted">&nbsp;· {playLabel(d.play)}</span>}
           <button type="button" className="chip-x" aria-label={`Take ${d.name} off`} onClick={() => set(id, d, false)}>
             ✕
           </button>

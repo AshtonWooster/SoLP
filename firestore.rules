@@ -205,7 +205,7 @@ service cloud.firestore {
           && request.resource.data.name is string && request.resource.data.name.size() <= 60
           && request.resource.data.layers is list && request.resource.data.layers.size() <= 6
           && request.resource.data.statuses is list && request.resource.data.statuses.size() <= 40
-          && request.resource.data.play in ["loop", "gain"];
+          && request.resource.data.play in ["loop", "gain", "proc", "end"];
       }
 
       // Enemy templates: only the GM sees or edits them.

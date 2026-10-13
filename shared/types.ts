@@ -374,8 +374,20 @@ export interface CombatState {
   fxSeq?: number;
   /** The latest Speed roll (combat starting, a re-roll, or someone joining), so screens can animate it. */
   speedRoll?: SpeedRoll;
+  /** Status Effects that just went off (their rules fired), newest last, so screens can play their VFX (shared/vfx.ts). */
+  procs?: EffectProc[];
+  /** Id of the newest entry in procs. */
+  procSeq?: number;
   /** Pages each character has used this round, by token id. */
   used?: Record<string, number>;
+}
+
+/** A status Effect going off on a character: its rules fired. */
+export interface EffectProc {
+  id: number;
+  tokenId: string;
+  /** The Effect's library id. */
+  defId: string;
 }
 
 /** Who just rolled Speed. A new id each roll, so screens play each roll once. */

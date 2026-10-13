@@ -1325,6 +1325,8 @@ export interface EffectOps<T extends EffectHolder> {
   /** Moves t straight away from `from` (negative: toward it), stopping at the map's edge or another character. */
   push(from: T, t: T, n: number): void;
   log(line: string): void;
+  /** A status Effect on t just went off (its rules fired), so screens can play its VFX. */
+  proc?(t: T, defId: string): void;
   /** Speed this round (0 out of combat). */
   speed(t: T): number;
   resource(t: T, key: "light" | "hp" | "maxHp" | "maxStagger"): number;
@@ -1554,6 +1556,7 @@ function fire<T extends EffectHolder>(ops: EffectOps<T>, holder: T, src: Source,
     if (rule.stop) break;
   }
   if (!firedWith || !entry) return;
+  ops.proc?.(holder, src.defId);
   if (!held(ops, holder, src.defId)) {
     if (def.decay === "allAfterTrigger") entry.count = 0;
     else if (def.decay === "halfAfterTrigger") entry.count = Math.floor(entry.count / 2);

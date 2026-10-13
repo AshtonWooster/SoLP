@@ -160,6 +160,8 @@ function concealCombat(c: CombatState, tokens: Record<string, Token>): CombatSta
   }));
   const out: CombatState = { ...c, decks, pages, order };
   if (fx) out.fx = fx;
+  // An Effect going off on a character whose Effects are secret isn't shown either.
+  if (c.procs) out.procs = c.procs.filter((p) => !isSecret(tokens[p.tokenId], "effects"));
   return out;
 }
 

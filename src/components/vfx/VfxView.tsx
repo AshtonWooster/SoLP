@@ -3,17 +3,20 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   gainedStatuses,
+  lostStatuses,
+  newProcs,
+  stacksByStatus,
+  vfxPlaying,
   GAIN_MS,
   loopSeconds,
   particleCount,
   particleSpots,
   stackStrength,
-  tokenVfx,
   type TokenVfx,
   type VfxDef,
   type VfxLayer,
 } from "../../../shared/vfx.ts";
-import type { Effect, Token } from "../../../shared/types.ts";
+import type { Effect, EffectProc, Token } from "../../../shared/types.ts";
 import "./vfx.css";
 
 export type VfxByStatus = Map<string, { id: string; def: VfxDef }[]>;
@@ -114,25 +117,36 @@ export interface Burst extends TokenVfx {
 }
 
 /**
- * "When gained" VFX playing right now, by token id: each starts when a character gains an Effect (or
- * more stacks of it) that one plays on, and stops after it has played once. Characters appearing
- * (a new map, a device connecting) don't count as gaining their Effects.
+ * VFX that play once, playing right now, by token id: "When gained" ones when a character gains an
+ * Effect (or more stacks of it), "When it goes off" ones when its rules fire, and "When it wears off"
+ * ones when it comes off. Each stops after playing once. Characters appearing (a new map, a device
+ * connecting) don't count as gaining their Effects, and Effects that went off before this screen
+ * opened don't play.
  */
-export function useVfxBursts(tokens: Record<string, Token>, byStatus: VfxByStatus | undefined): Record<string, Burst[]> {
+export function useVfxBursts(tokens: Record<string, Token>, byStatus: VfxByStatus | undefined, procs: EffectProc[] | undefined): Record<string, Burst[]> {
   const seen = useRef<Map<string, Effect[] | undefined> | null>(null);
+  const seenProc = useRef<number | null>(null);
   const [bursts, setBursts] = useState<Record<string, Burst[]>>({});
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   useEffect(() => {
     const before = seen.current;
+    const lastProc = seenProc.current;
     seen.current = new Map(Object.values(tokens).map((t) => [t.id, t.effects]));
+    seenProc.current = Math.max(lastProc ?? 0, ...(procs ?? []).map((p) => p.id));
     if (!before || !byStatus?.size) return;
+    const fired = lastProc === null ? new Map<string, Set<string>>() : newProcs(procs, lastProc);
     const started: Record<string, Burst[]> = {};
     for (const t of Object.values(tokens)) {
-      if (!before.has(t.id) || before.get(t.id) === t.effects) continue;
-      const gained = new Set(gainedStatuses(before.get(t.id), t.effects));
-      if (gained.size === 0) continue;
-      const list = tokenVfx(t.effects, byStatus).filter((v) => v.def.play === "gain" && v.def.statuses.some((s) => gained.has(s)));
+      if (!before.has(t.id)) continue;
+      const was = before.get(t.id);
+      const stacks = new Map([...stacksByStatus(was), ...stacksByStatus(t.effects)]);
+      const changed = was !== t.effects;
+      const list = [
+        ...(changed ? vfxPlaying(gainedStatuses(was, t.effects), byStatus, "gain", stacks) : []),
+        ...vfxPlaying(fired.get(t.id) ?? [], byStatus, "proc", stacks),
+        ...(changed ? vfxPlaying(lostStatuses(was, t.effects), byStatus, "end", stacks) : []),
+      ];
       if (list.length) started[t.id] = list.map((v) => ({ ...v, key: Date.now() + Math.random() }));
     }
     if (Object.keys(started).length === 0) return;
@@ -150,6 +164,6 @@ export function useVfxBursts(tokens: Record<string, Token>, byStatus: VfxByStatu
         timers.current.add(timer);
       }
     }
-  }, [tokens, byStatus]);
+  }, [tokens, byStatus, procs]);
   return bursts;
 }

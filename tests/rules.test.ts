@@ -473,6 +473,8 @@ test("VFX library: members read it; only the GM makes, changes and deletes VFX, 
   await assertFails(setDoc(v("gm", "many"), { ...flames, layers: Array(7).fill(layer) }));
   await assertFails(setDoc(v("gm", "odd"), { ...flames, play: "sometimes" }));
   await assertSucceeds(updateDoc(v("gm", "flames"), { play: "gain", scaleWithStacks: true }));
+  await assertSucceeds(updateDoc(v("gm", "flames"), { play: "proc" }));
+  await assertSucceeds(updateDoc(v("gm", "flames"), { play: "end" }));
   await assertSucceeds(deleteDoc(v("gm", "flames")));
 });
 

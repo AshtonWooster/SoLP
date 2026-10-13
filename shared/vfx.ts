@@ -7,7 +7,7 @@
 // changes it everywhere it plays, and an Effect with no VFX looks exactly as it did before.
 
 import { newId } from "./id.ts";
-import type { Effect, GameDoc } from "./types.ts";
+import type { Effect, EffectProc, GameDoc } from "./types.ts";
 
 export type VfxLayerType = "aura" | "particles" | "tint" | "icon" | "motion";
 export type AuraStyle = "glow" | "ripple" | "ring";
@@ -15,6 +15,11 @@ export type ParticleShape = "dot" | "spark" | "flame" | "bubble" | "star" | "dro
 export type ParticleFlow = "rise" | "fall" | "orbit" | "burst" | "swirl";
 export type TintStyle = "steady" | "pulse" | "flicker";
 export type MotionKind = "shake" | "bob" | "sway" | "throb";
+/**
+ * "loop": the whole time the Effect is on. The rest play once: "gain" each time the Effect is gained
+ * or gains stacks, "proc" each time it goes off (its rules fire), "end" when it wears off.
+ */
+export type VfxPlay = "loop" | "gain" | "proc" | "end";
 export type IconSpot = "top" | "topRight" | "bottomRight" | "center";
 
 /** One piece of a VFX. Which fields matter depends on the type. */
@@ -49,8 +54,8 @@ export interface VfxDef {
   layers: VfxLayer[];
   /** The status Effects (library ids) it plays on. */
   statuses: string[];
-  /** "loop": the whole time the Effect is on. "gain": once, each time the Effect is gained or gains stacks. */
-  play: "loop" | "gain";
+  /** When it plays (PLAY_OPTIONS): the whole time, or once when something happens to the Effect. */
+  play: VfxPlay;
   /** More stacks: more particles and a stronger look, up to FULL_STACKS. */
   scaleWithStacks?: boolean;
   updatedAt?: number;
@@ -60,11 +65,19 @@ export const MAX_LAYERS = 6;
 export const MAX_PARTICLES = 24;
 export const MAX_STATUSES = 40;
 /** A token plays at most this many VFX at once, so a pile of Effects can't slow the board down. */
-export const MAX_VFX_PER_TOKEN = 3;
+export const MAX_VFX_PER_TOKEN = 4;
 /** Stacks at which a VFX that grows with stacks looks its strongest. */
 export const FULL_STACKS = 10;
 /** How long a "When gained" VFX plays, at speed 1. */
 export const GAIN_MS = 1600;
+
+export const PLAY_OPTIONS: { value: VfxPlay; label: string; short: string }[] = [
+  { value: "loop", label: "The whole time it's on", short: "While on" },
+  { value: "gain", label: "When gained", short: "When gained" },
+  { value: "proc", label: "When it goes off", short: "When it goes off" },
+  { value: "end", label: "When it wears off", short: "When it wears off" },
+];
+export const playLabel = (play: VfxPlay) => PLAY_OPTIONS.find((p) => p.value === play)!.short;
 
 export const LAYER_TYPES: { value: VfxLayerType; label: string; hint: string }[] = [
   { value: "aura", label: "Aura", hint: "A glow or ring around the character" },
@@ -196,7 +209,7 @@ export function cleanVfx(raw: unknown): VfxDef {
     name: String(r.name ?? "").slice(0, 60),
     layers: layers.filter((l, i) => l.type !== "motion" || i === firstMotion),
     statuses: [...new Set((Array.isArray(r.statuses) ? r.statuses : []).map((s) => String(s).slice(0, 80)).filter(Boolean))].slice(0, MAX_STATUSES),
-    play: r.play === "gain" ? "gain" : "loop",
+    play: oneOf(r.play, PLAY_OPTIONS, "loop"),
   };
   if (r.scaleWithStacks === true) def.scaleWithStacks = true;
   if (r.updatedAt) def.updatedAt = Number(r.updatedAt) || 0;
@@ -305,7 +318,7 @@ export const VFX_TEMPLATES: { key: string; name: string; make: () => VfxDef }[] 
   {
     key: "hit",
     name: "Impact burst",
-    make: () => ({ name: "Impact burst", play: "gain", statuses: [], layers: [L("particles", { shape: "spark", flow: "burst", color: "#ffffff", color2: "#ff5a5a", count: 14, speed: 1.4 }), L("aura", { aura: "ripple", color: "#ff5a5a" })] }),
+    make: () => ({ name: "Impact burst", play: "proc", statuses: [], layers: [L("particles", { shape: "spark", flow: "burst", color: "#ffffff", color2: "#ff5a5a", count: 14, speed: 1.4 }), L("aura", { aura: "ripple", color: "#ff5a5a" })] }),
   },
   {
     key: "dread",
@@ -347,26 +360,52 @@ export function stacksByStatus(effects: Effect[] | undefined): Map<string, numbe
 }
 
 /**
- * The VFX to play on a character for the Effects on it, each once even when several of its Effects
+ * The looping VFX to play on a character for the Effects on it, each once even when several of its Effects
  * share it, in the order the Effects are listed; at most MAX_VFX_PER_TOKEN.
  */
 export function tokenVfx(effects: Effect[] | undefined, byStatus: Map<string, { id: string; def: VfxDef }[]>): TokenVfx[] {
   if (byStatus.size === 0) return [];
-  const out = new Map<string, TokenVfx>();
-  for (const [statusId, stacks] of stacksByStatus(effects)) {
-    for (const v of byStatus.get(statusId) ?? []) {
-      const had = out.get(v.id);
-      if (had) had.stacks = Math.max(had.stacks, stacks);
-      else out.set(v.id, { id: v.id, def: v.def, stacks });
-    }
-  }
-  return [...out.values()].slice(0, MAX_VFX_PER_TOKEN);
+  const stacks = stacksByStatus(effects);
+  return vfxPlaying(stacks.keys(), byStatus, "loop", stacks);
 }
 
 /** Effects (library ids) that are new on a character or have more stacks than before: "When gained" VFX play for these. */
 export function gainedStatuses(before: Effect[] | undefined, after: Effect[] | undefined): string[] {
   const was = stacksByStatus(before);
   return [...stacksByStatus(after)].filter(([id, n]) => n > (was.get(id) ?? 0)).map(([id]) => id);
+}
+
+/** Effects (library ids) a character had before and has no stacks of now: "When it wears off" VFX play for these. */
+export function lostStatuses(before: Effect[] | undefined, after: Effect[] | undefined): string[] {
+  const now = stacksByStatus(after);
+  return [...stacksByStatus(before).keys()].filter((id) => !now.has(id));
+}
+
+/** The VFX that play one way for some Effects, each once, at most MAX_VFX_PER_TOKEN. */
+export function vfxPlaying(statusIds: Iterable<string>, byStatus: Map<string, { id: string; def: VfxDef }[]>, play: VfxPlay, stacks: Map<string, number> = new Map()): TokenVfx[] {
+  const out = new Map<string, TokenVfx>();
+  for (const s of statusIds) {
+    for (const v of byStatus.get(s) ?? []) {
+      if (v.def.play !== play) continue;
+      const n = Math.max(1, stacks.get(s) ?? 1);
+      const had = out.get(v.id);
+      if (had) had.stacks = Math.max(had.stacks, n);
+      else out.set(v.id, { id: v.id, def: v.def, stacks: n });
+    }
+  }
+  return [...out.values()].slice(0, MAX_VFX_PER_TOKEN);
+}
+
+/** Effects that went off since the last one a screen saw (procs come from shared/combat.ts), by token id. */
+export function newProcs(procs: EffectProc[] | undefined, seenUpTo: number): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const p of procs ?? []) {
+    if (p.id <= seenUpTo) continue;
+    const set = out.get(p.tokenId) ?? new Set<string>();
+    set.add(p.defId);
+    out.set(p.tokenId, set);
+  }
+  return out;
 }
 
 /** How strong a VFX looks at some stacks: 1 unless it grows with stacks, then from 0.4 at 1 stack to 1 at FULL_STACKS. */

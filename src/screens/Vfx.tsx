@@ -19,6 +19,8 @@ import {
   moveLayer,
   newLayer,
   PARTICLE_FLOWS,
+  PLAY_OPTIONS,
+  playLabel,
   PARTICLE_SHAPES,
   statusVfxOn,
   TINT_STYLES,
@@ -142,24 +144,25 @@ function Preview({ def }: { def: VfxDef }) {
   // "When gained" VFX play once: on opening, on Replay, and whenever they're changed.
   const sig = JSON.stringify(def.layers) + def.play;
   useEffect(() => {
-    if (def.play !== "gain") return setPlaying(false);
+    if (def.play === "loop") return setPlaying(false);
     setPlaying(true);
     const t = setTimeout(() => setPlaying(false), gainMs(def));
     return () => clearTimeout(t);
   }, [sig, replay]);
   const show = def.play === "loop" || playing;
-  const list = show ? [{ def, stacks, once: def.play === "gain" }] : [];
+  const once = def.play !== "loop";
+  const list = show ? [{ def, stacks, once }] : [];
   return (
     <div className="vfx-preview">
       <div className="vfx-stage">
         <span className="token player vfx-sample" style={motionStyle(list)}>
-          {show && <VfxView key={`${replay}-${def.play}`} def={def} stacks={stacks} once={def.play === "gain"} />}
+          {show && <VfxView key={`${replay}-${def.play}`} def={def} stacks={stacks} once={once} />}
           <span className="token-name">Preview</span>
         </span>
       </div>
       <div className="row wrap vfx-preview-controls">
         <Slider label="Stacks" value={stacks} min={1} max={FULL_STACKS} step={1} onChange={setStacks} />
-        {def.play === "gain" && (
+        {once && (
           <button type="button" onClick={() => setReplay((r) => r + 1)}>
             ▶ Play again
           </button>
@@ -230,12 +233,7 @@ function VfxEditor({ gameId, id, def, effects, footer }: { gameId: string; id: s
       <div className="row wrap vfx-play">
         <span className="muted small">Plays</span>
         <div className="segmented" role="radiogroup" aria-label="Plays">
-          {(
-            [
-              ["loop", "The whole time it's on"],
-              ["gain", "Once, when gained"],
-            ] as const
-          ).map(([value, label]) => (
+          {PLAY_OPTIONS.map(({ value, label }) => (
             <button key={value} type="button" role="radio" aria-checked={d.play === value} className={"chip" + (d.play === value ? " active" : "")} onClick={() => update({ ...d, play: value })}>
               {label}
             </button>
@@ -444,7 +442,7 @@ export function Vfx() {
                       <span className="vfx-row-text">
                         <strong>{d.name || "Unnamed"}</strong>
                         <span className="muted small">
-                          {d.play === "gain" ? "Once, when gained" : "While on"} · {names.length ? `Plays on ${names.join(", ")}` : "Not on any status effect yet"}
+                          {playLabel(d.play)} · {names.length ? `Plays on ${names.join(", ")}` : "Not on any status effect yet"}
                         </span>
                       </span>
                     </button>

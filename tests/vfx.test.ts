@@ -1,7 +1,11 @@
 // VFX for status effects (shared/vfx.ts). Run with `npm run test:engine`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Effect, GameDoc } from "../shared/types.ts";
+import type { DiceKind, Page } from "../shared/character.ts";
+import { applyAction, type Actor, type EngineContext, type Loadout } from "../shared/engine.ts";
+import { MAX_PROCS, recordProc } from "../shared/combat.ts";
+import { tableForPlayers } from "../shared/secrets.ts";
+import type { Effect, GameDoc, TableState, Token } from "../shared/types.ts";
 import {
   blankVfx,
   cleanGlyph,
@@ -10,6 +14,10 @@ import {
   FULL_STACKS,
   gainedStatuses,
   linkStatus,
+  lostStatuses,
+  newProcs,
+  PLAY_OPTIONS,
+  vfxPlaying,
   MAX_LAYERS,
   MAX_PARTICLES,
   MAX_VFX_PER_TOKEN,
@@ -184,4 +192,97 @@ test("duplicating makes an unlinked copy with its own layer ids; moving layers c
   const moved = moveLayer(d, d.layers[0].id, 1);
   assert.deepEqual(moved.layers.map((l) => l.type), [d.layers[1].type, d.layers[0].type]);
   assert.equal(moveLayer(d, d.layers[0].id, -1), d);
+});
+
+test("a VFX plays in one of four ways; anything else saved reads as 'the whole time'", () => {
+  assert.deepEqual(PLAY_OPTIONS.map((p) => p.value), ["loop", "gain", "proc", "end"]);
+  for (const play of ["gain", "proc", "end"] as const) assert.equal(cleanVfx({ ...vfx("x", []), play }).play, play);
+  assert.equal(cleanVfx({ ...vfx("x", []), play: "sometimes" }).play, "loop");
+});
+
+test("several VFX on one status effect: looping ones play together, the others only on their moment", () => {
+  const byStatus = vfxByStatus({
+    flames: vfx("Flames", ["preset:burn"]),
+    embers: vfx("Embers", ["preset:burn"]),
+    flare: vfx("Flare", ["preset:burn"], { play: "proc" }),
+    puff: vfx("Puff", ["preset:burn"], { play: "end" }),
+    spark: vfx("Spark", ["preset:burn"], { play: "gain" }),
+  });
+  assert.deepEqual(tokenVfx([fx("preset:burn", 3)], byStatus).map((v) => v.id).sort(), ["embers", "flames"]);
+  assert.deepEqual(vfxPlaying(["preset:burn"], byStatus, "proc").map((v) => v.id), ["flare"]);
+  assert.deepEqual(vfxPlaying(["preset:burn"], byStatus, "end").map((v) => v.id), ["puff"]);
+  assert.deepEqual(vfxPlaying(["preset:burn"], byStatus, "gain").map((v) => v.id), ["spark"]);
+  assert.deepEqual(vfxPlaying(["preset:poise"], byStatus, "proc"), []);
+});
+
+test("'When it wears off' plays for Effects that came off, not ones that only lost stacks", () => {
+  assert.deepEqual(lostStatuses([fx("preset:burn", 2)], []), ["preset:burn"]);
+  assert.deepEqual(lostStatuses([fx("preset:burn", 2)], [fx("preset:burn", 1)]), []);
+  assert.deepEqual(lostStatuses([], [fx("preset:burn", 1)]), []);
+});
+
+test("screens play only the Effects that went off since they last looked", () => {
+  const procs = [
+    { id: 1, tokenId: "a", defId: "preset:burn" },
+    { id: 2, tokenId: "a", defId: "preset:poise" },
+    { id: 3, tokenId: "b", defId: "preset:burn" },
+  ];
+  const fired = newProcs(procs, 1);
+  assert.deepEqual([...fired.get("a")!], ["preset:poise"]);
+  assert.deepEqual([...fired.get("b")!], ["preset:burn"]);
+  assert.equal(newProcs(procs, 3).size, 0);
+  assert.equal(newProcs(undefined, 0).size, 0);
+});
+
+// ---- Effects going off in combat ----
+
+const gm: { uid: string; role: "gm"; displayName: string } = { uid: "gm", role: "gm", displayName: "GM" };
+const p1: Actor = { uid: "p1", role: "player", displayName: "P1" };
+const die = (kind: DiceKind, fp: number) => ({ id: `d${kind}${fp}`, kind, counter: false, sides: 1, basePower: fp - 1 });
+const slash: Page = { id: "slash", name: "Slash", kind: "basic", cost: 0, type: "melee", dice: [die("slash", 5)], effect: "" };
+const tok = (id: string, side: Token["side"], x: number, extra: Partial<Token> = {}): Token => ({
+  id, name: id, side, x, y: 2, color: "#fff",
+  resources: { hp: 30, maxHp: 30, stagger: 20, maxStagger: 20, light: 3, maxLight: 5, sanity: 0, maxSanity: 15 },
+  ...extra,
+});
+
+function combat(roland: Partial<Token>, rat: Partial<Token> = {}) {
+  const table: TableState = {
+    map: { name: "m", width: 16, height: 10 },
+    tokens: { roland: tok("roland", "player", 2, { ownerId: "p1", justice: 100, ...roland }), rat: tok("rat", "enemy", 3, { justice: -100, pages: [slash], ...rat }) },
+    log: [],
+  };
+  const loadout: Loadout = { pages: { slash }, deck: Array(12).fill("slash"), aux: [], stats: { justice: 4 } } as Loadout;
+  const ctx: EngineContext = { loadout: (id) => (id === "roland" ? loadout : undefined) };
+  applyAction(table, { type: "startCombat", tokenIds: ["roland", "rat"] }, gm, ctx);
+  return { table, endTurn: (who: Actor = gm) => applyAction(table, { type: "endTurn" }, who, ctx) };
+}
+
+test("a status Effect going off in combat is recorded for its 'When it goes off' VFX", () => {
+  const s = combat({ effects: [fx("preset:burn", 5)] });
+  assert.equal(s.table.combat!.procs, undefined, "nothing has gone off yet");
+  s.endTurn(p1);
+  assert.deepEqual(s.table.combat!.procs, [{ id: 1, tokenId: "roland", defId: "preset:burn" }]);
+  assert.equal(s.table.combat!.procSeq, 1);
+  s.endTurn(); // The Rat's turn: Roland's Burn doesn't go off.
+  assert.equal(s.table.combat!.procs!.length, 1);
+  s.endTurn(p1);
+  assert.deepEqual(s.table.combat!.procs!.map((p) => p.id), [1, 2]);
+});
+
+test("only the latest Effects going off are kept", () => {
+  const s = combat({});
+  const c = s.table.combat!;
+  for (let i = 0; i < MAX_PROCS + 4; i++) recordProc(c, "roland", "preset:burn");
+  assert.equal(c.procs!.length, MAX_PROCS);
+  assert.equal(c.procs!.at(-1)!.id, MAX_PROCS + 4);
+  assert.equal(c.procs![0].id, 5);
+});
+
+test("players aren't told an Effect went off on a character whose Effects the GM keeps secret", () => {
+  const s = combat({}, { effects: [fx("preset:burn", 5)], secret: { effects: true } } as Partial<Token>);
+  s.endTurn(p1);
+  s.endTurn();
+  assert.ok(s.table.combat!.procs!.some((p) => p.tokenId === "rat"), "the GM's screen gets it");
+  assert.ok(!tableForPlayers(s.table).combat!.procs!.some((p) => p.tokenId === "rat"));
 });
