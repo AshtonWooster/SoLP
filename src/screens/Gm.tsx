@@ -20,6 +20,8 @@ import { FogDraw, FogTools, type FogMode } from "../components/maps/Fog.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
 import { useHost } from "../net/hooks.ts";
+import { useDrag } from "../components/drag.ts";
+import { gmTurnToken } from "../../shared/combat.ts";
 
 /** The GM's laptop: runs the table and can override anything. */
 export function Gm() {
@@ -184,6 +186,7 @@ export function Gm() {
         {table && (
           <div className="gm-toolbar">
             <ToolbarMenu
+              title="Maps"
               label={
                 <>
                   Maps <span className="muted small">· {table.map.name}</span>
@@ -204,7 +207,7 @@ export function Gm() {
                 </>
               )}
             </ToolbarMenu>
-            <ToolbarMenu label="Characters">
+            <ToolbarMenu title="Characters" label="Characters">
               {(close) => (
                 <TemplateList
                   gameId={id}
@@ -218,7 +221,7 @@ export function Gm() {
                 />
               )}
             </ToolbarMenu>
-            {!table.combat && <ToolbarMenu label="Start combat">{(close) => <CombatStart table={table} act={act} onStarted={close} />}</ToolbarMenu>}
+            {!table.combat && <ToolbarMenu title="Start combat" label="Start combat">{(close) => <CombatStart table={table} act={act} onStarted={close} />}</ToolbarMenu>}
             <FogTools mode={fogMode} setMode={setFogMode} onAll={(hidden) => act({ type: "fogAll", mapId: table.map.id!, hidden })} />
             <span className="muted small gm-hint">
               {fogMode ? `Drag across the map to ${fogMode} an area. Esc to stop.` : "Click a token to see it; with it open, click a tile to move it."}
@@ -253,6 +256,7 @@ export function Gm() {
               {fogMode && <FogDraw map={table.map} mode={fogMode} onDraw={(r) => act({ type: "drawFog", mapId: table.map.id!, ...r })} />}
             </Grid>
           )}
+          {table?.combat && <EnemyTurnPopup table={table} act={act} />}
           {selected && (
             <TokenPopup
               key={selected.id}
@@ -298,9 +302,10 @@ export function Gm() {
 }
 
 /** A button above the map that opens a dropdown; clicking outside closes it. */
-function ToolbarMenu({ label, children }: { label: React.ReactNode; children: (close: () => void) => React.ReactNode }) {
+function ToolbarMenu({ title, label, children }: { title: string; label: React.ReactNode; children: (close: () => void) => React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const drag = useDrag<HTMLDivElement>();
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && !(e.target as Element).closest?.(".overlay") && setOpen(false);
@@ -317,7 +322,17 @@ function ToolbarMenu({ label, children }: { label: React.ReactNode; children: (c
       <button className={open ? "on" : ""} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         {label} <span className="muted">▾</span>
       </button>
-      {open && <div className="toolbar-dropdown">{children(() => setOpen(false))}</div>}
+      {open && (
+        <div className="toolbar-dropdown" role="dialog" aria-label={title} ref={drag.ref} style={drag.style}>
+          <header className="popup-head" {...drag.handle}>
+            <strong>{title}</strong>
+            <button type="button" className="icon" aria-label="Close" onClick={() => setOpen(false)}>
+              ✕
+            </button>
+          </header>
+          <div className="popup-body">{children(() => setOpen(false))}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -360,6 +375,40 @@ function CombatStart({ table, act, onStarted }: { table: TableState; act: (actio
   );
 }
 
+/**
+ * On a GM character's turn, their Combat Actions pop up over the map, so the side panel never has
+ * to scroll. Closing it hides it for this turn; the next GM character's turn brings it back.
+ */
+function EnemyTurnPopup({ table, act }: { table: TableState; act: (action: TableAction) => boolean }) {
+  const token = gmTurnToken(table);
+  const combat = table.combat!;
+  const turnKey = `${combat.round}:${combat.turn}:${token?.id}`;
+  const [hiddenFor, setHiddenFor] = useState<string | null>(null);
+  const drag = useDrag<HTMLElement>();
+  if (!token) return null;
+  if (hiddenFor === turnKey) {
+    return (
+      <button type="button" className="turn-popup-reopen" onClick={() => setHiddenFor(null)}>
+        Show {token.name}'s actions
+      </button>
+    );
+  }
+  return (
+    <aside className="turn-popup" aria-label={`${token.name}'s turn`} ref={drag.ref} style={drag.style}>
+      <header className="popup-head" {...drag.handle}>
+        <span className="swatch" style={{ background: token.color }} />
+        <strong className="turn-popup-title">{token.name}'s turn</strong>
+        <button type="button" className="icon" aria-label="Close" onClick={() => setHiddenFor(turnKey)}>
+          ✕
+        </button>
+      </header>
+      <div className="popup-body">
+        <ActionPanel table={table} token={token} canAct send={(a) => void act(a)} />
+      </div>
+    </aside>
+  );
+}
+
 /** Run the turn order and end combat. */
 function CombatPanel({ table, act }: { table: TableState; act: (action: TableAction) => boolean }) {
   const tokens = Object.values(table.tokens);
@@ -380,7 +429,6 @@ function CombatPanel({ table, act }: { table: TableState; act: (action: TableAct
           {active.name}'s turn · {PHASE_LABELS[combat.phase]} · {combat.movementLeft} Movement left
         </p>
       )}
-      {active && active.side !== "player" && <ActionPanel table={table} token={active} canAct send={(a) => void act(a)} />}
       {active?.side === "player" && combat.aim && (
         <p className="muted small">
           {active.name} is aiming {combat.pages[combat.aim.pageId]?.name}. Lit tokens can be clicked to target for them.

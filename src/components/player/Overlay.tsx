@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useDrag } from "../drag.ts";
 
 /** Popups currently open, oldest first. */
 const open: symbol[] = [];
@@ -23,10 +24,12 @@ export function Overlay({ title, onClose, children }: { title: string; onClose: 
       open.splice(open.indexOf(me), 1);
     };
   }, []);
+  const drag = useDrag<HTMLDivElement>();
+  const backdrop = useBackdropClose(onClose);
   return createPortal(
-    <div className="overlay" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
-      <div className="overlay-box" onClick={(e) => e.stopPropagation()}>
-        <header className="overlay-head">
+    <div className="overlay" role="dialog" aria-modal="true" aria-label={title} {...backdrop}>
+      <div className="overlay-box" ref={drag.ref} style={drag.style}>
+        <header className="overlay-head" {...drag.handle}>
           <h2>{title}</h2>
           <button type="button" className="icon" aria-label="Close" onClick={onClose}>
             ✕
@@ -37,4 +40,19 @@ export function Overlay({ title, onClose, children }: { title: string; onClose: 
     </div>,
     document.body,
   );
+}
+
+/**
+ * Clicking the dimmed area around a popup closes it, but only a click that starts and ends there:
+ * letting go of a dragged popup over the backdrop leaves it open.
+ */
+export function useBackdropClose(onClose: () => void) {
+  const downOnBackdrop = useRef(false);
+  return {
+    onPointerDown: (e: React.PointerEvent) => (downOnBackdrop.current = e.target === e.currentTarget),
+    onClick: (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget && downOnBackdrop.current) onClose();
+      downOnBackdrop.current = false;
+    },
+  };
 }

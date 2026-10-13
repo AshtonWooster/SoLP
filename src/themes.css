@@ -24,7 +24,7 @@
 :where(:root[data-theme]) :is(.invite-code, .room-code, .deck-count, .turn-speed, .res-val, .stat-num, .stepper-value, .num, .cp-die, .pv-range) { font-family: var(--f-num, inherit); }
 
 /* Panel-like boxes. */
-:where(:root[data-theme]) :is(.panel, .sheet-section, .game-card, .big-button, .token-popup, .gm-log, .combat-panel, .board-turn, .overlay-box, .toolbar-dropdown, .combat-log, .action-panel, .player-preview, .equip-box, .npc-preview, .gear-card, .ally, .stat-panel, .todo-panel, .summary-card, .augment-card, .story-card, .rb-box, .primary-tile, .char-dropdown-list, .player-nochar, .speed-die-row, .stat-box, .equip-empty) {
+:where(:root[data-theme]) :is(.panel, .sheet-section, .game-card, .big-button, .token-popup, .turn-popup, .gm-log, .combat-panel, .board-turn, .overlay-box, .toolbar-dropdown, .combat-log, .action-panel, .player-preview, .equip-box, .npc-preview, .gear-card, .ally, .stat-panel, .todo-panel, .summary-card, .augment-card, .story-card, .rb-box, .primary-tile, .char-dropdown-list, .player-nochar, .speed-die-row, .stat-box, .equip-empty) {
   border-radius: var(--t-radius);
   border-color: var(--line);
   background: var(--t-panel);

@@ -5,6 +5,8 @@ import type { TableAction, TableState } from "../../../shared/types.ts";
 import { MapPicture } from "./MapLayers.tsx";
 import { editedMap } from "./MapEditor.tsx";
 import { ConfirmButton } from "../ConfirmButton.tsx";
+import { useDrag } from "../drag.ts";
+import { useBackdropClose } from "../player/Overlay.tsx";
 
 type Act = (a: TableAction) => boolean;
 
@@ -63,6 +65,8 @@ export function MapPreview({
   onEdit: () => void;
 }) {
   const [asPlayers, setAsPlayers] = useState(false);
+  const drag = useDrag<HTMLDivElement>();
+  const backdrop = useBackdropClose(onClose);
   const scope = editedMap(table, mapId);
   if (!scope) return null;
   const { map, current } = scope;
@@ -70,9 +74,9 @@ export function MapPreview({
   const hidden = (map.items ?? []).filter((i) => i.hidden).length + tokens.filter((t) => t.hidden).length + (map.background && map.backgroundHidden ? 1 : 0);
   const waiting = tokens.filter((t) => !t.ghost && t.side !== "player").length;
   return (
-    <div className="overlay" role="dialog" aria-modal="true" aria-label={`Preview of ${map.name}`} onClick={onClose}>
-      <div className="overlay-box map-preview" onClick={(e) => e.stopPropagation()}>
-        <div className="overlay-head">
+    <div className="overlay" role="dialog" aria-modal="true" aria-label={`Preview of ${map.name}`} {...backdrop}>
+      <div className="overlay-box map-preview" ref={drag.ref} style={drag.style}>
+        <div className="overlay-head" {...drag.handle}>
           <h2>
             {map.name} {current && <span className="badge-soft players-here">Players here</span>}
           </h2>

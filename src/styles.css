@@ -189,8 +189,20 @@ button:disabled { opacity: 0.6; cursor: default; }
 .gm-hint { margin-left: auto; }
 .toolbar-menu { position: relative; }
 .toolbar-menu > button.on { border-color: var(--accent); }
-.toolbar-dropdown { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: 340px; max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 8px 24px #0008; }
+.toolbar-dropdown { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: min(340px, calc(100vw - 24px)); max-height: calc(60vh - var(--drag-y, 0px)); overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; box-shadow: 0 8px 24px #0008; }
 .toolbar-dropdown p, .toolbar-dropdown h3 { margin: 0; }
+/* Popups and menus: a header that stays put (drag it to move the box) over a body that scrolls. */
+.popup-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--line); }
+.popup-head > strong { flex: 1; min-width: 0; }
+.popup-body { overflow-y: auto; min-height: 0; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+[data-drag-handle] { cursor: grab; touch-action: none; user-select: none; }
+[data-drag-handle]:active { cursor: grabbing; }
+[data-drag-handle] :is(button, input, select, textarea, a, label, summary) { cursor: revert; }
+/* A GM character's Combat Actions, over the map on their turn. */
+.turn-popup { position: absolute; top: 8px; left: 8px; z-index: 21; width: min(380px, calc(100% - 16px)); max-height: calc(100% - 16px - var(--drag-y, 0px)); overflow: hidden; background: var(--panel); border: 1px solid var(--accent); border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 10px 30px #000a; }
+.turn-popup-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-popup .action-panel { border: 0; padding: 0; background: none; box-shadow: none; clip-path: none; }
+.turn-popup-reopen { position: absolute; top: 8px; left: 8px; z-index: 21; border-color: var(--accent); }
 .combat-start { display: flex; flex-direction: column; gap: 8px; }
 .gm-map-area { flex: 1; min-height: 0; position: relative; container-type: size; display: grid; place-items: center; }
 .gm-map-area > .grid { width: min(100cqw, calc(100cqh * var(--map-ratio, 1))); }
@@ -206,11 +218,14 @@ button:disabled { opacity: 0.6; cursor: default; }
   .gm-map-area { container-type: normal; }
   .gm-map-area > .grid { width: 100%; }
   .gm-log { max-height: 50vh; }
+  /* The map is too small to hold them on a phone: popups sit over the bottom of the screen instead. */
+  .gm .token-popup, .turn-popup { position: fixed; top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-height: calc(70dvh - var(--drag-y, 0px)); z-index: 40; }
 }
 
 /* The popup when a token is clicked */
-.token-popup { position: absolute; top: 8px; right: 8px; z-index: 20; width: min(360px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 10px 30px #000a; }
-.tp-head { display: flex; gap: 10px; align-items: flex-start; }
+.token-popup { position: absolute; top: 8px; right: 8px; z-index: 20; width: min(360px, calc(100% - 16px)); max-height: calc(100% - 16px - var(--drag-y, 0px)); overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 10px 30px #000a; }
+.tp-head { display: flex; gap: 10px; align-items: flex-start; flex: none; padding: 12px 12px 10px; border-bottom: 1px solid var(--line); }
+.tp-body { overflow-y: auto; min-height: 0; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
 .tp-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .tp-title h3 { margin: 0; overflow-wrap: anywhere; }
 .tp-status { gap: 4px; }
@@ -513,7 +528,7 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .pc-effect { font-size: 0.68rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 
 .overlay { position: fixed; inset: 0; background: #000a; display: grid; place-items: center; padding: 12px; z-index: 50; }
-.overlay-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; width: min(640px, 100%); max-height: calc(100dvh - 24px); display: flex; flex-direction: column; }
+.overlay-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; width: min(640px, 100%); max-height: calc(100dvh - 24px - var(--drag-y, 0px)); display: flex; flex-direction: column; }
 .overlay-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
 .overlay-head h2 { margin: 0; font-size: 1.1rem; }
 .overlay-body { overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
