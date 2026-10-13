@@ -42,6 +42,7 @@ import {
   updateMapItem,
 } from "./maps.ts";
 import { newId } from "./id.ts";
+import { createMapFolder, deleteMapFolder, renameMapFolder, setMapFolder } from "./mapFolders.ts";
 import { moveCost } from "./ruleset.ts";
 import { cleanSecrets } from "./secrets.ts";
 import type { Resources, Side, TableAction, TableState, Token, TokenGearInfo } from "./types.ts";
@@ -365,6 +366,21 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       gmOnly();
       deleteMap(table, action.mapId);
       return true;
+    case "createMapFolder":
+      gmOnly();
+      createMapFolder(table, action);
+      return true;
+    case "renameMapFolder":
+      gmOnly();
+      renameMapFolder(table, action);
+      return true;
+    case "deleteMapFolder":
+      gmOnly();
+      deleteMapFolder(table, action.folderId);
+      return true;
+    case "setMapFolder":
+      gmOnly();
+      return setMapFolder(table, action);
     case "addMapItem":
       gmOnly();
       addMapItem(table, action);

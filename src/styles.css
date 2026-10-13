@@ -1232,6 +1232,21 @@ select.piece.add { color: #6fb4ff; }
 .map-thumb-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .map-thumb-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge-soft { white-space: nowrap; }
+/* Map folders */
+.map-list { display: flex; flex-direction: column; gap: 6px; border-radius: 8px; outline: 2px dashed transparent; outline-offset: 2px; }
+.map-list.drop-here { outline-color: var(--accent); }
+.map-list li[draggable="true"] { cursor: grab; }
+.map-folder-new { align-self: flex-start; }
+.map-folders { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.map-folder { border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
+.map-folder.drop-here { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.map-folder > .map-thumbs { margin: 0; padding: 4px 0 0 8px; }
+.map-folder-head { display: flex; align-items: center; gap: 4px; }
+.map-folder-toggle { flex: 1; min-width: 0; display: flex; gap: 4px; align-items: baseline; text-align: left; border: none; background: none; padding: 4px; font-weight: 600; }
+.map-folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-folder-rename { flex: 1; min-width: 0; }
+.map-folder-empty { margin: 4px 8px; }
+.map-preview-folder { display: inline-flex; gap: 6px; align-items: center; margin: 4px 0; }
 .badge-soft.players-here { color: var(--ok); border-color: var(--ok); }
 .map-preview { width: min(860px, 100%); }
 .maps-panel p { margin: 6px 0; }

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { newId } from "../../../shared/engine.ts";
+import { groupMaps } from "../../../shared/mapFolders.ts";
 import { MAP_MAX, MAP_MIN } from "../../../shared/maps.ts";
 import type { TableAction, TableState } from "../../../shared/types.ts";
 import { MapPicture } from "./MapLayers.tsx";
@@ -16,33 +17,174 @@ export function allMaps(table: TableState) {
   return [{ ...table.map, id: table.map.id ?? "" }, ...others];
 }
 
-/** The game's maps as small pictures. Picking one opens its preview. */
-export function MapList({ table, editingId, onPick }: { table: TableState; editingId?: string; onPick: (mapId: string) => void }) {
+/** The drag type for a map dragged into a folder. */
+const MAP_DRAG_TYPE = "application/x-solp-map";
+
+/**
+ * The game's maps as small pictures, sorted into the GM's folders. Picking one opens its preview.
+ * With `act`, the list can be organized: new folders, renaming, deleting, and dragging maps in and out.
+ */
+export function MapList({ table, editingId, onPick, act }: { table: TableState; editingId?: string; onPick: (mapId: string) => void; act?: Act }) {
+  const [closed, setClosed] = useState<Set<string>>(() => new Set());
+  const [renaming, setRenaming] = useState<string | null>(null);
+  // Where a dragged map would land: a folder's id, or "" for the top level.
+  const [over, setOver] = useState<string | null>(null);
+  const { folders, loose } = groupMaps(allMaps(table), table.mapFolders);
+  const toggle = (id: string) => setClosed((c) => (c.has(id) ? new Set([...c].filter((x) => x !== id)) : new Set([...c, id])));
+
+  // Drop targets: a folder, or the top level.
+  const dropZone = (folderId: string) =>
+    act && {
+      onDragOver: (e: React.DragEvent) => {
+        if (!e.dataTransfer.types.includes(MAP_DRAG_TYPE)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        setOver(folderId);
+      },
+      onDragLeave: (e: React.DragEvent) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver((o) => (o === folderId ? null : o));
+      },
+      onDrop: (e: React.DragEvent) => {
+        const mapId = e.dataTransfer.getData(MAP_DRAG_TYPE);
+        e.preventDefault();
+        e.stopPropagation();
+        setOver(null);
+        if (e.dataTransfer.types.includes(MAP_DRAG_TYPE)) act({ type: "setMapFolder", mapId, folderId: folderId || null });
+        if (folderId && closed.has(folderId)) toggle(folderId);
+      },
+    };
+
+  const thumb = (m: ReturnType<typeof allMaps>[number]) => {
+    const scope = editedMap(table, m.id);
+    const waiting = scope && !scope.current ? scope.tokens.filter((t) => !t.ghost).length : 0;
+    return (
+      <li
+        key={m.id}
+        draggable={!!act}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(MAP_DRAG_TYPE, m.id);
+          e.dataTransfer.effectAllowed = "move";
+        }}
+        onDragEnd={() => setOver(null)}
+      >
+        <button
+          className={"map-thumb" + (m.id === editingId ? " editing" : "")}
+          onClick={() => onPick(m.id)}
+          aria-label={`Preview ${m.name}`}
+          title={act ? "Click to preview, or drag into a folder" : undefined}
+        >
+          <MapPicture map={m} tokens={scope?.tokens.filter((t) => !t.ghost) ?? []} className="thumb" />
+          <span className="map-thumb-text">
+            <strong>{m.name}</strong>
+            <span className="muted small">
+              {m.width}×{m.height}
+              {waiting ? ` · ${waiting} token${waiting === 1 ? "" : "s"} waiting` : ""}
+            </span>
+            <span className="row">
+              {m.id === table.map.id && <span className="badge-soft players-here">Players here</span>}
+              {m.id === editingId && <span className="badge-soft">Editing</span>}
+            </span>
+          </span>
+        </button>
+      </li>
+    );
+  };
+
   return (
-    <ul className="plain map-thumbs">
-      {allMaps(table).map((m) => {
-        const scope = editedMap(table, m.id);
-        const waiting = scope && !scope.current ? scope.tokens.filter((t) => !t.ghost).length : 0;
-        return (
-          <li key={m.id}>
-            <button className={"map-thumb" + (m.id === editingId ? " editing" : "")} onClick={() => onPick(m.id)} aria-label={`Preview ${m.name}`}>
-              <MapPicture map={m} tokens={scope?.tokens.filter((t) => !t.ghost) ?? []} className="thumb" />
-              <span className="map-thumb-text">
-                <strong>{m.name}</strong>
-                <span className="muted small">
-                  {m.width}×{m.height}
-                  {waiting ? ` · ${waiting} token${waiting === 1 ? "" : "s"} waiting` : ""}
-                </span>
-                <span className="row">
-                  {m.id === table.map.id && <span className="badge-soft players-here">Players here</span>}
-                  {m.id === editingId && <span className="badge-soft">Editing</span>}
-                </span>
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <div className={"map-list" + (over === "" ? " drop-here" : "")} {...dropZone("")}>
+      {act && (
+        <button
+          className="map-folder-new"
+          onClick={() => {
+            const id = newId();
+            if (act({ type: "createMapFolder", id, name: "New folder" })) setRenaming(id);
+          }}
+        >
+          + New folder
+        </button>
+      )}
+      {folders.length > 0 && (
+        <ul className="plain map-folders">
+          {folders.map((f) => {
+            const open = !closed.has(f.id);
+            return (
+              <li key={f.id} className={"map-folder" + (over === f.id ? " drop-here" : "")} {...dropZone(f.id)}>
+                <div className="map-folder-head">
+                  {renaming === f.id && act ? (
+                    <FolderName
+                      name={f.name}
+                      onDone={(name) => {
+                        if (name !== f.name) act({ type: "renameMapFolder", folderId: f.id, name });
+                        setRenaming(null);
+                      }}
+                    />
+                  ) : (
+                    <button className="map-folder-toggle" aria-expanded={open} onClick={() => toggle(f.id)}>
+                      <span aria-hidden>{open ? "▾" : "▸"}</span> <span className="map-folder-name">{f.name}</span>{" "}
+                      <span className="muted small">{f.maps.length}</span>
+                    </button>
+                  )}
+                  {act && renaming !== f.id && (
+                    <>
+                      <button className="icon" aria-label={`Rename ${f.name}`} title="Rename" onClick={() => setRenaming(f.id)}>
+                        ✎
+                      </button>
+                      <ConfirmButton
+                        className="icon danger"
+                        aria-label={`Delete ${f.name}`}
+                        title="Delete the folder (its maps stay)"
+                        confirmLabel="Delete?"
+                        ms={3000}
+                        onConfirm={() => act({ type: "deleteMapFolder", folderId: f.id })}
+                      >
+                        🗑
+                      </ConfirmButton>
+                    </>
+                  )}
+                </div>
+                {open &&
+                  (f.maps.length ? (
+                    <ul className="plain map-thumbs">{f.maps.map(thumb)}</ul>
+                  ) : (
+                    <p className="muted small map-folder-empty">{act ? "Empty. Drag maps here." : "Empty."}</p>
+                  ))}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <ul className="plain map-thumbs">{loose.map(thumb)}</ul>
+      {act && folders.length > 0 && <p className="muted small me-help">Drag a map onto a folder to file it, or here to take it out.</p>}
+    </div>
+  );
+}
+
+/** Typing a folder's new name: Enter or clicking away saves, Escape keeps the old one. */
+function FolderName({ name, onDone }: { name: string; onDone: (name: string) => void }) {
+  const [draft, setDraft] = useState(name);
+  // Escape finishes before the blur that follows, so the blur mustn't save the draft after it.
+  const done = useRef(false);
+  const finish = (next: string) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(next);
+  };
+  return (
+    <input
+      className="map-folder-rename"
+      aria-label="Folder name"
+      autoFocus
+      maxLength={60}
+      value={draft}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => finish(draft.trim() || name)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") finish(name);
+      }}
+    />
   );
 }
 
@@ -91,6 +233,20 @@ export function MapPreview({
           <label className="me-check">
             <input type="checkbox" checked={asPlayers} onChange={(e) => setAsPlayers(e.target.checked)} /> Show it the way players will see it
           </label>
+          {table.mapFolders && (
+            // Filing without dragging, for touch screens.
+            <label className="inline map-preview-folder">
+              Folder{" "}
+              <select value={map.folder && table.mapFolders[map.folder] ? map.folder : ""} onChange={(e) => act({ type: "setMapFolder", mapId, folderId: e.target.value || null })}>
+                <option value="">None</option>
+                {groupMaps([], table.mapFolders).folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <p className="muted small">
             {map.width}×{map.height} tiles · {waiting} other token{waiting === 1 ? "" : "s"}
             {hidden ? ` · ${hidden} hidden from players` : ""}
