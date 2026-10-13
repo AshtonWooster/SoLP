@@ -1,9 +1,8 @@
 import { useState } from "react";
 import type { Dice, DiceKind, Page, PageType } from "../../../shared/character.ts";
 import { blankDice } from "../../../shared/ruleset.ts";
-import { friendlyError } from "../../firebase.ts";
 import { NumberInput } from "../Fields.tsx";
-import { IMAGE_ACCEPT, uploadImage } from "../ImageUpload.tsx";
+import { IMAGE_ACCEPT, useImageUpload } from "../ImageUpload.tsx";
 import { DiceIcon, DIE_NAMES, dieClass } from "./DiceIcon.tsx";
 import { DieEffectSlots } from "../effects/library.tsx";
 import { ConfirmButton } from "../ConfirmButton.tsx";
@@ -131,8 +130,7 @@ export function DieEditor({ dice, onChange, onRemove }: { dice: Dice; onChange: 
 
 /** The 4:3 art area of a card being edited: tap it to upload an image (without a folder, it only shows the art). */
 export function ArtPicker({ folder, image, fallback, onChange }: { folder?: string; image?: string; fallback: string; onChange: (image: string | undefined) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, pick, editor } = useImageUpload(folder ?? "", "art", (url) => onChange(url));
   if (!folder) return <div className="pv-art">{image ? <img src={image} alt="" /> : <span className="pc-icon big">{fallback}</span>}</div>;
   return (
     <>
@@ -145,19 +143,10 @@ export function ArtPicker({ folder, image, fallback, onChange }: { folder?: stri
           hidden
           aria-label="Page art"
           disabled={busy}
-          onChange={async (e) => {
+          onChange={(e) => {
             const file = e.target.files?.[0];
             e.target.value = "";
-            if (!file) return;
-            setBusy(true);
-            setError("");
-            try {
-              onChange(await uploadImage(folder, file));
-            } catch (err) {
-              setError(friendlyError(err));
-            } finally {
-              setBusy(false);
-            }
+            pick(file);
           }}
         />
       </label>
@@ -167,6 +156,7 @@ export function ArtPicker({ folder, image, fallback, onChange }: { folder?: stri
         </button>
       )}
       {error && <span className="error small">{error}</span>}
+      {editor}
     </>
   );
 }
