@@ -29,6 +29,7 @@ import { useDrag } from "../components/drag.ts";
 import { gmTurnToken } from "../../shared/combat.ts";
 import { BLANK_DRAFT, GmPopups, type PopupDraft } from "../components/GmPopups.tsx";
 import { useStatusVfx } from "../components/vfx/useVfx.ts";
+import { StableLabel } from "../components/StableLabel.tsx";
 
 /** The GM's laptop: runs the table and can override anything. */
 export function Gm() {
@@ -121,12 +122,13 @@ export function Gm() {
           Map editor
         </button>
       </nav>
-      <ConnectionBadge status={snapshot.status} />
       <a href={`/games/${id}/board`} target="_blank" rel="noreferrer">
         Open board
       </a>
       {meta.data && <span className="muted">Invite code: {meta.data.inviteCode}</span>}
       {actionError && <span className="error">{actionError}</span>}
+      {/* Last, so its changing text ("Hosting", "Reconnecting…") never pushes the links over. */}
+      <ConnectionBadge status={snapshot.status} />
     </header>
   );
   const preview = table && previewId && (
@@ -205,7 +207,10 @@ export function Gm() {
               title="Maps"
               label={
                 <>
-                  Maps <span className="muted small">· {table.map.name}</span>
+                  Maps{" "}
+                  <span className="muted small toolbar-map-name" title={table.map.name}>
+                    · {table.map.name}
+                  </span>
                 </>
               }
             >
@@ -242,14 +247,27 @@ export function Gm() {
               title="Popups for players"
               label={
                 <>
-                  Popups{table.popups?.length ? <span className="muted small"> · {table.popups.length} up</span> : null}
+                  Popups
+                  {table.popups?.length ? (
+                    <span className="count-badge" aria-label={`${table.popups.length} up`}>
+                      {table.popups.length}
+                    </span>
+                  ) : null}
                 </>
               }
               wide
             >
               {() => <GmPopups gameId={id} table={table} players={players} act={act} draft={popupDraft} setDraft={setPopupDraft} />}
             </ToolbarMenu>
-            {!table.combat && <ToolbarMenu title="Start combat" label="Start combat">{(close) => <CombatStart table={table} act={act} onStarted={close} />}</ToolbarMenu>}
+            {/* Stays put during combat (greyed out), so the fog tools beside it don't jump. */}
+            <ToolbarMenu
+              title="Start combat"
+              label={<StableLabel labels={["Start combat", "In combat"]} show={table.combat ? 1 : 0} />}
+              disabled={!!table.combat}
+              disabledTitle="End combat from the combat panel on the right"
+            >
+              {(close) => <CombatStart table={table} act={act} onStarted={close} />}
+            </ToolbarMenu>
             <FogTools mode={fogMode} setMode={setFogMode} onAll={(hidden) => act({ type: "fogAll", mapId: table.map.id!, hidden })} />
             <span className="muted small gm-hint">
               {fogMode
@@ -359,7 +377,21 @@ export function Gm() {
 }
 
 /** A button above the map that opens a dropdown; clicking outside closes it. */
-function ToolbarMenu({ title, label, wide, children }: { title: string; label: React.ReactNode; wide?: boolean; children: (close: () => void) => React.ReactNode }) {
+function ToolbarMenu({
+  title,
+  label,
+  wide,
+  disabled,
+  disabledTitle,
+  children,
+}: {
+  title: string;
+  label: React.ReactNode;
+  wide?: boolean;
+  disabled?: boolean;
+  disabledTitle?: string;
+  children: (close: () => void) => React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const drag = useDrag<HTMLDivElement>();
@@ -376,10 +408,10 @@ function ToolbarMenu({ title, label, wide, children }: { title: string; label: R
   }, [open]);
   return (
     <div className="toolbar-menu" ref={ref}>
-      <button className={open ? "on" : ""} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button className={open ? "on" : ""} aria-expanded={open} disabled={disabled} title={disabled ? disabledTitle : undefined} onClick={() => setOpen((o) => !o)}>
         {label} <span className="muted">▾</span>
       </button>
-      {open && (
+      {open && !disabled && (
         <div className={"toolbar-dropdown" + (wide ? " wide" : "")} role="dialog" aria-label={title} ref={drag.ref} style={drag.style}>
           <header className="popup-head" {...drag.handle}>
             <strong>{title}</strong>
@@ -477,7 +509,7 @@ function CombatPanel({ table, act, speed }: { table: TableState; act: (action: T
     <div className="combat-panel">
       <div className="row-between">
         <h3>Combat · Round {combat.round}</h3>
-        <ConfirmButton className="danger" confirmLabel="Confirm end combat" onConfirm={() => act({ type: "endCombat" })}>
+        <ConfirmButton className="danger" confirmLabel="End it?" onConfirm={() => act({ type: "endCombat" })}>
           End combat
         </ConfirmButton>
       </div>

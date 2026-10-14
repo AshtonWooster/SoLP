@@ -131,15 +131,16 @@ export function ActionPanel({ table, token, canAct, send }: Props) {
               </button>
             ))}
           </div>
+          {/* Cancel first: the Use button's label grows with the count, and nothing sits after it to be pushed. */}
           <div className="row">
+            <button type="button" onClick={() => send({ type: "clearAim" })}>
+              Cancel
+            </button>
             {mass && (
               <button type="button" className="big-button" disabled={aim.targets.length === 0} onClick={() => send({ type: "slot" })}>
                 Use on {aim.targets.length} target{aim.targets.length === 1 ? "" : "s"}
               </button>
             )}
-            <button type="button" onClick={() => send({ type: "clearAim" })}>
-              Cancel
-            </button>
           </div>
         </div>
       )}

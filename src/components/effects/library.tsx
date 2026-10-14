@@ -8,6 +8,7 @@ import { useCollection } from "../../api.ts";
 import { db, friendlyError } from "../../firebase.ts";
 import { Overlay } from "../player/Overlay.tsx";
 import { EffectBuilder } from "./EffectBuilder.tsx";
+import { StableLabel } from "../StableLabel.tsx";
 
 export interface LibraryValue {
   gameId: string;
@@ -94,7 +95,7 @@ function NewEffectPopup({ kind, onCreated, onClose }: { kind: EffectKind; onCrea
                 }
               }}
             >
-              {busy ? "Adding…" : `Add ${info.label}`}
+              <StableLabel labels={[`Add ${info.label}`, "Adding…"]} show={busy ? 1 : 0} />
             </button>
           </>
         }

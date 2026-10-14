@@ -11,6 +11,7 @@ import { auth, db, deleteAccountFn, friendlyError, logOut } from "../firebase.ts
 import { applyTheme, savedTheme } from "../theme.ts";
 import { openConsent, useConsent } from "../consent.ts";
 import { Footer } from "../components/Footer.tsx";
+import { StableLabel } from "../components/StableLabel.tsx";
 
 /** Account settings, from the gear in the top bar: your display name, the app's look, and deleting your account. */
 export function Account() {
@@ -83,13 +84,13 @@ export function Account() {
           <p className="muted small">What GMs and other players see in every game you're in.</p>
           <div className="row">
             <input id="display-name" aria-label="Display name" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
-            <button disabled={busy || cleanDisplayName(name) === me.displayName}>{busy ? "Saving…" : "Save"}</button>
+            <button disabled={busy || cleanDisplayName(name) === me.displayName}><StableLabel labels={["Save", "Saving…"]} show={busy ? 1 : 0} /></button>
+            {nameMsg && (
+              <span className={nameMsg === "Saved." ? "muted small inline-note" : "error small inline-note"} role="status">
+                {nameMsg}
+              </span>
+            )}
           </div>
-          {nameMsg && (
-            <p className={nameMsg === "Saved." ? "muted small" : "error small"} role="status">
-              {nameMsg}
-            </p>
-          )}
         </form>
 
         <section className="panel settings-section stack">
@@ -253,7 +254,7 @@ function DeleteAccountSection({ me }: { me: User }) {
           {error && <p className="error small">{error}</p>}
           <div className="row wrap">
             <button type="submit" className="danger" disabled={!ready}>
-              {busy ? "Deleting…" : "Delete my account forever"}
+              <StableLabel labels={["Delete my account forever", "Deleting…"]} show={busy ? 1 : 0} />
             </button>
             <button type="button" onClick={cancel} disabled={busy}>
               Cancel

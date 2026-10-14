@@ -5,6 +5,7 @@ import { useStatFormulas } from "../../api.ts";
 import { Stepper } from "../Fields.tsx";
 import { IMAGE_ACCEPT, useImageUpload } from "../ImageUpload.tsx";
 import { SecondaryStatIcon, StatIcon } from "../LorIcons.tsx";
+import { StableLabel } from "../StableLabel.tsx";
 
 export type CreatorStep = "intro" | "license" | "stats" | "story" | "summary";
 export type SheetTab = "sheet" | "augment" | "inventory" | "decks";
@@ -425,7 +426,8 @@ export function CharacterCreator(props: Props) {
           </button>
           {index < ORDER.length - 1 && (
             <button type="button" className="go" onClick={() => setStep(ORDER[index + 1])}>
-              Next: {STEPS.find((s) => s.key === ORDER[index + 1])?.label} →
+              {/* Every step's label takes the same room, so Next keeps its size from step to step. */}
+              <StableLabel labels={STEPS.map((s) => `Next: ${s.label} →`)} show={STEPS.findIndex((s) => s.key === ORDER[index + 1])} />
             </button>
           )}
         </div>

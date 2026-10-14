@@ -321,7 +321,13 @@ export function Play() {
           </button>
         )}
         {combat && mine && deck && (
+          // Always one row tall, and Clear comes first, so picking a Page never moves End turn or Clear.
           <div className="select-strip">
+            {(page || target) && (
+              <button type="button" className="chip" onClick={() => clearSelection()}>
+                Clear
+              </button>
+            )}
             {problem && !PICK_PROMPTS.includes(problem) && (
               <span className="chip static warn" role="status">
                 {problem}
@@ -330,11 +336,6 @@ export function Play() {
             {page && selectedCard && !problem && (
               <button type="button" className="chip go" onClick={() => use(category, selectedCard, targets)}>
                 Use{mass ? ` on ${targets.length}` : ""}
-              </button>
-            )}
-            {(page || target) && (
-              <button type="button" className="chip" onClick={() => clearSelection()}>
-                Clear
               </button>
             )}
           </div>

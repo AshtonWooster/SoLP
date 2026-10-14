@@ -142,7 +142,7 @@ function SentPopup({ popup: p, players, name, onRemove }: { popup: GmPopup; play
     <li className="popup-sent-item">
       <div className="row-between">
         <strong className="popup-sent-title">{p.title || p.text || (p.image ? "Image" : "Story Roll")}</strong>
-        <ConfirmButton className="small" confirmLabel="Take down?" onConfirm={onRemove}>
+        <ConfirmButton className="small" confirmLabel="Sure?" confirmHint="Takes it off every phone" onConfirm={onRemove}>
           Take down
         </ConfirmButton>
       </div>

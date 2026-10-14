@@ -539,7 +539,7 @@ export function NpcEditor({
           <button type="button" onClick={() => onDuplicate(t)}>
             Duplicate
           </button>
-          <ConfirmButton className="danger" confirmLabel="Delete? Copies on the map stay" ms={3000} onConfirm={onDelete}>
+          <ConfirmButton className="danger" confirmLabel="Delete?" confirmHint="Copies already on the map stay" ms={3000} onConfirm={onDelete}>
             Delete
           </ConfirmButton>
         </div>

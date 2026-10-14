@@ -134,7 +134,8 @@ export function MapList({ table, editingId, onPick, act }: { table: TableState; 
                         className="icon danger"
                         aria-label={`Delete ${f.name}`}
                         title="Delete the folder (its maps stay)"
-                        confirmLabel="Delete?"
+                        confirmLabel="🗑"
+                        confirmHint="Tap again to delete the folder. Its maps stay."
                         ms={3000}
                         onConfirm={() => act({ type: "deleteMapFolder", folderId: f.id })}
                       >
@@ -269,7 +270,7 @@ export function MapPreview({
             {!current && (
               <>
                 <button onClick={() => act({ type: "createMap", id: newId(), name: "", width: map.width, height: map.height, copyFrom: mapId }) && onClose()}>Duplicate</button>
-                <ConfirmButton className="danger" confirmLabel={`Delete ${map.name} and its waiting tokens?`} ms={3000} onConfirm={() => act({ type: "deleteMap", mapId }) && onClose()}>
+                <ConfirmButton className="danger" confirmLabel="Delete?" confirmHint={`Deletes ${map.name || "this map"} and the tokens waiting on it`} ms={3000} onConfirm={() => act({ type: "deleteMap", mapId }) && onClose()}>
                   Delete
                 </ConfirmButton>
               </>

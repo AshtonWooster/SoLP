@@ -106,7 +106,7 @@ function EquipmentCardEditor<T extends Weapon | Armor>({
         <span className="muted small">
           {item.pages.length} Page{item.pages.length === 1 ? "" : "s"}: tap one on the right to edit it
         </span>
-        <ConfirmButton className="danger" confirmLabel="Confirm remove" ms={3000} onConfirm={onRemove}>
+        <ConfirmButton className="danger" confirmLabel="Remove?" ms={3000} onConfirm={onRemove}>
           Remove {label.toLowerCase()}
         </ConfirmButton>
       </div>

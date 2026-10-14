@@ -378,7 +378,8 @@ export function Vfx() {
                     </button>
                     <ConfirmButton
                       className="danger"
-                      confirmLabel="Confirm delete (status effects keep working)"
+                      confirmLabel="Delete?"
+                      confirmHint="Status effects keep working, without it"
                       ms={3000}
                       onConfirm={async () => {
                         await deleteDoc(doc(db, "games", id, "vfx", current)).catch((e) => setMessage(friendlyError(e)));

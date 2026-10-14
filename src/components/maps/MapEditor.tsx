@@ -12,6 +12,7 @@ import { FogDraw, FogLayer, FogTools, type FogMode } from "./Fog.tsx";
 import { fogMask, itemInView, tokenInView } from "../../../shared/fog.ts";
 import { assetName } from "../../../shared/mapAssets.ts";
 import { ASSET_DRAG_TYPE, AssetLibrary, saveToLibrary } from "./AssetLibrary.tsx";
+import { StableLabel } from "../StableLabel.tsx";
 
 type Act = (a: TableAction) => boolean;
 type LayerKey = "pins" | "tokens" | "assets" | "background";
@@ -483,7 +484,10 @@ export function MapEditor({
                   >
                     {layers[l.key].show ? "👁" : "◌"}
                   </button>
-                  {l.key !== "background" && (
+                  {l.key === "background" ? (
+                    // The background can't be locked; an empty slot keeps its eye in line with the others.
+                    <span className="me-layer-slot" aria-hidden="true" />
+                  ) : (
                     <button
                       className={"icon" + (layers[l.key].lock ? " on" : "")}
                       aria-label={`${layers[l.key].lock ? "Unlock" : "Lock"} the ${l.label} layer`}
@@ -538,7 +542,7 @@ function UploadButton({ gameId, onUploaded, onError }: { gameId: string; onUploa
   return (
     <>
       <label className={"button-like" + (busy ? " disabled" : "")} title="Add an image to the asset layer">
-        {busy ? "Uploading…" : "🖼 Add image"}
+        <StableLabel labels={["🖼 Add image", "Uploading…"]} show={busy ? 1 : 0} />
         <input
           type="file"
           accept={IMAGE_ACCEPT}
