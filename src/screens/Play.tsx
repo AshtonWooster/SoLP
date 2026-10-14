@@ -279,7 +279,7 @@ export function Play() {
         </div>
       </section>
       {/* Effects on you: tap an icon for what it does. Always one row tall, so nothing under it moves. */}
-      <EffectsBar className="player-effects" effects={mine?.effects ?? []} library={effectLibrary} size={44} floating empty="No effects on you." />
+      <EffectsBar className="player-effects" effects={mine?.effects ?? []} library={effectLibrary} size={44} empty="No effects on you." />
 
       {/* ---- Turn state ---- */}
       <div className={"turn-strip" + (myTurn ? " mine" : "")}>

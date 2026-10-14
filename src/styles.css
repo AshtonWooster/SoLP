@@ -1622,9 +1622,8 @@ select.piece.add { color: #6fb4ff; }
 .effects-bar-icons { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 5px 5px 5px 0; }
 .status-icon-btn { padding: 0; border: 0; background: none; border-radius: 22%; cursor: pointer; line-height: 0; }
 .status-icon-btn:hover .status-icon-face, .status-icon-btn.open .status-icon-face { outline: 2px solid var(--accent); outline-offset: 1px; }
-.status-details { display: flex; gap: 10px; align-items: flex-start; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); text-align: left; }
+.status-details { display: flex; gap: 10px; align-items: flex-start; position: fixed; z-index: 1000; overflow-y: auto; box-sizing: border-box; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); text-align: left; }
 .status-details p { margin: 4px 0 0; }
-.effects-bar.floating .status-details { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
 /* The player's own bar: under the top row, icons big enough to tap. */
 .player-effects { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; min-height: 58px; display: flex; flex-direction: column; justify-content: center; }
 .player-effects .effects-bar-icons { min-height: 48px; }

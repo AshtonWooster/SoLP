@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { blankEffect, cleanEffect, copyEffect, effectLibrary, PRESET_EFFECTS } from "../shared/effects.ts";
-import { cleanIcon, effectDetailLines, effectInitials, effectLabel, nameHue, statusIconInfo } from "../shared/statusIcons.ts";
+import { cleanIcon, detailsPlacement, effectDetailLines, effectInitials, effectLabel, nameHue, statusIconInfo } from "../shared/statusIcons.ts";
 
 const ICON = "https://firebasestorage.googleapis.com/v0/b/demo/o/games%2Fg%2Fassets%2Feffect-icons%2Fa.png?alt=media";
 const library = effectLibrary({
@@ -77,4 +77,24 @@ test("details and labels say the stacks, duration and stacks still to come", () 
   assert.deepEqual(effectDetailLines({}), []);
   assert.equal(effectLabel({ name: "Burn", count: 3, pending: 2 }), "Burn, 3 stacks, +2 next round");
   assert.equal(effectLabel({ name: "", count: 1 }), "Effect, 1 stack");
+});
+
+test("details open under the bar, as wide as it, without moving anything", () => {
+  const p = detailsPlacement({ left: 20, top: 100, bottom: 160, width: 600 }, { width: 900, height: 700 });
+  assert.deepEqual(p, { left: 20, width: 600, top: 164, maxHeight: 528 });
+});
+
+test("details stay on screen on a narrow phone and next to a bar at the right edge", () => {
+  const phone = detailsPlacement({ left: 130, top: 300, bottom: 340, width: 120 }, { width: 390, height: 760 });
+  assert.equal(phone.width, 260);
+  assert.ok(phone.left + phone.width <= 390 - 8);
+  const tiny = detailsPlacement({ left: 0, top: 10, bottom: 50, width: 400 }, { width: 200, height: 600 });
+  assert.deepEqual([tiny.left, tiny.width], [8, 184]);
+});
+
+test("details open above the bar when there's more room there", () => {
+  const p = detailsPlacement({ left: 10, top: 600, bottom: 650, width: 300 }, { width: 800, height: 700 });
+  assert.equal(p.top, undefined);
+  assert.equal(p.bottom, 104);
+  assert.equal(p.maxHeight, 588);
 });

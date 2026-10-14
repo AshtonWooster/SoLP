@@ -1,8 +1,9 @@
 // Status effects as icons with their stacks: in a character's preview, the player's effects bar
 // and Cycle Characters. Hover (or tap, on a phone) an icon for its details.
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, forwardRef, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { EffectDef } from "../../../shared/effects.ts";
-import { effectDetailLines, effectLabel, type StatusGlyph, statusIconInfo } from "../../../shared/statusIcons.ts";
+import { detailsPlacement, effectDetailLines, effectLabel, type StatusGlyph, statusIconInfo } from "../../../shared/statusIcons.ts";
 import type { Effect } from "../../../shared/types.ts";
 import { effectText } from "./EffectBuilder.tsx";
 
@@ -47,11 +48,11 @@ export function LibraryStatusIcon({ id, def, size = 28 }: { id: string; def: Eff
 }
 
 /** An effect's name, stacks, duration and what it does. */
-function EffectDetails({ effect, library }: { effect: Effect; library: Record<string, EffectDef> }) {
+const EffectDetails = forwardRef<HTMLDivElement, { effect: Effect; library: Record<string, EffectDef>; style?: CSSProperties }>(function EffectDetails({ effect, library, style }, ref) {
   const def = effect.defId ? library[effect.defId] : undefined;
   const description = effect.description || (def ? effectText(def, library) : "");
   return (
-    <div className="status-details" role="note">
+    <div className="status-details" role="note" ref={ref} style={style}>
       <StatusIcon effect={effect} library={library} size={36} />
       <div>
         <strong>{statusIconInfo(effect, library).name}</strong> <span className="muted small">× {effect.count}</span>
@@ -64,26 +65,23 @@ function EffectDetails({ effect, library }: { effect: Effect; library: Record<st
       </div>
     </div>
   );
-}
+});
 
 /**
  * A row of effect icons. Hovering one with a mouse shows its details; tapping or clicking keeps
- * them open until it's tapped again, another is picked, or the viewer clicks elsewhere.
- * `floating`: the details hang over what's below instead of pushing it down (the player screen,
- * where nothing under the bar should move).
+ * them open until it's tapped again, another is picked, or the viewer clicks elsewhere. The
+ * details hang over whatever is below the bar, so opening them never moves anything.
  */
 export function EffectsBar({
   effects,
   library,
   size = 32,
-  floating,
   empty,
   className = "",
 }: {
   effects: Effect[];
   library: Record<string, EffectDef>;
   size?: number;
-  floating?: boolean;
   /** Shown when there are none; without it the bar isn't drawn at all. */
   empty?: string;
   className?: string;
@@ -91,17 +89,34 @@ export function EffectsBar({
   const [pinned, setPinned] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const detailsRef = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<CSSProperties | null>(null);
   useEffect(() => {
     if (!pinned) return;
-    const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setPinned(null);
+    const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && !detailsRef.current?.contains(e.target as Node) && setPinned(null);
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
   }, [pinned]);
-  if (!effects.length && !empty) return null;
   const openId = hovered ?? pinned;
   const open = effects.find((e) => e.id === openId);
+  // The details float over the page beside the bar, following it if the page or a popup scrolls.
+  useLayoutEffect(() => {
+    if (!open) return setPlace(null);
+    const measure = () => {
+      const r = ref.current?.getBoundingClientRect();
+      if (r) setPlace(detailsPlacement(r, { width: window.innerWidth, height: window.innerHeight }));
+    };
+    measure();
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [open]);
+  if (!effects.length && !empty) return null;
   return (
-    <div className={`effects-bar ${floating ? "floating" : ""} ${className}`} ref={ref} onPointerLeave={() => setHovered(null)}>
+    <div className={`effects-bar ${className}`} ref={ref} onPointerLeave={() => setHovered(null)}>
       <div className="effects-bar-icons" role="group" aria-label="Effects">
         {effects.map((e) => (
           <button
@@ -118,7 +133,7 @@ export function EffectsBar({
         ))}
         {!effects.length && <span className="muted small">{empty}</span>}
       </div>
-      {open && <EffectDetails effect={open} library={library} />}
+      {open && place && createPortal(<EffectDetails ref={detailsRef} effect={open} library={library} style={place} />, document.body)}
     </div>
   );
 }
