@@ -27,9 +27,14 @@ export function AugmentTab({ c, update, npc }: { c: Character; update: (fn: (d: 
         <p className="muted small">
           {npc
             ? "Their background and training, picked from the game's shared Proficiencies."
-            : `They reflect your background, like a workshop Fixer with Proficiencies in modifying weapons. Each one may need minimum Stats. You get ${profMax} at Rank ${c.rank}. Pick them from the game's shared Proficiencies.`}
+            : `They reflect your background, like a workshop Fixer with Proficiencies in modifying weapons. You get ${profMax} at Rank ${c.rank}. Pick them on the game's shared Proficiency tree: some need other Proficiencies or minimum Stats first.`}
         </p>
-        <ProficiencySlots proficiencies={c.proficiencies} max={npc ? undefined : profMax} onChange={(p) => update((d) => void (d.proficiencies = p))} />
+        <ProficiencySlots
+          proficiencies={c.proficiencies}
+          max={npc ? undefined : profMax}
+          sheet={npc ? undefined : c}
+          onChange={(p) => update((d) => void (d.proficiencies = p))}
+        />
       </aside>
 
       <section className="augment-card" id="augment" aria-label="Augment">
