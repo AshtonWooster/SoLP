@@ -185,6 +185,13 @@ export function tableForPlayers(full: TableState): TableState {
     log: table.log.map((l) => concealLine(l, hidden)).filter((l): l is string => l !== null),
   };
   if (table.combat) out.combat = concealCombat(table.combat, tokens);
+  // A Story Roll's bonus is the character's Justice: hidden when the log hides it.
+  const story = table.storyRoll;
+  if (story && hidden(story.tokenId, "justice")) {
+    const { bonus: _bonus, ...rest } = story;
+    if (tokens[story.tokenId]) out.storyRoll = rest;
+    else delete out.storyRoll;
+  }
   return out;
 }
 

@@ -462,6 +462,8 @@ export function playerView(table: TableState, viewerId?: string): TableState {
     tokens: Object.fromEntries(Object.entries(table.tokens).filter(([id]) => shown.has(id))),
   };
   if (table.combat) out.combat = combatShowing(table.combat, shown);
+  // A Story Roll under the fog plays on no one else's screen.
+  if (table.storyRoll && !shown.has(table.storyRoll.tokenId)) delete out.storyRoll;
   return out;
 }
 
