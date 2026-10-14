@@ -83,8 +83,6 @@ export interface EngineContext {
   effectDef?(id: string): EffectDef | undefined;
   /** The Game setting "Effects wear off when combat ends" (shared/types.ts). */
   clearEffectsAfterCombat?(): boolean;
-  /** The Game setting "Rewards and costs in popups" (shared/types.ts). */
-  popupRewards?(): boolean;
   /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
   sheets?: SheetAccess;
 }
@@ -334,9 +332,13 @@ function recoverStagger(table: TableState, t: Token, amount: number) {
   const before = r.stagger;
   r.stagger = Math.min(r.maxStagger, r.stagger + amount);
   const wasStaggered = !!t.status?.staggered;
-  if (r.stagger > 0 && wasStaggered) t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
-  if (r.stagger > before) log(table, secret(t, "stagger", `  ${t.name} recovers ${r.stagger - before} Stagger Resist.`));
-  if (wasStaggered && !t.status?.staggered) trigger(table, "recovered", t);
+  if (r.stagger > 0 && wasStaggered) {
+    // Recovering from Stagger always brings Stagger Resist back to full, however little was recovered.
+    t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
+    r.stagger = r.maxStagger;
+    log(table, `  ${t.name} recovers from Stagger${secret(t, "stagger", ` (${r.stagger}/${r.maxStagger})`)}; Resistances are back to normal.`);
+    trigger(table, "recovered", t);
+  } else if (r.stagger > before) log(table, secret(t, "stagger", `  ${t.name} recovers ${r.stagger - before} Stagger Resist.`));
 }
 
 /** Clash Win heals 1 Sanity, Clash Lose costs 1. Sanity runs from -max to +max; the minimum means Panic. */
