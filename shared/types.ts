@@ -75,6 +75,12 @@ export interface GameSettings {
    */
   playersCreateEffects?: boolean;
   /**
+   * Players' new and changed Proficiencies in the Proficiency tree (shared/proficiencies.ts) wait for
+   * the GM's approval, and nobody can pick them until then. Off unless the GM turns it on: then
+   * players' Proficiencies join the tree right away, as they always have.
+   */
+  approveProficiencies?: boolean;
+  /**
    * When the GM ends combat, every automated status Effect (Burn, Poise…) comes off the characters
    * who fought. Off unless the GM turns it on: then Effects stay until they wear off or the GM removes them.
    */
@@ -109,6 +115,10 @@ export function playersCanCreateItems(game: GameDoc | undefined): boolean {
 
 export function playersCanCreateEffects(game: GameDoc | undefined): boolean {
   return game?.settings?.playersCreateEffects === true;
+}
+
+export function proficienciesNeedApproval(game: GameDoc | undefined): boolean {
+  return game?.settings?.approveProficiencies === true;
 }
 
 export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {

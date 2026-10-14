@@ -34,6 +34,7 @@ import { effectsClearAfterCombat, popupRewardsOn } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
 import { clearLog, logClearedAt, logClearRequested } from "../../shared/clearLog.ts";
 import { autosaveWrites, loadedNotes, type LastSaved } from "../../shared/autosave.ts";
+import { proficiencyPages } from "../../shared/proficiencies.ts";
 import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
@@ -345,14 +346,19 @@ export class Host {
       const c = ownerId ? this.character(ownerId) : undefined;
       if (!c) return undefined;
       const aux = auxiliaryDeck(c);
+      // Proficiencies that add a Page put one copy in the Auxiliary Deck (shared/proficiencies.ts).
+      const profPages = proficiencyPages(c, this.effects);
       return {
         pages: Object.fromEntries(
-          [...equipmentPages(c).map((x) => x.page), ...aux.map((x) => x.page), ...(c.ego ?? [])].map((p) => [p.id, p]),
+          [...equipmentPages(c).map((x) => x.page), ...aux.map((x) => x.page), ...profPages.map((x) => x.page), ...(c.ego ?? [])].map((p) => [p.id, p]),
         ),
         ego: (c.ego ?? []).map((p) => p.id),
         stats: { ...c.primary, ...c.secondary },
         deck: cleanDeck(c).flatMap((e) => Array(e.copies).fill(e.pageId)),
-        aux: aux.flatMap((x) => Array.from({ length: x.copies }, () => ({ pageId: x.page.id, itemId: x.item.id }))),
+        aux: [
+          ...aux.flatMap((x) => Array.from({ length: x.copies }, () => ({ pageId: x.page.id, itemId: x.item.id }))),
+          ...profPages.map((x) => ({ pageId: x.page.id })),
+        ],
         resistances: c.armor?.resistances,
         staggerResistances: c.armor?.staggerResistances,
         passiveEffects: linkedEffects(c),

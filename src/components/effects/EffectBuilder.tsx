@@ -17,6 +17,7 @@ import {
   EFFECT_WHENS,
   effectWarnings,
   isAlwaysOn,
+  MAX_REQUIRES,
   LIMIT_OPTIONS,
   PAGE_IS_OPTIONS,
   PERCENT_ACTIONS,
@@ -34,7 +35,9 @@ import {
   type Whose,
 } from "../../../shared/effects.ts";
 import { tryEffect, type TryResult } from "../../../shared/effects-try.ts";
-import { PRIMARY_STATS, SECONDARY_STATS } from "../../../shared/ruleset.ts";
+import { blankPage, PRIMARY_STATS, SECONDARY_STATS } from "../../../shared/ruleset.ts";
+import { wouldLoop } from "../../../shared/proficiencies.ts";
+import { PageCardEditor } from "../player/LorCard.tsx";
 import { NumberInput } from "../Fields.tsx";
 
 const STATS = [...PRIMARY_STATS, ...SECONDARY_STATS].map((s) => ({ value: s.key, label: s.label }));
@@ -688,10 +691,13 @@ export function EffectBuilder({
   library,
   onChange,
   footer,
+  selfId,
 }: {
   def: EffectDef;
   library: Record<string, EffectDef>;
   onChange: (d: EffectDef) => void;
+  /** Its library id, if it has one yet, so a Proficiency can't need itself. */
+  selfId?: string;
   /** Buttons for the bottom of the card, like Make a variant and Delete. */
   footer?: React.ReactNode;
 }) {
@@ -721,7 +727,7 @@ export function EffectBuilder({
               </span>
             </label>
           )}
-          {optionalRules ? (def.rules.length ? " · Automated" : " · The GM handles it") : ""}
+          {optionalRules ? (def.rules.length ? " · Automated" : def.page ? " · Adds a Page" : " · The GM handles it") : ""}
         </span>
         {ruleText && <p>{ruleText}</p>}
         <textarea
@@ -741,6 +747,8 @@ export function EffectBuilder({
           ))}
         </ul>
       )}
+
+      {def.kind === "proficiency" && <ProficiencyFields def={def} library={library} selfId={selfId} onChange={onChange} />}
 
       {optionalRules && <h4 className="rules-head">Automate it {def.rules.length ? "" : <span className="muted small">(optional)</span>}</h4>}
       {def.rules.map((r, i) => (
@@ -790,5 +798,101 @@ export function EffectBuilder({
       )}
       {def.rules.length > 0 && <TryIt def={def} library={library} />}
     </div>
+  );
+}
+
+/**
+ * A Proficiency's place in the tree (what it needs first, and minimum Stats) and the Page it can add
+ * to its owner's Auxiliary Deck. Its rules (below) and words cover the other two things it can do.
+ */
+function ProficiencyFields({ def, library, selfId, onChange }: { def: EffectDef; library: Record<string, EffectDef>; selfId?: string; onChange: (d: EffectDef) => void }) {
+  const requires = def.requires ?? [];
+  const stats = Object.entries(def.minStats ?? {});
+  const options = Object.entries(library)
+    .filter(([id, d]) => d.kind === "proficiency" && id !== selfId && !requires.includes(id) && !(selfId && wouldLoop(library, selfId, id)))
+    .sort((a, b) => a[1].name.localeCompare(b[1].name));
+  const setStats = (next: [string, number][]) => {
+    const { minStats: _m, ...rest } = def;
+    onChange(next.length ? { ...rest, minStats: Object.fromEntries(next) } : rest);
+  };
+  const setRequires = (next: string[]) => {
+    const { requires: _r, ...rest } = def;
+    onChange(next.length ? { ...rest, requires: next } : rest);
+  };
+  const freeStat = STATS.find((s) => !def.minStats?.[s.value]);
+  return (
+    <section className="rule-card prof-fields" aria-label="Place in the Proficiency tree">
+      <div className="piece-row">
+        <span className="piece-tag">needs</span>
+        {requires.map((id) => (
+          <span key={id} className="chip static">
+            {library[id]?.name || "(deleted)"}
+            <button type="button" className="link" aria-label={`Doesn't need ${library[id]?.name ?? "it"}`} onClick={() => setRequires(requires.filter((x) => x !== id))}>
+              ✕
+            </button>
+          </span>
+        ))}
+        {requires.length < MAX_REQUIRES && options.length > 0 && (
+          <select aria-label="Needs another Proficiency first" className="piece add" value="" onChange={(e) => e.target.value && setRequires([...requires, e.target.value])}>
+            <option value="">{requires.length ? "+ And another first…" : "+ Another Proficiency first…"}</option>
+            {options.map(([id, d]) => (
+              <option key={id} value={id}>
+                {d.name || "Unnamed"}
+              </option>
+            ))}
+          </select>
+        )}
+        {!requires.length && <span className="muted small">Nothing yet: it starts a branch.</span>}
+      </div>
+      <div className="piece-row">
+        <span className="piece-tag">stats</span>
+        {stats.map(([k, v], i) => (
+          <span key={k} className="row">
+            <Select
+              label="Stat needed"
+              value={k}
+              options={STATS.filter((s) => s.value === k || !def.minStats?.[s.value])}
+              onChange={(key) => setStats(stats.map((x, j) => (j === i ? [key, x[1]] : x)))}
+            />
+            <span className="piece-num">
+              <NumberInput label={`Lowest ${STAT_NAMES[k] ?? k}`} value={v} min={1} max={99} onChange={(n) => setStats(stats.map((x, j) => (j === i ? [x[0], Math.max(1, Math.min(99, Math.round(n)))] : x)))} />
+            </span>
+            <button type="button" className="link" aria-label={`Doesn't need ${STAT_NAMES[k] ?? k}`} onClick={() => setStats(stats.filter((_, j) => j !== i))}>
+              ✕
+            </button>
+          </span>
+        ))}
+        {freeStat && (
+          <button type="button" className="piece add" onClick={() => setStats([...stats, [freeStat.value, 2]])}>
+            + Minimum Stat
+          </button>
+        )}
+      </div>
+      <div className="piece-row">
+        <span className="piece-tag">page</span>
+        {def.page ? (
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              const { page: _p, ...rest } = def;
+              onChange(rest);
+            }}
+          >
+            Remove the Page
+          </button>
+        ) : (
+          <button type="button" className="piece add" onClick={() => onChange({ ...def, page: { ...blankPage("basic"), name: def.name, type: "instant" } })}>
+            + Add a Page to the Auxiliary Deck
+          </button>
+        )}
+      </div>
+      {def.page && (
+        <div className="prof-page">
+          <PageCardEditor page={def.page} onChange={(page) => onChange({ ...def, page })} />
+          <p className="muted small">Whoever has this Proficiency gets one copy of this Page in their Auxiliary Deck in combat.</p>
+        </div>
+      )}
+    </section>
   );
 }
