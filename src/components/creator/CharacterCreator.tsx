@@ -8,7 +8,7 @@ import { SecondaryStatIcon, StatIcon } from "../LorIcons.tsx";
 import { StableLabel } from "../StableLabel.tsx";
 
 export type CreatorStep = "intro" | "license" | "stats" | "story" | "summary";
-export type SheetTab = "sheet" | "augment" | "inventory" | "decks";
+export type SheetTab = "sheet" | "augment" | "proficiencies" | "inventory" | "decks";
 
 const STEPS: { key: Exclude<CreatorStep, "intro">; label: string }[] = [
   { key: "license", label: "Fixer License" },
@@ -22,8 +22,8 @@ const ORDER: CreatorStep[] = ["intro", ...STEPS.map((s) => s.key)];
 const FIX: Record<string, { step?: CreatorStep; tab?: SheetTab; label: string }> = {
   "Finishing Touches": { step: "license", label: "Fixer License" },
   Stats: { step: "stats", label: "Stats" },
-  Proficiencies: { tab: "augment", label: "Augment & Proficiencies" },
-  Augment: { tab: "augment", label: "Augment & Proficiencies" },
+  Proficiencies: { tab: "proficiencies", label: "Proficiencies" },
+  Augment: { tab: "augment", label: "Augment" },
   Equipment: { tab: "decks", label: "Equipment & Decks" },
   Decks: { tab: "decks", label: "Equipment & Decks" },
   Inventory: { tab: "inventory", label: "Inventory" },
@@ -365,7 +365,11 @@ function Intro({ c, setStep, goTab }: Pick<Props, "c" | "setStep" | "goTab">) {
       <p className="muted small">
         Your{" "}
         <button type="button" className="link" onClick={() => goTab("augment")}>
-          Augment &amp; Proficiencies
+          Augment
+        </button>
+        ,{" "}
+        <button type="button" className="link" onClick={() => goTab("proficiencies")}>
+          Proficiencies
         </button>
         ,{" "}
         <button type="button" className="link" onClick={() => goTab("decks")}>

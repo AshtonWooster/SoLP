@@ -3,7 +3,17 @@
 // pick Proficiencies; the effect library uses it to see and edit the whole tree.
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { EffectDef } from "../../../shared/effects.ts";
-import { proficiencyMode, proficiencyTree, statLabel, type ProficiencyMode } from "../../../shared/proficiencies.ts";
+import {
+  matchesStatFilter,
+  proficiencyMode,
+  proficiencyTree,
+  STAT_CMP_OPTIONS,
+  statLabel,
+  type ProficiencyMode,
+  type StatCmp,
+  type StatFilter,
+} from "../../../shared/proficiencies.ts";
+import { PRIMARY_STATS, SECONDARY_STATS } from "../../../shared/ruleset.ts";
 
 /** How a node looks: picked by the character, open to pick, locked by its requirements, or waiting on the GM. */
 export type NodeState = "picked" | "open" | "locked" | "pending" | "plain";
@@ -36,12 +46,15 @@ export function ProficiencyTree({
   selected,
   onSelect,
   empty,
+  filter,
 }: {
   library: Record<string, EffectDef>;
   stateOf?: (id: string, def: EffectDef) => NodeState;
   selected?: string | null;
   onSelect: (id: string) => void;
   empty?: React.ReactNode;
+  /** Nodes that don't match are dimmed, so the tree keeps its shape. */
+  filter?: StatFilter;
 }) {
   const nodes = useMemo(() => proficiencyTree(library), [library]);
   const tiers = useMemo(() => {
@@ -109,7 +122,7 @@ export function ProficiencyTree({
                   type="button"
                   key={n.id}
                   data-node={n.id}
-                  className={`prof-node ${state}` + (selected === n.id ? " selected" : "")}
+                  className={`prof-node ${state}` + (selected === n.id ? " selected" : "") + (matchesStatFilter(n.def, filter) ? (filter?.rows.length ? " match" : "") : " dimmed")}
                   aria-pressed={selected === n.id}
                   onClick={() => onSelect(n.id)}
                 >
@@ -139,5 +152,72 @@ export function TreeLegend({ picking }: { picking?: boolean }) {
       ⚙ Automated · 🂠 Adds a Page to the Auxiliary Deck · ✎ Words only (the GM handles it)
       {picking ? " · Lines show what each one needs first." : ""}
     </p>
+  );
+}
+
+const FILTER_STATS = [...PRIMARY_STATS, ...SECONDARY_STATS];
+
+/**
+ * Filter the tree by the Stats a Proficiency needs: "Fortitude at least 2 and Insight". Tap a Stat
+ * to add it; each one can be any amount, at least, exactly or at most a number.
+ */
+export function StatFilterBar({ filter, onChange, matches, total }: { filter: StatFilter; onChange: (f: StatFilter) => void; matches: number; total: number }) {
+  const on = (stat: string) => filter.rows.some((r) => r.stat === stat);
+  const toggle = (stat: string) =>
+    onChange({ ...filter, rows: on(stat) ? filter.rows.filter((r) => r.stat !== stat) : [...filter.rows, { stat, cmp: "any", n: 2 }] });
+  const set = (i: number, patch: Partial<StatFilter["rows"][number]>) => onChange({ ...filter, rows: filter.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+  return (
+    <div className="stat-filter" role="group" aria-label="Filter by required Stats">
+      <div className="row wrap stat-filter-stats">
+        <span className="muted small">Needs</span>
+        {FILTER_STATS.map((s) => (
+          <button key={s.key} type="button" className={"chip" + (on(s.key) ? " active" : "")} aria-pressed={on(s.key)} onClick={() => toggle(s.key)}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+      {filter.rows.length > 0 && (
+        <div className="stat-filter-rows">
+          {filter.rows.map((r, i) => (
+            <div className="row wrap stat-filter-row" key={r.stat}>
+              {i > 0 && (
+                <select aria-label="Match all or any" className="stat-filter-mode" value={filter.mode} onChange={(e) => onChange({ ...filter, mode: e.target.value as StatFilter["mode"] })}>
+                  <option value="and">and</option>
+                  <option value="or">or</option>
+                </select>
+              )}
+              <strong>{statLabel(r.stat)}</strong>
+              <select aria-label={`How much ${statLabel(r.stat)}`} value={r.cmp} onChange={(e) => set(i, { cmp: e.target.value as StatCmp })}>
+                {STAT_CMP_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {r.cmp !== "any" && (
+                <input
+                  type="number"
+                  aria-label={`${statLabel(r.stat)} amount`}
+                  className="stat-filter-n"
+                  min={1}
+                  max={99}
+                  value={r.n}
+                  onChange={(e) => set(i, { n: Math.max(0, Math.min(99, Math.round(Number(e.target.value) || 0))) })}
+                />
+              )}
+              <button type="button" className="link" aria-label={`Stop filtering by ${statLabel(r.stat)}`} onClick={() => toggle(r.stat)}>
+                ✕
+              </button>
+            </div>
+          ))}
+          <p className="muted small stat-filter-count" role="status">
+            {matches} of {total} match.{" "}
+            <button type="button" className="link" onClick={() => onChange({ ...filter, rows: [] })}>
+              Clear
+            </button>
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
