@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Character, ItemTemplate } from "../../shared/character.ts";
-import { ANY_STAT, POPUP_STATS, POPUP_TEXT_MAX, POPUP_TITLE_MAX, popupIsFor, statLabel } from "../../shared/popups.ts";
+import { ANY_STAT, finishedPopups, POPUP_STATS, POPUP_TEXT_MAX, POPUP_TITLE_MAX, popupIsUp, popupWaitingOn, statLabel, upPopups } from "../../shared/popups.ts";
 import type { PlayerListEntry } from "../../shared/players.ts";
 import { dealSummary, MAX_AHN, MAX_DEAL_COUNT, OUTCOME_LABELS } from "../../shared/rewards.ts";
 import type { GmPopup, PopupDeal, TableAction, TableState } from "../../shared/types.ts";
@@ -54,7 +54,8 @@ function draftDeal(d: PopupDraft): PopupDeal | undefined {
 /**
  * The GM's popups to players, in a toolbar menu: write one (any mix of text, an image and a Story
  * Roll prompt), pick who gets it, send it. Below, the ones still up, with who closed them and what
- * each player rolled.
+ * each player rolled; then, folded away, the finished ones (closed by everyone or taken down) with
+ * their results, until the GM clears them.
  */
 export function GmPopups({
   gameId,
@@ -100,10 +101,12 @@ export function GmPopups({
     setSent(true);
   };
 
-  const popups = [...(table.popups ?? [])].reverse();
+  const popups = upPopups(table).reverse();
+  const finished = finishedPopups(table);
+  const uids = players.map((p) => p.uid);
   return (
     <div className="gm-popups">
-      <p className="muted small">Shows on players' phones until they close it. Use any mix of text, an image and a Story Roll.</p>
+      <p className="muted small">Shows on players' phones until they close it, then takes itself down. Use any mix of text, an image and a Story Roll.</p>
       <label className="field">
         <span>Title</span>
         <input value={title} maxLength={POPUP_TITLE_MAX} placeholder="Optional" onChange={(e) => set({ title: e.target.value })} />
@@ -169,10 +172,26 @@ export function GmPopups({
           <h3>Up now</h3>
           <ul className="plain popup-sent">
             {popups.map((p) => (
-              <SentPopup key={p.id} popup={p} players={players} name={name} onRemove={() => act({ type: "removePopup", popupId: p.id })} />
+              <SentPopup key={p.id} popup={p} players={uids} name={name} onRemove={() => act({ type: "removePopup", popupId: p.id })} />
             ))}
           </ul>
         </>
+      )}
+
+      {finished.length > 0 && (
+        <details className="popup-finished">
+          <summary>
+            Finished <span className="muted small">({finished.length})</span>
+          </summary>
+          <ul className="plain popup-sent">
+            {finished.map((p) => (
+              <SentPopup key={p.id} popup={p} players={uids} name={name} onRemove={() => act({ type: "clearPopups", popupId: p.id })} />
+            ))}
+          </ul>
+          <button type="button" className="small" onClick={() => act({ type: "clearPopups" })}>
+            Clear finished
+          </button>
+        </details>
       )}
 
       {rewards && <PartyAhn players={players} characters={rewards.characters} act={act} />}
@@ -321,18 +340,32 @@ function dealLine(d: PopupDeal): string {
   return `${d.kind === "cost" ? "Cost" : "Reward"}: ${dealSummary(d)}${how}`;
 }
 
-function SentPopup({ popup: p, players, name, onRemove }: { popup: GmPopup; players: PlayerListEntry[]; name: (uid: string) => string; onRemove: () => void }) {
-  const recipients = p.to?.length ? p.to : players.filter((x) => popupIsFor(p, x.uid)).map((x) => x.uid);
-  const open = recipients.filter((uid) => !p.closedBy?.includes(uid));
+/** A popup in the GM's list: still up (with who it waits on) or finished (with how it came down). */
+function SentPopup({ popup: p, players, name, onRemove }: { popup: GmPopup; players: string[]; name: (uid: string) => string; onRemove: () => void }) {
+  const up = popupIsUp(p);
+  const waiting = popupWaitingOn(p, players) ?? [];
   const parts = [p.text && "text", p.image && "image", p.roll && `${statLabel(p.roll.stat)} roll`, p.deal && dealLine(p.deal)].filter(Boolean).join(" · ");
   const outcomes = Object.entries(p.outcomes ?? {});
+  const status = up
+    ? waiting.length
+      ? `Still open for ${waiting.map(name).join(", ")}`
+      : "Everyone closed it"
+    : p.takenDown
+      ? `Taken down${waiting.length ? ` while open for ${waiting.map(name).join(", ")}` : ""}`
+      : "Everyone closed it, so it took itself down";
   return (
-    <li className="popup-sent-item">
+    <li className={`popup-sent-item${up ? "" : " done"}`}>
       <div className="row-between">
         <strong className="popup-sent-title">{p.title || p.text || (p.image ? "Image" : "Story Roll")}</strong>
-        <ConfirmButton className="small" confirmLabel="Sure?" confirmHint="Takes it off every phone" onConfirm={onRemove}>
-          Take down
-        </ConfirmButton>
+        {up ? (
+          <ConfirmButton className="small" confirmLabel="Sure?" confirmHint="Takes it off every phone" onConfirm={onRemove}>
+            Take down
+          </ConfirmButton>
+        ) : (
+          <button type="button" className="small" onClick={onRemove}>
+            Clear
+          </button>
+        )}
       </div>
       <span className="muted small">
         {parts} · To {p.to?.length ? p.to.map(name).join(", ") : "every player"}
@@ -345,7 +378,7 @@ function SentPopup({ popup: p, players, name, onRemove }: { popup: GmPopup; play
         </span>
       )}
       {outcomes.length > 0 && <span className="small">{outcomes.map(([uid, o]) => `${name(uid)} ${OUTCOME_LABELS[o]}`).join(", ")}</span>}
-      <span className="muted small">{open.length ? `Still open for ${open.map(name).join(", ")}` : "Everyone closed it"}</span>
+      <span className="muted small">{status}</span>
     </li>
   );
 }

@@ -509,7 +509,7 @@ export interface TableState {
   tokens: Record<string, Token>;
   log: string[];
   combat?: CombatState;
-  /** Popups the GM sent to players: text, an image, a Story Roll prompt (shared/popups.ts). Newest last. */
+  /** Popups the GM sent to players: text, an image, a Story Roll prompt (shared/popups.ts). Newest last. Finished ones stay for the GM's record. */
   popups?: GmPopup[];
 }
 
@@ -533,6 +533,12 @@ export interface GmPopup {
   deal?: PopupDeal;
   /** How the deal turned out for each player, by user id. */
   outcomes?: Record<string, DealOutcome>;
+  /**
+   * When it came down: every player it's for closed it, or the GM took it down (`takenDown`). It's
+   * off every phone then; the GM's screen keeps it, with its results, until they clear it.
+   */
+  doneAt?: number;
+  takenDown?: boolean;
 }
 
 /**
@@ -677,8 +683,10 @@ export type TableAction =
   // GM popups (shared/popups.ts).
   /** GM: show players a popup. `to` missing or empty: every player. */
   | { type: "sendPopup"; id?: string; title?: string; text?: string; image?: string; roll?: { stat: string }; to?: string[]; deal?: PopupDeal }
-  /** GM: take a popup down from every screen. */
+  /** GM: take a popup down from every screen. Its results stay in the GM's finished list. */
   | { type: "removePopup"; popupId: string }
+  /** GM: clear a finished popup from their list, or every finished one when `popupId` is missing. */
+  | { type: "clearPopups"; popupId?: string }
   /** A player closes a popup sent to them. */
   | { type: "closePopup"; popupId: string }
   /** A player makes the Story Roll a popup asks for. `stat`: their pick, when the popup lets them choose. */

@@ -1551,6 +1551,11 @@ select.piece.add { color: #6fb4ff; }
 .popup-sent-item .row-between { flex-wrap: nowrap; gap: 8px; }
 .popup-sent-item .row-between button { flex: none; white-space: nowrap; }
 .popup-sent-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.popup-sent-item.done { opacity: 0.8; border-style: dashed; }
+.popup-finished { display: flex; flex-direction: column; gap: 6px; }
+.popup-finished > summary { cursor: pointer; font-weight: 600; margin-top: 6px; }
+.popup-finished[open] > .popup-sent { margin: 6px 0; }
+.popup-finished > button { align-self: flex-start; }
 .deal-kind { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .deal-kind label, .deal-when label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .deal-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
