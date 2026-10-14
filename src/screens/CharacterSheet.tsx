@@ -4,7 +4,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import type { Character, ItemTemplate } from "../../shared/character.ts";
 import { blankCharacter, characterChecks, linkInventory } from "../../shared/ruleset.ts";
 import { approveEdits, describeEdits, partsNeedingApproval, proposeEdits, rejectEdits, withProposals } from "../../shared/permissions.ts";
-import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playersCanCreateEffects, type TableStatus } from "../../shared/types.ts";
+import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playersCanCreateEffects, proficienciesNeedApproval, type TableStatus } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { DeckTab } from "../components/DeckTab.tsx";
 import { AugmentTab } from "../components/creator/AugmentTab.tsx";
@@ -12,6 +12,7 @@ import { CharacterCreator, type CreatorStep } from "../components/creator/Charac
 import { InventoryTab } from "../components/items/InventoryTab.tsx";
 import { Section } from "../components/Fields.tsx";
 import { EffectLibraryContext, useLibraryValue } from "../components/effects/library.tsx";
+import { proficiencyChecks } from "../../shared/proficiencies.ts";
 import { linkLibrary } from "../../shared/effects.ts";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, friendlyError } from "../firebase.ts";
@@ -167,7 +168,7 @@ export function CharacterSheet() {
   const { user } = useAuth();
   const game = useDoc<GameDoc>(`games/${id}`);
   const isGm = !!user && game.data?.gmId === user.id;
-  const effects = useLibraryValue(id, user?.id, isGm, playersCanCreateEffects(game.data));
+  const effects = useLibraryValue(id, user?.id, isGm, playersCanCreateEffects(game.data), proficienciesNeedApproval(game.data));
   const isMine = user?.id === uid;
   const canEdit = isMine || isGm;
   const ownerName = game.data?.members[uid]?.displayName ?? "";
@@ -252,7 +253,8 @@ export function CharacterSheet() {
 
   // Slotted Passives and Proficiencies show what the shared effect library says now.
   const sheet = linkLibrary(c, effects.library);
-  const checks = characterChecks(linkInventory(sheet, library));
+  // Picked Proficiencies must meet their prerequisites and Stats (shared/proficiencies.ts).
+  const checks = [...characterChecks(linkInventory(sheet, library)), ...proficiencyChecks(sheet, effects.library)];
   // A new character starts on the intro (Start opens it); coming back later opens the summary.
   const stepParam = params.get("step") as CreatorStep | null;
   const step: CreatorStep = stepParam && CREATOR_STEPS.includes(stepParam) ? stepParam : c.name.trim() ? "summary" : "intro";
