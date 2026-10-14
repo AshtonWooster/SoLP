@@ -47,6 +47,11 @@ export interface Page {
   effect: string;
   /** Optional artwork (an uploaded image's URL). */
   image?: string;
+  /**
+   * Weapon Range in tiles, set in combat from the Weapon the Page comes from (its Melee or Ranged
+   * range, by the Page's type). Missing: the default range for its type (WEAPON_RANGE).
+   */
+  range?: number;
 }
 
 export interface Equipment {
@@ -62,6 +67,10 @@ export interface Equipment {
 export interface Weapon extends Equipment {
   /** Characters have two hands by default. */
   hands: 1 | 2;
+  /** Tiles its Melee Pages reach. Missing: the default (WEAPON_RANGE.melee). */
+  meleeRange?: number;
+  /** Tiles its Ranged Pages reach; a ranged weapon can have Melee Pages too. Missing: the default (WEAPON_RANGE.ranged). */
+  rangedRange?: number;
 }
 
 /** Damage multipliers per Damage Type. Higher tier armor has lower values. */
@@ -125,6 +134,8 @@ export interface InventoryItem {
   maxUses?: number;
   /** Uses left before it's used up (one item of a stack). */
   uses?: number;
+  /** Set by the GM on an Item: it's Ammo, spent one at a time by Ranged Pages (Game setting "Ranged Pages use Ammo"). */
+  ammo?: boolean;
 }
 
 /**

@@ -3,9 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
-import { blankCharacter, linkInventory, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
+import { blankCharacter, linkInventory, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isAmmo, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import { partsNeedingApproval, proposeEdits, withProposals } from "../../shared/permissions.ts";
-import { storyRollsOnPhone, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
+import { rangedPagesUseAmmo, storyRollsOnPhone, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
@@ -23,6 +23,7 @@ import { GmPopupView } from "../components/player/GmPopupView.tsx";
 import { PvCard } from "../components/player/LorCard.tsx";
 import { PageView } from "../components/player/PageView.tsx";
 import { SlotChoice } from "../components/player/SlotChoice.tsx";
+import { FullCoverChoice } from "../components/SlotPages.tsx";
 import { db, friendlyError } from "../firebase.ts";
 import { useClient } from "../net/hooks.ts";
 
@@ -49,6 +50,9 @@ const INFO_BUTTONS: { key: PanelKey; label: string }[] = [
 type OverlayKey = "cycle" | "info" | "story" | "targets";
 
 /** A single-target Page about to be slotted, waiting on Clash or Unopposed (and which Speed Die). */
+/** How a Page is slotted: on which of the target's Speed Dice, Unopposed, and with which Ammo. */
+type SlotHow = { targetDie?: number; unopposed?: boolean; ammo?: string };
+
 interface PendingSlot {
   category: Category;
   card: Card;
@@ -75,6 +79,10 @@ export function Play() {
   const [category, setCategory] = useState<Category>("combat");
   const [selected, setSelected] = useState<Partial<Record<Category, string>>>({});
   const [pending, setPending] = useState<PendingSlot | null>(null);
+  // A Ranged Page waiting on which Ammo to fire it with (Game setting "Ranged Pages use Ammo").
+  const [loading, setLoading] = useState<{ cat: Category; card: Card; targets?: string[]; how: SlotHow } | null>(null);
+  // Full Cover questions this player put off for now (the Page holds fire if it's still unanswered when it resolves).
+  const [later, setLater] = useState<string[]>([]);
   const [target, setTarget] = useState<string | undefined>(undefined);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -100,6 +108,10 @@ export function Play() {
   const canAct = myTurn && combat?.phase === "actions";
   const myStory = storyOnPhone && story && story.tokenId === mine?.id ? story : null;
   const myDice = (combat && mine && combat.order?.find((x) => x.tokenId === mine.id)?.dice) || 0;
+  const useAmmo = rangedPagesUseAmmo(gameDoc.data);
+  const ammo = (c?.inventory.items ?? []).filter(isAmmo);
+  // My Ranged Pages whose target the GM says is moving into Full Cover: fire now or hold fire.
+  const coverAsk = (combat?.slots ?? []).find((s) => s.ownerId === mine?.id && s.cover === "full" && !later.includes(s.id));
 
   const cardsIn = (cat: Category): Card[] => (!deck ? [] : cat === "combat" ? (deck.hand ?? []) : cat === "ego" ? (deck.ego ?? []) : (deck.aux ?? []));
   const selectedCard = cardsIn(category).find((x) => x.id === selected[category]);
@@ -170,8 +182,9 @@ export function Play() {
     setTarget(undefined);
   };
 
-  /** Pay and slot a Page on the first free Speed Die against the chosen target(s). */
-  const place = async (cat: Category, card: Card, withTargets?: string[], how: { targetDie?: number; unopposed?: boolean } = {}) => {
+  /** Pay and slot a Page on the first free Speed Die against the chosen target(s). Ranged Pages may ask for Ammo first. */
+  const place = async (cat: Category, card: Card, withTargets?: string[], how: SlotHow = {}) => {
+    if (useAmmo && combat?.pages[card.pageId]?.type === "ranged" && !how.ammo) return setLoading({ cat, card, targets: withTargets, how });
     if (!(await act({ type: "aim", source: sourceOf(cat), cardId: card.id }))) return;
     if (await act({ type: "slot", targets: withTargets, ...how })) clearSelection(cat);
   };
@@ -446,6 +459,47 @@ export function Play() {
             void place(pending.category, pending.card, [pending.target], how);
           }}
         />
+      )}
+      {loading && combat && (
+        <Overlay title="Pick your Ammo" onClose={() => setLoading(null)}>
+          <p className="muted small">Firing {combat.pages[loading.card.pageId]?.name || "this Ranged Page"} spends one.</p>
+          {ammo.length === 0 ? (
+            <p className="small">You have no Ammo. Ask your GM for some, or use another Page.</p>
+          ) : (
+            <ul className="plain target-list">
+              {ammo.map((i) => (
+                <li key={i.id}>
+                  <button
+                    type="button"
+                    className="target-pick ammo-pick"
+                    onClick={() => {
+                      const l = loading;
+                      setLoading(null);
+                      void place(l.cat, l.card, l.targets, { ...l.how, ammo: i.id });
+                    }}
+                  >
+                    <strong>{i.name || "Ammo"}</strong>
+                    <span className="muted small">{i.count} left</span>
+                    {i.description && <span className="muted small ammo-desc">{i.description}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Overlay>
+      )}
+      {coverAsk && combat && combat.pages[coverAsk.pageId] && (
+        <Overlay title="Full Cover" onClose={() => setLater((x) => [...x, coverAsk.id])}>
+          <FullCoverChoice
+            slot={coverAsk}
+            page={combat.pages[coverAsk.pageId]}
+            target={table.tokens[coverAsk.targets[0]?.tokenId]?.name ?? "Your target"}
+            owner={mine?.name ?? "You"}
+            decides
+            act={(a) => void act(a)}
+          />
+          <p className="muted small">If you don't answer, it holds fire when it would resolve.</p>
+        </Overlay>
       )}
       {overlay === "targets" && (
         <Overlay title={mass ? "Pick targets" : "Pick a target"} onClose={() => setOverlay(null)}>

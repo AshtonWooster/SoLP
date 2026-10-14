@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Armor, Dice, DiceKind, Equipment, Page, PageType, Passive, Weapon } from "../../shared/character.ts";
-import { blankArmor, blankPage, blankPassive, blankWeapon, clonePage, equipmentMaxCost, RANKS } from "../../shared/ruleset.ts";
+import { blankArmor, blankPage, blankPassive, blankWeapon, clonePage, equipmentMaxCost, MAX_WEAPON_RANGE, RANKS, weaponRange } from "../../shared/ruleset.ts";
 import { PassiveSlots } from "./effects/library.tsx";
 import { NumberInput, Stepper, TextField } from "./Fields.tsx";
 import { ResistanceGrid } from "./LorIcons.tsx";
@@ -88,6 +88,31 @@ function EquipmentCardEditor<T extends Weapon | Armor>({
             <option value={2}>Two-handed</option>
           </select>
         </label>
+      )}
+      {isWeapon && (
+        <div className="equip-ranges" role="group" aria-label="Weapon Range">
+          <label className="inline" title="How many tiles this weapon's Melee Pages reach">
+            Melee range
+            <NumberInput
+              label="Melee range"
+              value={weaponRange(item as Weapon, "melee")}
+              min={0}
+              max={MAX_WEAPON_RANGE}
+              onChange={(v) => onChange({ ...item, meleeRange: Math.max(0, Math.min(MAX_WEAPON_RANGE, Math.round(v))) })}
+            />
+          </label>
+          <label className="inline" title="How many tiles this weapon's Ranged Pages reach">
+            Ranged range
+            <NumberInput
+              label="Ranged range"
+              value={weaponRange(item as Weapon, "ranged")}
+              min={0}
+              max={MAX_WEAPON_RANGE}
+              onChange={(v) => onChange({ ...item, rangedRange: Math.max(0, Math.min(MAX_WEAPON_RANGE, Math.round(v))) })}
+            />
+          </label>
+          <span className="muted small">Tiles. A ranged weapon can have Melee Pages too: each Page uses the range for its type.</span>
+        </div>
       )}
       {"resistances" in item && (
         <div className="equip-res">
@@ -184,7 +209,7 @@ function EquipmentBox<T extends Weapon | Armor>({
         <strong>Passives</strong>{" "}
         <span className="muted small">
           {item.passives.length ? item.passives.map((p) => p.name || "Unnamed").join(", ") : "none"} · cost {passiveCost}/{max}
-          {isWeapon ? ` · ${(item as Weapon).hands === 2 ? "two" : "one"}-handed` : ""}
+          {isWeapon ? ` · ${(item as Weapon).hands === 2 ? "two" : "one"}-handed · range ${weaponRange(item as Weapon, "melee")} melee, ${weaponRange(item as Weapon, "ranged")} ranged` : ""}
         </span>
       </button>
       <div className="equip-pages">

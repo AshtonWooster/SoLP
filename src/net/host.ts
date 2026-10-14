@@ -30,12 +30,12 @@ import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
 import { popupsFor } from "../../shared/popups.ts";
 import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
-import { effectsClearAfterCombat } from "../../shared/types.ts";
+import { effectsClearAfterCombat, rangedPagesUseAmmo } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
 import { clearLog, logClearedAt, logClearRequested } from "../../shared/clearLog.ts";
 import { autosaveWrites, loadedNotes, type LastSaved } from "../../shared/autosave.ts";
 import { proficiencyPages } from "../../shared/proficiencies.ts";
-import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn } from "../../shared/ruleset.ts";
+import { auxiliaryDeck, cleanDeck, equipmentPages, linkedEffects, linkInventory, maxResources, useItemIn, withWeaponRanges } from "../../shared/ruleset.ts";
 import type {
   GameDoc,
   GmNotes,
@@ -350,7 +350,7 @@ export class Host {
       const profPages = proficiencyPages(c, this.effects);
       return {
         pages: Object.fromEntries(
-          [...equipmentPages(c).map((x) => x.page), ...aux.map((x) => x.page), ...profPages.map((x) => x.page), ...(c.ego ?? [])].map((p) => [p.id, p]),
+          [...withWeaponRanges(c, equipmentPages(c).map((x) => x.page)), ...aux.map((x) => x.page), ...profPages.map((x) => x.page), ...(c.ego ?? [])].map((p) => [p.id, p]),
         ),
         ego: (c.ego ?? []).map((p) => p.id),
         stats: { ...c.primary, ...c.secondary },
@@ -366,6 +366,7 @@ export class Host {
     },
     effectDef: (id: string) => this.effects[id],
     clearEffectsAfterCombat: () => effectsClearAfterCombat(this.game),
+    rangedAmmo: () => rangedPagesUseAmmo(this.game),
     // Popups that hand out or take items and Ahn read and save players' sheets here.
     sheets: {
       players: () => Object.entries(this.game.members).filter(([, m]) => m.role === "player").map(([uid]) => uid),

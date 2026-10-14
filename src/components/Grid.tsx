@@ -5,7 +5,7 @@ import { dragItemTo, type TableLayer } from "../../shared/maps.ts";
 import type { MapItem, TableState, Token } from "../../shared/types.ts";
 import { arrowHitSegment, boardArrows } from "./arrows.ts";
 import { FxBubble, type FxStep } from "./ClashFx.tsx";
-import { SlotPages } from "./SlotPages.tsx";
+import { SlotPages, type SlotControls } from "./SlotPages.tsx";
 import { SpeedBubble } from "./SpeedRollFx.tsx";
 import { StoryBubble } from "./StoryRollFx.tsx";
 import type { StoryStep } from "./storyRoll.ts";
@@ -45,6 +45,8 @@ interface Props {
   vfx?: VfxByStatus;
   /** Drawn over the whole map (the GM's fog drawing tool). */
   children?: ReactNode;
+  /** Lets a tapped arrow's Page be marked in Cover (GM) or answered (its owner). Missing: view only. */
+  slotControls?: SlotControls;
 }
 
 type ItemDrag = { item: MapItem; pointer: number; sx: number; sy: number; to?: { x: number; y: number } };
@@ -63,7 +65,7 @@ export function aimTargets(table: TableState): { targetable: Set<string>; picked
  * The battle map: the background image, the assets layer, a tile grid with tokens on it, and pins on
  * top. Used full-screen on the board, smaller on the GM screen (where hidden things show faded).
  */
-export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, speed, story, fog, layer = "tokens", snap = true, onMoveItem, vfx, children }: Props) {
+export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, speed, story, fog, layer = "tokens", snap = true, onMoveItem, vfx, children, slotControls }: Props) {
   const { width, height } = state.map;
   const { targetable, picked } = aimTargets(state);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -304,7 +306,7 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
           );
         })()}
       <PinLayer map={drawn} onGrab={editing && layer === "pins" ? grab : undefined} wasDragged={() => dragged.current} />
-      {openSlots && <SlotPages state={state} slotIds={openSlots} onClose={() => setOpenSlots(null)} />}
+      {openSlots && <SlotPages state={state} slotIds={openSlots} onClose={() => setOpenSlots(null)} controls={slotControls} />}
       {children}
     </div>
   );

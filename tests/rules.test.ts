@@ -519,6 +519,11 @@ test("Story Rolls on players' phones is a Game setting only the GM changes", asy
   await assertSucceeds(updateDoc(doc(as("gm"), "games", GAME), { "settings.storyRollsOnPhone": true }));
 });
 
+test("Ranged Pages use Ammo is a Game setting only the GM changes", async () => {
+  await assertFails(updateDoc(doc(as("p1"), "games", GAME), { "settings.rangedAmmo": true }));
+  await assertSucceeds(updateDoc(doc(as("gm"), "games", GAME), { "settings.rangedAmmo": true }));
+});
+
 test("only the GM sees the invite code and GM notes", async () => {
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "meta")));
   await assertSucceeds(getDoc(doc(as("gm"), "games", GAME, "gm", "notes")));

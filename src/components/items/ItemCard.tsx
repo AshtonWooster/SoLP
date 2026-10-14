@@ -89,6 +89,7 @@ export function ItemCard({ item, size = "full", onClick, selected, note }: { ite
             {item.stacking ? <span className="badge-soft">Stacks to {item.maxStack}</span> : <span className="badge-soft">One per Slot</span>}
             {item.consumable && <span className="badge-soft">{item.maxUses ?? 1} use{(item.maxUses ?? 1) === 1 ? "" : "s"}</span>}
             {item.kind === "trinket" && <span className="badge-soft">Active in the Trinket Slot</span>}
+            {item.kind === "item" && item.ammo && <span className="badge-soft">Ammo</span>}
           </div>
         </div>
       )}
@@ -129,7 +130,7 @@ export function ItemCardEditor({ item, onChange, onRemove, artFolder }: { item: 
           value={item.kind}
           onChange={(e) => {
             const kind = e.target.value as Kind;
-            set({ kind, ...(kind === "tool" ? { page } : {}), ...(kind !== "tool" ? { consumable: false } : {}) });
+            set({ kind, ...(kind === "tool" ? { page } : {}), ...(kind !== "tool" ? { consumable: false } : {}), ...(kind !== "item" ? { ammo: false } : {}) });
           }}
         >
           {ITEM_KINDS.map((k) => (
@@ -186,6 +187,12 @@ export function ItemCardEditor({ item, onChange, onRemove, artFolder }: { item: 
           <label className="inline">
             Max per Slot
             <NumberInput label="Max stack" value={item.maxStack} min={1} onChange={(n) => set({ maxStack: Math.max(1, Math.round(n)) })} />
+          </label>
+        )}
+        {item.kind === "item" && (
+          <label className="inline check" title="Ranged Pages spend one when the Game setting &quot;Ranged Pages use Ammo&quot; is on">
+            <input type="checkbox" checked={!!item.ammo} onChange={(e) => set({ ammo: e.target.checked })} />
+            Ammo
           </label>
         )}
         {usable && (

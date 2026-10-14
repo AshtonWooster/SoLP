@@ -18,6 +18,7 @@ import {
 import { pendingCount } from "../../shared/permissions.ts";
 import {
   effectsClearAfterCombat,
+  rangedPagesUseAmmo,
   type GameDoc,
   type GmMeta,
   PLAYER_EDIT_OPTIONS,
@@ -395,7 +396,7 @@ function DeleteGameSection({ gameId, name }: { gameId: string; name: string }) {
   );
 }
 
-type Area = "invite" | "players" | "permissions" | "story" | "items" | "effects" | "formulas";
+type Area = "invite" | "players" | "permissions" | "story" | "ranged" | "items" | "effects" | "formulas";
 
 /** The GM's game settings: the game's name and image, inviting players, the players (open their sheets, kick them) and what players may edit. */
 export function Settings() {
@@ -528,6 +529,23 @@ export function Settings() {
             }}
           />
           {message?.at === "story" && <p className="muted settings-note" role="status">{message.text}</p>}
+        </section>
+
+        <section className="panel settings-section" aria-label="Ranged Pages">
+          <h2>Ranged Pages</h2>
+          <Toggle
+            label="Ranged Pages use Ammo"
+            hint="On: when a player fires a Ranged Page, they pick which Ammo from their inventory to use and one is spent; with none, they can't fire. Mark an Item as Ammo in the item library. Off: Ranged Pages need no Ammo."
+            on={rangedPagesUseAmmo(g)}
+            onChange={async (on) => {
+              try {
+                await updateDoc(ref, { "settings.rangedAmmo": on });
+              } catch (err) {
+                setMessage({ at: "ranged", text: friendlyError(err) });
+              }
+            }}
+          />
+          {message?.at === "ranged" && <p className="muted settings-note" role="status">{message.text}</p>}
         </section>
 
         <section className="panel settings-section" aria-label="Item library">

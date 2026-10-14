@@ -1,6 +1,6 @@
 // Combat (Act 8) and Pages (Act 3): turn phases, decks, slotting Pages, and resolving them,
 // including Dice Clashes, Counter Dice and Mass Attacks. Runs on the host (the GM's browser).
-import type { Dice, Page, ResistanceSet } from "./character.ts";
+import type { Dice, InventoryItem, Page, ResistanceSet } from "./character.ts";
 import type { SheetAccess } from "./rewards.ts";
 import { ActionError, clamp, log, occupied, type Actor } from "./core.ts";
 import { secret } from "./secrets.ts";
@@ -25,6 +25,7 @@ import {
   enemyDeck,
   isMassAttack,
   isOffensive,
+  linkItem,
   moveCost,
   movementPoints,
   SPEED_DICE,
@@ -35,11 +36,15 @@ import {
   STAGGER_UPKEEPS,
   STAGGERED_RESISTANCE,
   UPKEEP_LIGHT,
-  WEAPON_RANGE,
+  isAmmo,
+  PARTIAL_COVER,
+  pageRange,
+  spendOne,
 } from "./ruleset.ts";
 import type {
   Card,
   ClashFx,
+  Cover,
   Combatant,
   CombatState,
   DeckState,
@@ -82,6 +87,8 @@ export interface EngineContext {
   effectDef?(id: string): EffectDef | undefined;
   /** The Game setting "Effects wear off when combat ends" (shared/types.ts). */
   clearEffectsAfterCombat?(): boolean;
+  /** The Game setting "Ranged Pages use Ammo" (shared/types.ts). */
+  rangedAmmo?(): boolean;
   /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
   sheets?: SheetAccess;
 }
@@ -264,6 +271,8 @@ interface PagePlay {
   page?: Page;
   nth?: number;
   oneSided?: boolean;
+  /** A Ranged Page against a target in Partial Cover: Final Power - 2. */
+  cover?: boolean;
 }
 
 /**
@@ -574,8 +583,19 @@ function rollPower(table: TableState, d: Dice, owner: Token, other?: Token, play
   };
   const power = rollWith(table, owner, d.sides + mine.max + (theirs?.max ?? 0), fx) + d.basePower;
   const bonus = mine.power + (theirs?.power ?? 0);
-  return bonus ? Math.max(0, power + bonus) : power;
+  const final = bonus ? Math.max(0, power + bonus) : power;
+  return play.cover ? partialCover(table, final) : final;
 }
+
+/** Partial Cover takes 2 off a Ranged Page's Final Power, but never takes it below 1. */
+function partialCover(table: TableState, power: number): number {
+  const after = Math.max(Math.min(power, 1), power - PARTIAL_COVER);
+  if (after !== power) log(table, `  Partial Cover: ${power} → ${after}.`);
+  return after;
+}
+
+/** How far a Melee Page reaches, for the Ranged Page rules ("outside of the target's Weapon Range"). */
+const meleeReach = (page: Page | undefined) => pageRange(page ?? { type: "melee" });
 
 interface ClashOutcome {
   winner: "a" | "b" | "draw";
@@ -625,7 +645,7 @@ function clashDice(
   } else if (w.die.kind === "block") {
     if (isOffensive(l.die.kind)) {
       // A Ranged attacker outside the Melee target's range takes no Stagger damage from a winning Block.
-      const rangedSafe = l.pageType === "ranged" && w.pageType === "melee" && distance(l.owner, w.owner) > WEAPON_RANGE.melee;
+      const rangedSafe = l.pageType === "ranged" && w.pageType === "melee" && distance(l.owner, w.owner) > meleeReach(w.play?.page);
       if (rangedSafe) log(table, `  ${l.owner.name} is out of melee range: no Stagger damage.`);
       else staggerDamage(table, l.owner, fw - fl, { attack: true, by: w.owner }, w.die);
     } else staggerDamage(table, l.owner, fw, { attack: true, by: w.owner }, w.die);
@@ -707,14 +727,14 @@ function spendCounters(c: CombatState, target: Token, used: Set<string>) {
  * A One-Sided Attack: each die hits the target top to bottom. The target's Counter Dice answer
  * automatically, in the order they were made; any used are lost when the page finishes.
  */
-function oneSided(table: TableState, attacker: Token, target: Token, page: Page, dice: Dice[], nth?: number) {
+function oneSided(table: TableState, attacker: Token, target: Token, page: Page, dice: Dice[], nth?: number, cover?: boolean) {
   const c = table.combat!;
   const used = new Set<string>();
   const rounds: FxRound[] = [];
   const before = fxState(attacker, target);
   for (const die of dice) {
     if (knockedOut(target) || down(attacker)) break;
-    const play: PagePlay = { page, nth };
+    const play: PagePlay = { page, nth, ...(cover ? { cover } : {}) };
     const fp = rollPower(table, die, attacker, target, play);
     const round = oneSidedDie(table, attacker, target, page, die, fp, play, used);
     if (round) rounds.push({ ...round, after: fxState(attacker, target) });
@@ -732,20 +752,23 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
   const ta = owner(a);
   const tb = owner(b);
   log(table, `Clash: ${ta.name}'s ${pa.name} vs ${tb.name}'s ${pb.name}.`);
-  const qa: LiveDie[] = pa.dice.filter((d) => !d.counter).map((die) => ({ die, owner: ta, pageType: pa.type, play: { page: pa, nth: a.nth } }));
-  const qb: LiveDie[] = pb.dice.filter((d) => !d.counter).map((die) => ({ die, owner: tb, pageType: pb.type, play: { page: pb, nth: b.nth } }));
+  // A Ranged Page whose target the GM marked in Partial Cover rolls 2 lower.
+  const playOf = (s: SlottedPage, p: Page): PagePlay => ({ page: p, nth: s.nth, ...(p.type === "ranged" && s.cover === "partial" ? { cover: true } : {}) });
+  const qa: LiveDie[] = pa.dice.filter((d) => !d.counter).map((die) => ({ die, owner: ta, pageType: pa.type, play: playOf(a, pa) }));
+  const qb: LiveDie[] = pb.dice.filter((d) => !d.counter).map((die) => ({ die, owner: tb, pageType: pb.type, play: playOf(b, pb) }));
   const rounds: FxRound[] = [];
   const before = fxState(ta, tb);
 
-  /** A Ranged Page with no Offensive Dice left, out of the Melee target's range, Negates the target's Offensive Dice. */
+  /** A Ranged Page with only Defensive Dice left, out of the Melee target's range, Negates the target's Offensive Dice. */
   const rangedEscape = () => {
     for (const [mine, theirs, me, them] of [
       [qa, qb, ta, tb],
       [qb, qa, tb, ta],
     ] as const) {
       const myType = mine === qa ? pa.type : pb.type;
-      const theirType = mine === qa ? pb.type : pa.type;
-      if (myType === "ranged" && theirType === "melee" && !mine.some((d) => isOffensive(d.die.kind)) && distance(me, them) > WEAPON_RANGE.melee) {
+      const theirPage = mine === qa ? pb : pa;
+      // Only while the Ranged Page still has dice: once it's spent, the Melee Page's leftovers become Counter Dice below.
+      if (myType === "ranged" && theirPage.type === "melee" && mine.length && !mine.some((d) => isOffensive(d.die.kind)) && distance(me, them) > meleeReach(theirPage)) {
         const before = theirs.length;
         const kept = theirs.filter((d) => !isOffensive(d.die.kind));
         theirs.splice(0, theirs.length, ...kept);
@@ -768,11 +791,17 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
     rangedEscape();
   }
   // Leftover dice: Offensive ones hit One-Sided (Counter Dice don't answer inside a clash);
-  // Defensive ones become Counter Dice.
-  for (const [q, me, them, page] of [
-    [qa, ta, tb, pa],
-    [qb, tb, ta, pb],
+  // Defensive ones become Counter Dice. A Melee Page's leftovers against a Ranged Page outside its
+  // Weapon Range can't reach: they all become Counter Dice.
+  for (const [q, me, them, page, other] of [
+    [qa, ta, tb, pa, pb],
+    [qb, tb, ta, pb, pa],
   ] as const) {
+    if (q.length && page.type === "melee" && other.type === "ranged" && !down(me) && distance(me, them) > meleeReach(page)) {
+      log(table, `  ${them.name} is out of ${me.name}'s range: ${me.name}'s ${q.length === 1 ? "last die becomes a Counter Die" : `${q.length} remaining dice become Counter Dice`}.`);
+      for (const d of q) storeCounter(c, me, d.die, page.id);
+      continue;
+    }
     for (const d of q) {
       if (down(me) || knockedOut(them)) break;
       if (isOffensive(d.die.kind)) {
@@ -946,7 +975,16 @@ function resolveSlot(table: TableState, slot: SlottedPage): boolean {
     (s) => s.id !== slot.id && isMassAttack(c.pages[s.pageId]?.type) && (s.id === slot.clashWith || s.targets.some((t) => t.tokenId === slot.ownerId && t.die === slot.die)),
   );
   if (mass) return false;
-  const partner = slot.clashWith ? c.slots.find((s) => s.id === slot.clashWith) : undefined;
+  // A Ranged Page still waiting on its owner's choice against a target in Full Cover can't fire: it holds.
+  if (slot.cover === "full") {
+    holdFire(table, slot);
+    return true;
+  }
+  let partner = slot.clashWith ? c.slots.find((s) => s.id === slot.clashWith) : undefined;
+  if (partner?.cover === "full") {
+    holdFire(table, partner);
+    partner = undefined;
+  }
   if (partner) {
     clashPages(table, slot, partner);
     removeSlot(c, partner);
@@ -958,7 +996,7 @@ function resolveSlot(table: TableState, slot: SlottedPage): boolean {
     log(table, `${owner.name}'s ${page.name} has no target left.`);
   } else {
     log(table, `${owner.name} uses ${page.name} on ${target.name}.`);
-    oneSided(table, owner, target, page, page.dice.filter((d) => !d.counter), slot.nth);
+    oneSided(table, owner, target, page, page.dice.filter((d) => !d.counter), slot.nth, page.type === "ranged" && slot.cover === "partial");
   }
   removeSlot(c, slot);
   return true;
@@ -1213,7 +1251,7 @@ function freeDie(c: CombatState, token: Token, die: number | undefined): number 
 /** Characters a Page can target: within Weapon Range and not Knocked Out. Only Instant Pages can target yourself. */
 export function validTargets(table: TableState, user: Token, page: Page): Token[] {
   return Object.values(table.tokens).filter(
-    (t) => !knockedOut(t) && (t.id !== user.id || page.type === "instant") && distance(user, t) <= WEAPON_RANGE[page.type],
+    (t) => !knockedOut(t) && (t.id !== user.id || page.type === "instant") && distance(user, t) <= pageRange(page),
   );
 }
 
@@ -1251,7 +1289,7 @@ function pageForAim(table: TableState, token: Token): Page {
  * Instant Pages resolve right away and never clash. A single-target Page can aim at any of the
  * target's Speed Dice (`targetDie`), or go in `unopposed`: a One-Sided attack that starts no Clash.
  */
-export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?: EngineContext, opts: { targetDie?: number; unopposed?: boolean } = {}) {
+export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?: EngineContext, opts: { targetDie?: number; unopposed?: boolean; ammo?: string } = {}) {
   const c = table.combat!;
   const token = actingToken(table, actor);
   const a = c.aim;
@@ -1277,6 +1315,8 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   if (page.type !== "instant" && free === undefined) {
     throw new ActionError(a.die !== undefined ? `Speed Die ${a.die + 1} isn't free.` : "No free Speed Die to slot it on.");
   }
+  // With "Ranged Pages use Ammo" on, a player's Ranged Page needs Ammo from their inventory.
+  const ammo = page.type === "ranged" && token.side === "player" && ctx?.rangedAmmo?.() ? findAmmo(token, opts.ammo, ctx) : undefined;
 
   // Pay, and take the card out of the hand (or Auxiliary Deck).
   token.resources.light -= cost;
@@ -1289,6 +1329,7 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
     } else if (a.source === "ego") deck.ego = (deck.ego ?? []).filter((x) => x.id !== card.id);
     else deck.hand = deck.hand.filter((x) => x.id !== card.id);
   }
+  if (ammo) ctx!.sheets!.save(ammo.uid, { items: spendOne(ammo.items, ammo.item.id) });
   delete c.aim;
   // Count it, for "the first Page I use this round" and "if I haven't used a Page".
   const nth = ((c.used ??= {})[token.id] ?? 0) + 1;
@@ -1307,8 +1348,10 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
     fromEgo: a.source === "ego",
     targets: ids.map((tokenId) => ({ tokenId, die: targetDie })),
     nth,
+    ...(ammo ? { ammo: ammo.item.name || "Ammo" } : {}),
   };
   const names = ids.map((id) => table.tokens[id].name).join(", ");
+  if (ammo) log(table, `${token.name} loads ${ammo.item.name || "Ammo"}${ammo.item.count > 1 ? ` (${ammo.item.count - 1} left)` : " (the last one)"}.`);
 
   if (page.type === "instant") {
     log(table, `${token.name} uses ${page.name} (Instant) on ${names}.`);
@@ -1348,4 +1391,84 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
     }
   }
   log(table, `${token.name} slots ${page.name} against ${names} (${cost} Light).`);
+}
+
+// ---- Ranged Pages: Ammo and Cover (ruleset, "Cover") ----
+
+/** The Ammo a player fires with: the stack they picked, or their first. Throws if they have none. */
+function findAmmo(token: Token, itemId: string | undefined, ctx: EngineContext) {
+  const sheets = ctx.sheets;
+  const uid = token.ownerId;
+  const sheet = uid ? sheets?.sheet(uid) : undefined;
+  if (!sheets || !uid || !sheet) throw new ActionError("Players' sheets aren't loaded yet.");
+  // The GM marks Ammo in the item library, so each item is read with the library's details.
+  const linked = (i: InventoryItem) => (i.templateId ? linkItem(i, { [i.templateId]: sheets.item(i.templateId)! }) : i);
+  const ammo = sheet.inventory.items.filter((i) => isAmmo(linked(i)));
+  if (!ammo.length) throw new ActionError(`${token.name} has no Ammo to fire with.`);
+  const item = itemId ? ammo.find((i) => i.id === itemId) : ammo[0];
+  if (!item) throw new ActionError("That Ammo isn't in the inventory.");
+  return { uid, items: sheet.inventory.items, item: linked(item) };
+}
+
+/**
+ * The GM marks the target of a slotted Ranged Page as in Partial Cover (its dice get Final Power - 2)
+ * or Full Cover (its owner fires right away or holds fire), or clears it.
+ */
+export function setCover(table: TableState, actor: Actor, slotId: string, cover: Cover | null) {
+  if (actor.role !== "gm") throw new ActionError("Only the GM marks Cover.");
+  const c = table.combat;
+  const s = c?.slots.find((x) => x.id === slotId);
+  if (!c || !s) throw new ActionError("That Page is no longer slotted.");
+  const page = c.pages[s.pageId];
+  if (page?.type !== "ranged") throw new ActionError("Only Ranged Pages are affected by Cover.");
+  if ((s.cover ?? null) === cover) return false;
+  const owner = table.tokens[s.ownerId];
+  const target = table.tokens[s.targets[0]?.tokenId]?.name ?? "The target";
+  if (!cover) {
+    delete s.cover;
+    log(table, `${target} is no longer in Cover from ${owner?.name ?? "someone"}'s ${page.name}.`);
+  } else {
+    s.cover = cover;
+    log(
+      table,
+      cover === "partial"
+        ? `${target} is in Partial Cover: ${owner?.name ?? "the attacker"}'s ${page.name} gets Final Power -${PARTIAL_COVER}.`
+        : `${target} is moving into Full Cover: ${owner?.name ?? "the attacker"} can fire ${page.name} now or hold fire.`,
+    );
+  }
+  return true;
+}
+
+/**
+ * The owner of a Ranged Page whose target is going into Full Cover answers it: fire now (the clash or
+ * One-Sided attack resolves right away) or hold fire (the Page is Negated).
+ */
+export function coverChoice(table: TableState, actor: Actor, slotId: string, fire: boolean) {
+  const c = table.combat;
+  const s = c?.slots.find((x) => x.id === slotId);
+  if (!c || !s) throw new ActionError("That Page is no longer slotted.");
+  const owner = table.tokens[s.ownerId];
+  if (actor.role !== "gm" && owner?.ownerId !== actor.uid) throw new ActionError("Only the Page's owner decides.");
+  if (s.cover !== "full") throw new ActionError("Its target isn't going into Full Cover.");
+  if (!fire) return void holdFire(table, s);
+  delete s.cover;
+  log(table, `${owner?.name ?? "Someone"} fires ${c.pages[s.pageId]?.name ?? "their Page"} before the target reaches cover!`);
+  if (!resolveSlot(table, s)) {
+    s.cover = "full";
+    throw new ActionError("It's facing a Mass Attack and resolves with it; hold fire or wait.");
+  }
+}
+
+/**
+ * A Ranged Page that holds fire is Negated: none of its dice are used, except Defensive Dice, which
+ * become Counter Dice (its Counter Dice were stored when it was slotted, and stay).
+ */
+function holdFire(table: TableState, s: SlottedPage) {
+  const c = table.combat!;
+  const owner = table.tokens[s.ownerId];
+  const page = c.pages[s.pageId];
+  const kept = owner && page ? page.dice.filter((d) => !d.counter && !isOffensive(d.kind)) : [];
+  for (const d of kept) storeCounter(c, owner, d, page.id);
+  log(table, `${owner?.name ?? "Someone"} holds fire: ${page?.name ?? "their Page"} is Negated${kept.length ? `; ${kept.length} Defensive ${kept.length === 1 ? "Die becomes a Counter Die" : "Dice become Counter Dice"}` : ""}.`);
+  removeSlot(c, s);
 }
