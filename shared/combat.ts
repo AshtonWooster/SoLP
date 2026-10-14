@@ -940,11 +940,10 @@ function resolveSlot(table: TableState, slot: SlottedPage): boolean {
     removeSlot(c, slot);
     return true;
   }
-  // A Page answering a Mass Attack (clashing with it, or on the Speed Die it's aimed at) waits for the
-  // Mass Attack owner's turn, where the Mass Attack's one roll is checked against it.
-  const mass = c.slots.find(
-    (s) => s.id !== slot.id && isMassAttack(c.pages[s.pageId]?.type) && (s.id === slot.clashWith || s.targets.some((t) => t.tokenId === slot.ownerId && t.die === slot.die)),
-  );
+  // A Page that clashed with a Mass Attack waits for the Mass Attack owner's turn, where the Mass
+  // Attack's one roll is checked against it. A Page slotted before a Mass Attack was aimed at its
+  // Speed Die still resolves on its owner's turn as usual.
+  const mass = c.slots.find((s) => s.id === slot.clashWith && isMassAttack(c.pages[s.pageId]?.type));
   if (mass) return false;
   const partner = slot.clashWith ? c.slots.find((s) => s.id === slot.clashWith) : undefined;
   if (partner) {
