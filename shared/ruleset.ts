@@ -118,10 +118,6 @@ export const WEAPON_RANGE: Record<PageType, number> = {
   instant: 6,
 };
 
-/** PLACEHOLDER: Dash converts Light into Movement Points; the exchange rate isn't in the ruleset yet. */
-export const DASH_LIGHT_COST = 1;
-export const DASH_MOVEMENT = 2;
-
 export const isMassAttack = (type: PageType) => type === "massSummation" || type === "massIndividual";
 export const isOffensive = (kind: DiceKind) => kind === "slash" || kind === "pierce" || kind === "blunt";
 

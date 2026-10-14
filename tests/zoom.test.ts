@@ -1,7 +1,8 @@
 // Zooming and panning the battle map (src/components/zoom.ts). Run with `npm run test:engine`.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { clampView, HOME, isHome, mapPoint, MAX_ZOOM, MIN_ZOOM, panBy, viewTransform, wheelFactor, ZOOM_STEP, zoomAt, type View } from "../src/components/zoom.ts";
+import { clampView, HOME, isHome, mapPoint, MAX_ZOOM, MIN_ZOOM, panBy, stageStyle, viewTransform, wheelFactor, ZOOM_STEP, zoomAt, type View } from "../src/components/zoom.ts";
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 
@@ -82,4 +83,24 @@ test("scrolling up zooms in, down zooms out, whatever units the wheel reports", 
 
 test("the transform matches the view", () => {
   assert.equal(viewTransform({ scale: 2, x: -0.5, y: -0.25 }), "translate(-50%, -25%) scale(2)");
+});
+
+test("the map hands its zoom to what's on it, so dice, token borders and pins can keep their size", () => {
+  assert.deepEqual(stageStyle(HOME), { "--map-zoom": "1" });
+  const v = zoomAt(HOME, 2, { x: 0.5, y: 0.5 });
+  assert.deepEqual(stageStyle(v), { "--map-zoom": "2", transform: viewTransform(v) });
+  assert.equal(stageStyle(zoomAt(HOME, 100))["--map-zoom"], String(MAX_ZOOM));
+});
+
+test("dice animations, pins and token borders and names shrink back by the zoom", () => {
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const rule = (sel: string) => css.match(new RegExp(`(^|\\n)${sel.replace(/[.]/g, "\\.")} \\{([^}]*)\\}`))?.[2] ?? "";
+  assert.match(rule(".map-stage"), /--unzoom: calc\(1 \/ var\(--map-zoom, 1\)\)/);
+  // The clash, Speed and story roll dice all float in .fx-float above the token.
+  assert.match(rule(".fx-float"), /scale: var\(--unzoom, 1\)/);
+  assert.match(rule(".map-pin"), /scale: var\(--unzoom, 1\)/);
+  assert.match(rule(".token"), /border: calc\(3px \* var\(--unzoom, 1\)\)/);
+  assert.match(rule(".token-name"), /font-size: calc\(.* \* var\(--unzoom, 1\)\)/);
+  assert.match(rule(".token-status"), /font-size: calc\(.* \* var\(--unzoom, 1\)\)/);
+  assert.match(rule(".token.selected"), /outline: calc\(3px \* var\(--unzoom, 1\)\)/);
 });

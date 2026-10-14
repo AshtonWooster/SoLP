@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { popupRewardsOn, type GameDoc, type GmMeta, type TableAction, type TableState, type Token } from "../../shared/types.ts";
+import type { GameDoc, GmMeta, TableAction, TableState, Token } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc, useStatFormulas } from "../api.ts";
 import { activeToken } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
@@ -9,7 +9,7 @@ import { useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
 import type { SpeedStep } from "../components/speedRoll.ts";
 import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { isMassAttack, normalizeNpc, NPC_SIDES, npcSpawnData } from "../../shared/ruleset.ts";
-import type { Character, ItemTemplate, NpcTemplate } from "../../shared/character.ts";
+import type { Character, NpcTemplate } from "../../shared/character.ts";
 import { playerList } from "../../shared/players.ts";
 import { tokenGear } from "../../shared/tokenPreview.ts";
 import { PlayerPreview } from "../components/PlayerPreview.tsx";
@@ -28,6 +28,7 @@ import { useHost } from "../net/hooks.ts";
 import { useDrag } from "../components/drag.ts";
 import { gmTurnToken } from "../../shared/combat.ts";
 import { BLANK_DRAFT, GmPopups, type PopupDraft } from "../components/GmPopups.tsx";
+import { upPopups } from "../../shared/popups.ts";
 import { useStatusVfx } from "../components/vfx/useVfx.ts";
 import { StableLabel } from "../components/StableLabel.tsx";
 
@@ -62,9 +63,6 @@ export function Gm() {
   // Player characters (for the player list and their tokens' gear) and the GM's own characters.
   const characters = useCollection<Character>(isGm ? `games/${id}/characters` : null);
   const templates = useCollection<NpcTemplate>(isGm ? `games/${id}/enemies` : null);
-  // The item library, for popups that hand out or take items: read only once the GM turns that on.
-  const rewardsOn = popupRewardsOn(game.data);
-  const itemLibrary = useCollection<ItemTemplate>(isGm && rewardsOn ? `games/${id}/items` : null);
   const formulas = useStatFormulas(id);
   // A GM character picked from the Characters menu, waiting for the GM to click a tile for it.
   const [placing, setPlacing] = useState<{ templateId: string; template: NpcTemplate } | null>(null);
@@ -101,6 +99,8 @@ export function Gm() {
   const table = snapshot.table;
   const selected = selectedId ? table?.tokens[selectedId] : undefined;
   const players = playerList(id, game.data!, characters, true);
+  // Finished popups stay in the menu's record but don't count as up.
+  const popupsUp = table ? upPopups(table).length : 0;
   const setTab = (next: "table" | "maps") => {
     setActionError("");
     setParams(next === "maps" ? { tab: "maps" } : {}, { replace: true });
@@ -251,9 +251,9 @@ export function Gm() {
               label={
                 <>
                   Popups
-                  {table.popups?.length ? (
-                    <span className="count-badge" aria-label={`${table.popups.length} up`}>
-                      {table.popups.length}
+                  {popupsUp ? (
+                    <span className="count-badge" aria-label={`${popupsUp} up`}>
+                      {popupsUp}
                     </span>
                   ) : null}
                 </>
@@ -268,7 +268,7 @@ export function Gm() {
                   act={act}
                   draft={popupDraft}
                   setDraft={setPopupDraft}
-                  rewards={rewardsOn ? { library: itemLibrary, characters } : undefined}
+                  characters={characters}
                 />
               )}
             </ToolbarMenu>

@@ -4,8 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Dice, DiceKind, Page, PageType } from "../shared/character.ts";
 import { activeToken, applyAction, type Actor, type EngineContext, type Loadout } from "../shared/engine.ts";
-import { DASH_MOVEMENT, STARTING_HAND } from "../shared/ruleset.ts";
-import { clashOdds } from "../shared/combat.ts";
+import { STARTING_HAND } from "../shared/ruleset.ts";
 import type { TableAction, TableState, Token } from "../shared/types.ts";
 
 const gm: Actor = { uid: "gm", role: "gm", displayName: "GM" };
@@ -113,7 +112,7 @@ test("not enough Light, out of range, or not your turn: refused", () => {
   s.table.tokens.rat.x = 8;
   assert.throws(() => play(s, "slash", ["rat"]), /out of range/);
   endTurn(s, p1);
-  assert.throws(() => s.act({ type: "dash" }), /isn't your turn/);
+  assert.throws(() => s.act({ type: "turnMove", x: 2, y: 4 }), /isn't your turn/);
 });
 
 test("Type Resistance multiplies damage", () => {
@@ -391,16 +390,21 @@ test("Instant Pages resolve right away and never clash", () => {
   assert.ok(!s.c().slots.some((x) => x.ownerId === "roland"));
 });
 
-test("a character targeted by an enemy's (non-Mass) Page can't move; Dash turns Light into Movement", () => {
+test("a character targeted by an enemy's (non-Mass) Page can't move", () => {
   const s = setup([page("slash", "melee", [die("slash", 3)])], [page("bite", "melee", [die("pierce", 3)])]);
-  const before = s.c().movementLeft;
-  s.act({ type: "dash" });
-  assert.equal(s.c().movementLeft, before + DASH_MOVEMENT);
-  assert.equal(s.table.tokens.roland.resources.light, 4);
   endTurn(s, p1);
   enemyPlay(s, "bite", ["roland"]);
   endTurn(s);
   assert.throws(() => s.act({ type: "turnMove", x: 2, y: 4 }), /can't move/);
+});
+
+test("Dash is gone: an old client sending it is refused and nothing changes", () => {
+  const s = setup([page("slash", "melee", [die("slash", 3)])], []);
+  const before = s.c().movementLeft;
+  const light = s.table.tokens.roland.resources.light;
+  assert.throws(() => s.act({ type: "dash" } as never), /Unknown action/);
+  assert.equal(s.c().movementLeft, before);
+  assert.equal(s.table.tokens.roland.resources.light, light);
 });
 
 test("at 0 Health a character is Knocked Out: their Pages are discarded and their turns skipped", () => {
@@ -734,15 +738,4 @@ test("slotting without a chosen die still clashes with the target's first Speed 
   play(s, "slash", ["rat"]);
   const bite = s.c().slots.find((x) => x.pageId === "bite")!;
   assert.equal(s.c().slots.find((x) => x.ownerId === "roland")!.clashWith, bite.id);
-});
-
-test("clash odds compare two dice's Power ranges", () => {
-  // 1d4+2 (3-6) vs 1d4 (1-4): of 16 pairs, 13 wins, 2 draws (3 v 3, 4 v 4) and 1 loss.
-  const odds = clashOdds({ id: "a", kind: "slash", counter: false, sides: 4, basePower: 2 }, { id: "b", kind: "pierce", counter: false, sides: 4, basePower: 0 });
-  assert.equal(odds.win + odds.draw + odds.lose, 1);
-  assert.equal(odds.win, 13 / 16);
-  assert.equal(odds.draw, 2 / 16);
-  const same = clashOdds({ id: "a", kind: "slash", counter: false, sides: 6, basePower: 0 }, { id: "b", kind: "block", counter: false, sides: 6, basePower: 0 });
-  assert.equal(same.win, same.lose);
-  assert.equal(same.draw, 1 / 6);
 });
