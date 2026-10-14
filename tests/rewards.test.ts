@@ -7,7 +7,7 @@ import { applyAction, type Actor, type EngineContext } from "../shared/engine.ts
 import { popupsFor } from "../shared/popups.ts";
 import { dealSummary, type SheetAccess } from "../shared/rewards.ts";
 import { tableForPlayers } from "../shared/secrets.ts";
-import { popupRewardsOn, type TableState, type Token } from "../shared/types.ts";
+import type { TableState, Token } from "../shared/types.ts";
 
 const gm: Actor = { uid: "gm", role: "gm", displayName: "GM" };
 const ann: Actor = { uid: "ann", role: "player", displayName: "Ann" };
@@ -23,7 +23,7 @@ const library: Record<string, ItemTemplate> = {
 };
 
 /** A host stand-in: players' sheets in memory, saved the way the host saves them. */
-function world(opts: { rewards?: boolean; slots?: number; players?: string[] } = {}) {
+function world(opts: { slots?: number; players?: string[] } = {}) {
   const sheets: Record<string, { ahn: number; inventory: Inventory }> = {
     ann: { ahn: 100, inventory: { slotCount: opts.slots ?? 9, items: [], trinket: null } },
     bo: { ahn: 5, inventory: { slotCount: opts.slots ?? 9, items: [], trinket: null } },
@@ -41,7 +41,6 @@ function world(opts: { rewards?: boolean; slots?: number; players?: string[] } =
   };
   const ctx: EngineContext = {
     loadout: () => ({ pages: {}, deck: [], aux: [], stats: { insight: 0 } }),
-    popupRewards: () => opts.rewards ?? true,
     sheets: access,
   };
   const table: TableState = { map: { name: "m", width: 8, height: 4 }, tokens: { annie: token("annie", "ann"), bob: token("bob", "bo") }, log: [] };
@@ -49,18 +48,20 @@ function world(opts: { rewards?: boolean; slots?: number; players?: string[] } =
   return { sheets, saves, ctx, table, held };
 }
 
-test("the setting is off unless the GM turns it on, and a deal needs it", () => {
-  assert.equal(popupRewardsOn(undefined), false);
-  assert.equal(popupRewardsOn({ settings: {} } as never), false);
-  assert.equal(popupRewardsOn({ settings: { popupRewards: true } } as never), true);
-  const w = world({ rewards: false });
-  assert.throws(
-    () => applyAction(w.table, { type: "sendPopup", text: "Loot", deal: { kind: "reward", itemId: "sword", when: "now" } }, gm, w.ctx),
-    /Game settings/,
-  );
-  assert.throws(() => applyAction(w.table, { type: "setAhn", uid: "ann", ahn: 5 }, gm, w.ctx), /Game settings/);
-  // Plain popups work just as before.
-  assert.ok(applyAction(w.table, { type: "sendPopup", text: "Hi" }, gm, w.ctx));
+test("rewards and costs need no Game setting: any GM popup can carry one", () => {
+  const w = world();
+  assert.ok(applyAction(w.table, { type: "sendPopup", text: "Loot", deal: { kind: "reward", itemId: "sword", when: "now" } }, gm, w.ctx));
+  assert.equal(w.held("ann", "sword"), 1);
+  assert.equal(applyAction(w.table, { type: "setAhn", uid: "bo", ahn: 9 }, gm, w.ctx), false);
+  assert.equal(w.sheets.bo.ahn, 9);
+});
+
+test("without players' sheets (nothing hosting), a deal is refused and plain popups still work", () => {
+  const w = world();
+  const bare: EngineContext = { loadout: w.ctx.loadout };
+  assert.throws(() => applyAction(w.table, { type: "sendPopup", deal: { kind: "reward", ahn: 5, when: "now" } }, gm, bare), /sheets aren't loaded/);
+  assert.throws(() => applyAction(w.table, { type: "setAhn", uid: "ann", ahn: 5 }, gm, bare), /sheets aren't loaded/);
+  assert.ok(applyAction(w.table, { type: "sendPopup", text: "Hi" }, gm, bare));
   assert.deepEqual(w.saves, []);
 });
 
