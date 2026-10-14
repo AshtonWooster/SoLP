@@ -30,7 +30,7 @@ import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
 import { popupsFor } from "../../shared/popups.ts";
 import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
-import { effectsClearAfterCombat, emotionLevelsOn } from "../../shared/types.ts";
+import { effectsClearAfterCombat, emotionLevelsOn, popupRewardsOn } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
 import { clearLog, logClearedAt, logClearRequested } from "../../shared/clearLog.ts";
 import { autosaveWrites, loadedNotes, type LastSaved } from "../../shared/autosave.ts";
@@ -361,6 +361,29 @@ export class Host {
     effectDef: (id: string) => this.effects[id],
     clearEffectsAfterCombat: () => effectsClearAfterCombat(this.game),
     emotionLevels: () => emotionLevelsOn(this.game),
+    popupRewards: () => popupRewardsOn(this.game),
+    // Popups that hand out or take items and Ahn read and save players' sheets here.
+    sheets: {
+      players: () => Object.entries(this.game.members).filter(([, m]) => m.role === "player").map(([uid]) => uid),
+      sheet: (uid) => {
+        const c = this.characters.get(uid);
+        return c ? { ahn: c.ahn ?? 0, inventory: c.inventory } : undefined;
+      },
+      item: (templateId) => {
+        const t = this.library?.[templateId];
+        return t && t.pending !== true ? t : undefined;
+      },
+      save: (uid, change) => {
+        const c = this.characters.get(uid);
+        if (!c) return;
+        // Kept here right away, so a second deal before Firestore echoes the first sees the new sheet.
+        this.characters.set(uid, { ...c, ...(change.ahn !== undefined ? { ahn: change.ahn } : {}), ...(change.items ? { inventory: { ...c.inventory, items: change.items } } : {}) });
+        const fields: Record<string, unknown> = { updatedAt: Date.now() };
+        if (change.ahn !== undefined) fields.ahn = change.ahn;
+        if (change.items) fields["inventory.items"] = change.items;
+        updateDoc(doc(db, "games", this.gameId, "characters", uid), fields).catch((err) => console.error("Couldn't save the reward", err));
+      },
+    },
     // A consumable Tool used in combat counts down on the player's character sheet.
     onToolUsed: (tokenId: string, itemId: string) => {
       const ownerId = this.table?.tokens[tokenId]?.ownerId;

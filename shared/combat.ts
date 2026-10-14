@@ -1,6 +1,7 @@
 // Combat (Act 8) and Pages (Act 3): turn phases, decks, slotting Pages, and resolving them,
 // including Dice Clashes, Counter Dice and Mass Attacks. Runs on the host (the GM's browser).
 import type { Dice, Page, ResistanceSet } from "./character.ts";
+import type { SheetAccess } from "./rewards.ts";
 import { ActionError, clamp, log, occupied, type Actor } from "./core.ts";
 import { secret } from "./secrets.ts";
 export type { Actor };
@@ -86,6 +87,10 @@ export interface EngineContext {
   clearEffectsAfterCombat?(): boolean;
   /** The Game setting "Emotion Levels" (shared/types.ts). */
   emotionLevels?(): boolean;
+  /** The Game setting "Rewards and costs in popups" (shared/types.ts). */
+  popupRewards?(): boolean;
+  /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
+  sheets?: SheetAccess;
 }
 
 /**
