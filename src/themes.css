@@ -58,7 +58,7 @@
 :where(:root[data-theme]) .tab.active { color: var(--accent-hi); background: var(--t-tab-active, none); }
 :where(:root[data-theme]) :is(.turn-strip.mine, .pb-cats .cat.active, .char-dropdown-list button[aria-selected="true"], .die-pick.active, .target-pick.active) { background: var(--active-bg); }
 /* The phone's small action buttons are narrow, so they drop the extra tracking to keep labels inside. */
-:where(:root[data-theme]) .pt-actions button, :where(:root[data-theme]) .pt-side button { letter-spacing: 0; font-size: 0.72rem; }
+:where(:root[data-theme]) .pt-actions button { letter-spacing: 0; font-size: 0.72rem; }
 /* Buttons that hold running text keep the body face. */
 :where(:root[data-theme]) :is(.theme-option, .target-pick, .die-pick, .info-tile, .story-grid button, .pv-card, .page-card-ui) { font-family: var(--f-body); font-style: normal; letter-spacing: 0; text-transform: none; font-weight: 400; }
 

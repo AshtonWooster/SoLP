@@ -82,6 +82,8 @@ export interface EngineContext {
   effectDef?(id: string): EffectDef | undefined;
   /** The Game setting "Effects wear off when combat ends" (shared/types.ts). */
   clearEffectsAfterCombat?(): boolean;
+  /** Whether players may make Story Rolls on their own (Game settings). Missing: they may. */
+  playersStoryRoll?(): boolean;
   /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
   sheets?: SheetAccess;
 }

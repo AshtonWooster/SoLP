@@ -1,11 +1,11 @@
-// Story Roll animation: what the table records for screens to play, the "Story Rolls on players'
-// phones" setting, and what players' copies leave out. Run with `npm run test:engine`.
+// Story Roll animation: what the table records for screens to play, the "Players can make Story
+// Rolls" setting, and what players' copies leave out. Run with `npm run test:engine`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { applyAction, type Actor, type EngineContext } from "../shared/engine.ts";
 import { playerView } from "../shared/maps.ts";
 import { tableForPlayers } from "../shared/secrets.ts";
-import { storyRollsOnPhone, type GameDoc, type TableState, type Token } from "../shared/types.ts";
+import { playersCanStoryRoll, type GameDoc, type TableState, type Token } from "../shared/types.ts";
 import { STORY_TIMES, nextStoryStep, rollingStory, storyBreakdown, storyRollToPlay, storyTotal } from "../src/components/storyRoll.ts";
 
 const gm: Actor = { uid: "gm", role: "gm", displayName: "GM" };
@@ -24,12 +24,31 @@ function table(): TableState {
 
 const game = (settings?: GameDoc["settings"]) => ({ name: "g", gmId: "gm", members: {}, settings }) as unknown as GameDoc;
 
-test("the setting is off unless the GM turns it on", () => {
-  assert.equal(storyRollsOnPhone(undefined), false);
-  assert.equal(storyRollsOnPhone(game()), false);
-  assert.equal(storyRollsOnPhone(game({ popupRewards: true })), false);
-  assert.equal(storyRollsOnPhone(game({ storyRollsOnPhone: false })), false);
-  assert.equal(storyRollsOnPhone(game({ storyRollsOnPhone: true })), true);
+test("players make their own Story Rolls unless the GM turns it off", () => {
+  assert.equal(playersCanStoryRoll(undefined), true);
+  assert.equal(playersCanStoryRoll(game()), true);
+  assert.equal(playersCanStoryRoll(game({ popupRewards: true })), true);
+  assert.equal(playersCanStoryRoll(game({ playerStoryRolls: true })), true);
+  assert.equal(playersCanStoryRoll(game({ playerStoryRolls: false })), false);
+});
+
+test("with player Story Rolls off, players roll only when a popup asks; the GM still rolls", () => {
+  const off: EngineContext = { ...ctx, playersStoryRoll: () => false };
+  const t = table();
+  assert.throws(() => applyAction(t, { type: "storyRoll", tokenId: "annie", stat: "insight" }, ann, off), /turned off Story Rolls/);
+  assert.equal(t.storyRoll, undefined);
+  assert.equal(t.log.length, 0);
+
+  applyAction(t, { type: "sendPopup", id: "p", roll: { stat: "insight" } }, gm);
+  applyAction(t, { type: "popupRoll", popupId: "p" }, ann, off);
+  assert.equal(t.storyRoll?.tokenId, "annie");
+
+  applyAction(t, { type: "storyRoll", tokenId: "rat", stat: "justice" }, gm, off);
+  assert.equal(t.storyRoll?.tokenId, "rat");
+
+  // On (or a context that doesn't say): players roll as before.
+  applyAction(t, { type: "storyRoll", tokenId: "annie", stat: "insight" }, ann, { ...ctx, playersStoryRoll: () => true });
+  assert.equal(t.storyRoll?.tokenId, "annie");
 });
 
 test("a Story Roll records its roll and Stat for screens to play, each with a new id", () => {
