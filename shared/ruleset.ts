@@ -637,9 +637,3 @@ export function characterChecks(c: Character): Check[] {
   ];
 }
 
-/**
- * Emotion Levels (Library of Ruina), when the Game setting is on: Emotion Points needed to go from
- * each level to the next (0→1, 1→2, …, 4→5). Points reset at each new level; levels rise at the end of the round.
- */
-export const EMOTION_POINTS = [3, 3, 5, 7, 9];
-export const MAX_EMOTION = EMOTION_POINTS.length;

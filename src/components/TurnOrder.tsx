@@ -56,11 +56,6 @@ export function TurnOrder({
             <span className="swatch" style={{ background: t.color }} />
             <span className="turn-name">{t.name}</span>
             {t.status?.knockedOut ? <span className="badge-soft">KO</span> : t.status?.staggered && <span className="badge-soft stagger-badge">Staggered</span>}
-            {t.emotion && (
-              <span className="badge-soft emotion-badge" title={`Emotion Level ${t.emotion.level} (${t.emotion.points} Emotion ${t.emotion.points === 1 ? "Point" : "Points"} toward the next)`}>
-                Emotion {t.emotion.level}
-              </span>
-            )}
             <span className="turn-speed" title={withheld(t, "justice") ? "Speed" : `Rolled ${entry.roll}, +${entry.bonus} Justice`}>
               {rolling && speed.entries.some((x) => x.tokenId === entry.tokenId) ? <RollingSpeed entry={entry} /> : entry.speed}
             </span>

@@ -13,9 +13,6 @@ import { EXCLUDED, PASSIVES, STATUSES } from "./ruina-passives.ts";
 const SITE_IDS = [10001, 10004, 10005, 10008, 10010, 10011, 10012, 10013, 10112, 180005, 180104, 200004, 200005, 200006, 200007, 200010, 201001, 210001, 210002, 210003, 210006, 211003, 211005, 211007, 220001, 220002, 220003, 220004, 220005, 220006, 220007, 220008, 220009, 220010, 221001, 221005, 221007, 221009, 221010, 221012, 221013, 221014, 230001, 230004, 230005, 230006, 230007, 230008, 230010, 230011, 230012, 230018, 230019, 230020, 230021, 230022, 230023, 230024, 230025, 230026, 230107, 230118, 230121, 230124, 230207, 231001, 232001, 232002, 233001, 234001, 234002, 240001, 240002, 240003, 240004, 240005, 240006, 240010, 240015, 240016, 240018, 240019, 240020, 240021, 240022, 240023, 240024, 240025, 240026, 240027, 240101, 240118, 240127, 240227, 240301, 240308, 240408, 241001, 241002, 241102, 241301, 243001, 243003, 243005, 243101, 243105, 243201, 243205, 250001, 250002, 250003, 250004, 250005, 250006, 250007, 250008, 250009, 250010, 250011, 250012, 250014, 250015, 250016, 250017, 250018, 250020, 250021, 250023, 250024, 250025, 250026, 250027, 250036, 250051, 250106, 250110, 250113, 250114, 250115, 250122, 250123, 250127, 250151, 250210, 250214, 250222, 250223, 250322, 251001, 251002, 251003, 251101, 251102, 251103, 251201, 252001, 252002, 252003, 253001, 253002, 253003, 254001, 254002, 254003, 255001, 255002, 255003, 255004, 256001, 256002, 256003, 260001, 260002, 260003, 260004, 260005, 260006, 260007, 260008, 260009, 260010, 260011, 260012, 260013, 260014, 1005011, 1005012, 1005013, 1005014, 1005015, 1300001];
 
 const LIBRARY = effectLibrary(STATUSES);
-/** Warnings that are only reminders, not problems with how the effect is built. */
-const reminder = (w: string) => w.startsWith("Emotion Levels only count") || w.includes("Emotion Levels only count");
-
 test("every passive on the list is either built from pieces or listed as character-specific", () => {
   const built = PASSIVES.map((p) => p.id);
   const left = EXCLUDED.map((p) => p.id);
@@ -33,7 +30,7 @@ test("every passive and the statuses it uses are valid effects with no builder w
   }
   for (const p of PASSIVES) {
     assert.deepEqual(cleanEffect(p.def), p.def, `${p.def.name} survives cleaning unchanged`);
-    assert.deepEqual(effectWarnings(p.def).filter((w) => !reminder(w)), [], `${p.def.name} has no warnings`);
+    assert.deepEqual(effectWarnings(p.def), [], `${p.def.name} has no warnings`);
     for (const r of p.def.rules) {
       for (const id of [r.effectId, ...r.checks.map((c) => c.effectId), ...r.actions.flatMap((a) => [a.effectId, ...(a.effectIds ?? [])])]) {
         if (id) assert.ok(LIBRARY[id], `${p.def.name} uses ${id}, which is in the library`);
@@ -67,7 +64,7 @@ function token(id: string, side: Token["side"], x: number, extra: Partial<Token>
 }
 
 /** Roland (player, always first) next to a Rat (enemy). Roland's Page hits One-Sided at the start of his next turn. */
-function setup(opts: { roland?: Partial<Token>; rat?: Partial<Token>; page?: Page; pages?: Page[]; library?: Record<string, EffectDef>; passives?: string[]; emotion?: boolean; extra?: Token[] } = {}) {
+function setup(opts: { roland?: Partial<Token>; rat?: Partial<Token>; page?: Page; pages?: Page[]; library?: Record<string, EffectDef>; passives?: string[]; extra?: Token[] } = {}) {
   const pg = opts.page ?? page(5);
   const table: TableState = {
     map: { name: "m", width: 16, height: 10 },
@@ -84,7 +81,6 @@ function setup(opts: { roland?: Partial<Token>; rat?: Partial<Token>; page?: Pag
   const ctx: EngineContext = {
     loadout: (id) => (id === "roland" ? loadout : undefined),
     effectDef: (id) => library[id] ?? PRESET_EFFECTS[id],
-    emotionLevels: () => !!opts.emotion,
   };
   const act = (a: TableAction, who: Actor = p1) => applyAction(table, a, who, ctx);
   act({ type: "startCombat", tokenIds: ["roland", "rat", ...(opts.extra ?? []).map((t) => t.id)] }, gm);
@@ -289,23 +285,31 @@ test("die rolls: The Twelve Fixers raises the Min; Manipulator of Odds rerolls t
   assert.equal(s2.table.combat!.order.find((x) => x.tokenId === "roland")!.roll, 6);
 });
 
-test("Emotion Levels (Game setting): off by default nobody gains Emotion; on, clashes and hits build it and 'When my Emotion Level rises' fires", () => {
-  const off = setup({ page: page(1) });
-  off.hit();
-  off.hit();
-  assert.equal(off.t("roland").emotion, undefined);
-  const rises = passive("Rises", [{ when: "emotionUp", checks: [], actions: [{ kind: "heal", target: me, amount: num(5) }] }]);
-  const s = setup({ ...lib({ rises }), page: { ...page(1), dice: [die("slash", 1), die("slash", 1), die("slash", 1)] }, emotion: true, roland: { resources: { hp: 10, maxHp: 30, stagger: 20, maxStagger: 20, light: 3, maxLight: 5, sanity: 0, maxSanity: 15 } } });
-  assert.deepEqual(s.t("roland").emotion, { level: 0, points: 0 });
-  s.attack();
-  s.endRound(); // 3 hits land at the start of Roland's turn: 3 points, then Emotion Level 1 at the round's end.
+test("Emotion Levels are gone: saved effects that used them load and act as they did with the old setting off", () => {
+  const saved = cleanEffect({
+    name: "Old",
+    kind: "passive",
+    rules: [
+      { when: "emotionUp", checks: [], actions: [{ kind: "heal", target: me, amount: num(5) }] },
+      { when: "roll", checks: [{ kind: "emotion", cmp: "atLeast", n: 3 }], actions: [{ kind: "addPower", amount: num(1) }] },
+      { when: "roll", checks: [{ kind: "emotion", n: 2 }], actions: [{ kind: "addPower", amount: num(1) }] },
+      { when: "roll", checks: [{ kind: "emotion", cmp: "atMost", n: 2 }, { kind: "die", dieKind: "offensive" }], actions: [{ kind: "addPower", amount: num(2) }] },
+      { when: "clashWin", checks: [], actions: [{ kind: "emotion", target: me, amount: num(1) }, { kind: "heal", target: me, amount: num(1) }] },
+    ],
+  });
+  assert.deepEqual(
+    saved.rules.map(({ when, checks, actions }) => ({ when, checks, actions })),
+    [
+      { when: "roll", checks: [{ kind: "die", dieKind: "offensive" }], actions: [{ kind: "addPower", amount: num(2) }] },
+      { when: "clashWin", checks: [], actions: [{ kind: "heal", target: me, amount: num(1) }] },
+    ],
+  );
+  assert.ok(!describeEffect(saved).includes("Emotion"));
+  // An old saved token with Emotion on it fights as usual and gains none.
+  const s = setup({ page: page(1), roland: { emotion: { level: 2, points: 1 } } as Partial<Token> });
+  s.hit();
   s.endRound();
-  assert.equal(s.t("roland").emotion!.level, 1);
-  assert.equal(s.hp("roland"), 15);
-  const check = passive("Fervor", [{ when: "roll", checks: [{ kind: "emotion", cmp: "atLeast", n: 1 }], actions: [{ kind: "addPower", amount: num(1) }] }]);
-  assert.equal(describeEffect(check), "When I roll a die, if my Emotion Level is at least 1, the die gets +1 Power.");
-  s.act({ type: "endCombat" }, gm);
-  assert.equal(s.t("roland").emotion, undefined);
+  assert.deepEqual((s.t("roland") as Token & { emotion?: unknown }).emotion, { level: 2, points: 1 });
 });
 
 test("Triple-R Suit: a passive lets its owner hold more of an Effect", () => {
@@ -332,11 +336,11 @@ test("new pieces are cleaned like the old ones: unknown values fall back, number
     kind: "passive",
     rules: [
       {
-        when: "emotionUp",
+        when: "nope",
         every: 500,
         stop: "yes",
         limit: "roundTarget",
-        checks: [{ kind: "page", pageIs: "nope" }, { kind: "resist", n: 333 }, { kind: "emotion", n: 9 }],
+        checks: [{ kind: "page", pageIs: "nope" }, { kind: "resist", n: 333 }],
         actions: [
           { kind: "resist", level: 7, dmgType: "fire", until: "forever", which: "x" },
           { kind: "counterDie", dieKind: "laser", base: 100, amount: { kind: "number", n: 6 } },
@@ -350,7 +354,7 @@ test("new pieces are cleaned like the old ones: unknown values fall back, number
   assert.equal(r.every, 20);
   assert.equal(r.stop, undefined);
   assert.equal(r.limit, "roundTarget");
-  assert.deepEqual(r.checks, [{ kind: "page", pageIs: "melee" }, { kind: "resist", whose: "them", cmp: "atLeast", n: 150 }, { kind: "emotion", cmp: "atLeast", n: 5 }]);
+  assert.deepEqual(r.checks, [{ kind: "page", pageIs: "melee" }, { kind: "resist", whose: "them", cmp: "atLeast", n: 150 }]);
   const [resist, counter, random, extra] = r.actions as Action[];
   assert.deepEqual([resist.level, resist.dmgType, resist.until, resist.which], [100, "die", "round", "both"]);
   assert.deepEqual([counter.dieKind, counter.base], ["block", 20]);
