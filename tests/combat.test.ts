@@ -522,6 +522,31 @@ test("using a Tool's Auxiliary Page tells the host which item, so its uses can c
   assert.equal(table.combat!.decks.roland.aux.length, 0, "gone until combat ends");
 });
 
+test("a Proficiency's Page sits in the Auxiliary Deck with no Tool to count down", () => {
+  const used: string[] = [];
+  const table: TableState = {
+    map: { name: "m", width: 16, height: 10 },
+    tokens: {
+      roland: token("roland", "player", 2, 2, { ownerId: "p1", justice: 100 }),
+      rat: token("rat", "enemy", 3, 2, { justice: -100, pages: [page("bite", "melee", [die("pierce", 3)])] }),
+    },
+    log: [],
+  };
+  const flurry = page("flurry", "instant", [die("slash", 5)]);
+  const ctx: EngineContext = {
+    loadout: (id) => (id === "roland" ? { pages: { flurry }, deck: [], aux: [{ pageId: "flurry" }] } : undefined),
+    onToolUsed: (tokenId, itemId) => used.push(`${tokenId}:${itemId}`),
+  };
+  applyAction(table, { type: "startCombat", tokenIds: ["roland", "rat"] }, gm, ctx);
+  const card = table.combat!.decks.roland.aux[0];
+  assert.equal(card.itemId, undefined);
+  applyAction(table, { type: "aim", source: "aux", cardId: card.id }, p1, ctx);
+  applyAction(table, { type: "slot", targets: ["rat"] }, p1, ctx);
+  assert.deepEqual(used, [], "no inventory Tool to use up");
+  assert.equal(table.tokens.rat.resources.hp, 25);
+  assert.equal(table.combat!.decks.roland.aux.length, 0, "used once per combat");
+});
+
 test("E.G.O. Pages are available from the start and used once per combat", () => {
   const ego = page("ego", "instant", [die("slash", 8)], 0);
   const table: TableState = {

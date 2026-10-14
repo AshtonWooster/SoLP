@@ -62,8 +62,8 @@ export interface Loadout {
   pages: Record<string, Page>;
   /** Combat Deck page ids, one entry per copy. */
   deck: string[];
-  /** Auxiliary Deck: one entry per copy, with the inventory Tool it comes from. */
-  aux: { pageId: string; itemId: string }[];
+  /** Auxiliary Deck: one entry per copy, with the inventory Tool it comes from (none for a Proficiency's Page). */
+  aux: { pageId: string; itemId?: string }[];
   /** E.G.O. Page ids. */
   ego?: string[];
   /** Stat values by key (primary and secondary), for Story Rolls and effects. */
@@ -178,7 +178,7 @@ function setUpDeck(c: CombatState, token: Token, ctx: EngineContext | undefined)
     draw: shuffle(loadout.deck.map((pageId) => ({ id: newId(), pageId }))),
     hand: [],
     discard: [],
-    aux: loadout.aux.map((a) => ({ id: newId(), pageId: a.pageId, itemId: a.itemId })),
+    aux: loadout.aux.map((a) => ({ id: newId(), pageId: a.pageId, ...(a.itemId ? { itemId: a.itemId } : {}) })),
     auxUsed: [],
     ego: (loadout.ego ?? []).map((pageId) => ({ id: newId(), pageId })),
     egoUsed: [],
