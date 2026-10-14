@@ -89,6 +89,13 @@ export const DIE_WHEN_OPTIONS: { value: When; label: string; hint: string }[] = 
   { value: "gave", label: "When this die gives someone an Effect", hint: "One of this die's rules gives stacks" },
 ];
 
+/** A menu's options in alphabetical order by label, keeping the first `pinned` (a "Choose…"-style
+ *  placeholder) where they are. Returns a new list; the option constants keep their own order. */
+export function alphabetical<T extends { label: string }>(options: readonly T[], pinned = 0): T[] {
+  const sorted = options.slice(pinned).sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true }));
+  return [...options.slice(0, pinned), ...sorted];
+}
+
 /** The When menu for a kind of effect. */
 export const whenOptions = (kind: EffectKind) => (kind === "die" ? DIE_WHEN_OPTIONS : WHEN_OPTIONS);
 
