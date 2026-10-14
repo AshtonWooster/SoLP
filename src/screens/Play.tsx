@@ -3,9 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
-import { blankCharacter, linkInventory, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, asMeleeWithoutAmmo, isAmmo, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
+import { blankCharacter, linkInventory, PANIC_TYPES, PANIC_UPKEEPS, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, asMeleeWithoutAmmo, isAmmo, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import { partsNeedingApproval, proposeEdits, withProposals } from "../../shared/permissions.ts";
-import { playersCanStoryRoll, rangedPagesUseAmmo, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
+import { panicTypesOn, playersCanStoryRoll, rangedPagesUseAmmo, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
@@ -108,6 +108,8 @@ export function Play() {
   const myStory = story && story.tokenId === mine?.id ? story : null;
   const myDice = (combat && mine && combat.order?.find((x) => x.tokenId === mine.id)?.dice) || 0;
   const useAmmo = rangedPagesUseAmmo(gameDoc.data);
+  // How I'm Panicking, with the Game setting "Panic types" on.
+  const panic = mine?.status?.panic && panicTypesOn(gameDoc.data) ? mine.status.panicType : undefined;
   const ammo = (c?.inventory.items ?? []).filter(isAmmo);
   // My Ranged Pages whose target the GM says is moving into Full Cover: fire now or hold fire.
   const coverAsk = (combat?.slots ?? []).find((s) => s.ownerId === mine?.id && s.cover === "full" && !later.includes(s.id));
@@ -158,6 +160,7 @@ export function Play() {
     if (!mine || !deck) return "You're not in this combat";
     if (!canAct) return myTurn ? "Wait for Combat Actions" : `Waiting for ${active?.name ?? "the next turn"}`;
     if (!page) return "Pick a Page";
+    if (category === "aux" && panic === 4) return "Panicking: no Auxiliary Pages";
     if ((r?.light ?? 0) < page.cost) return `Needs ${page.cost} Light`;
     if (page.type !== "instant" && freeDice.length === 0) return "No free Speed Die";
     if (targets.length === 0) return mass ? "Pick targets" : "Pick a target";
@@ -310,6 +313,12 @@ export function Play() {
         <div className="player-msg staggered" role="status">
           <strong>Staggered.</strong> You can't act and your Resistances are {STAGGERED_RESISTANCE}x.{" "}
           {combat && (STAGGER_UPKEEPS - (mine.status.staggerUpkeeps ?? 0) <= 1 ? "You recover at your next Upkeep." : `You recover after ${STAGGER_UPKEEPS - (mine.status.staggerUpkeeps ?? 0)} more Upkeeps.`)}
+        </div>
+      )}
+      {panic && (
+        <div className="player-msg panic" role="status">
+          <strong>Panic: {PANIC_TYPES[panic].label}.</strong> {PANIC_TYPES[panic].effect[0].toUpperCase() + PANIC_TYPES[panic].effect.slice(1)}, and your Sanity is stuck at its minimum.{" "}
+          {PANIC_UPKEEPS - (mine?.status?.panicUpkeeps ?? 0) <= 1 ? "You recover at your next Upkeep." : `You recover after ${PANIC_UPKEEPS - (mine?.status?.panicUpkeeps ?? 0)} more Upkeeps.`}
         </div>
       )}
       {(error || notice) && (

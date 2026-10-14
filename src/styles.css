@@ -724,6 +724,7 @@ button.pv-card:hover { filter: brightness(1.12); }
   .fx-die.rolling, .fx-die.lose, .fx-total.lose, .fx-die.settled, .fx-impact, .fx-page, .turn-order.dealt li { animation: none; }
 }
 .player-msg.staggered { border-color: var(--p-stagger); color: var(--p-stagger); }
+.player-msg.panic { border-color: var(--sanity); color: var(--sanity); }
 .stagger-badge { color: var(--p-stagger); border-color: var(--p-stagger); }
 
 /* GM maps */

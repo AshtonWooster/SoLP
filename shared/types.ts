@@ -97,6 +97,13 @@ export interface GameSettings {
    */
   rangedAmmo?: boolean;
   /**
+   * Panic types: a character whose Sanity hits its minimum rolls a d4 for how they Panic (rolls
+   * the Min, no drawing, no Light, or no Auxiliary Pages), stays at minimum Sanity for 3 Upkeeps,
+   * then recovers (shared/ruleset.ts, PANIC_TYPES). Off unless the GM turns it on: then Panic is
+   * only the state effects can check, and Sanity moves freely.
+   */
+  panicTypes?: boolean;
+  /**
    * Status Effects play the VFX the GM built for them in the VFX editor (shared/vfx.ts) on the map.
    * Off unless the GM turns it on: then the map looks as it always did and loads no VFX.
    */
@@ -132,6 +139,10 @@ export function playersCanStoryRoll(game: GameDoc | undefined): boolean {
 
 export function rangedPagesUseAmmo(game: GameDoc | undefined): boolean {
   return game?.settings?.rangedAmmo === true;
+}
+
+export function panicTypesOn(game: GameDoc | undefined): boolean {
+  return game?.settings?.panicTypes === true;
 }
 
 export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {
@@ -268,6 +279,9 @@ export interface Effect {
   sourceId?: string;
 }
 
+/** How a character Panics, by the d4 rolled (Game setting "Panic types"). */
+export type PanicType = 1 | 2 | 3 | 4;
+
 export interface TokenStatus {
   /** Health reached 0. */
   knockedOut?: boolean;
@@ -277,6 +291,10 @@ export interface TokenStatus {
   staggerUpkeeps?: number;
   /** Sanity reached its minimum. */
   panic?: boolean;
+  /** With the Game setting "Panic types": the d4 rolled on Panicking (ruleset.ts, PANIC_TYPES). */
+  panicType?: PanicType;
+  /** Upkeeps the character has passed while Panicking with a type; they recover at PANIC_UPKEEPS. */
+  panicUpkeeps?: number;
 }
 
 /** One character in the turn order. */

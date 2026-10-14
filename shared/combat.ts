@@ -41,6 +41,9 @@ import {
   pageRange,
   spendOne,
   asMeleeWithoutAmmo,
+  PANIC_DIE,
+  PANIC_TYPES,
+  PANIC_UPKEEPS,
 } from "./ruleset.ts";
 import type {
   Card,
@@ -54,6 +57,7 @@ import type {
   FxRound,
   FxState,
   PageSource,
+  PanicType,
   Side,
   SlottedPage,
   TableState,
@@ -90,6 +94,8 @@ export interface EngineContext {
   clearEffectsAfterCombat?(): boolean;
   /** The Game setting "Ranged Pages use Ammo" (shared/types.ts). */
   rangedAmmo?(): boolean;
+  /** The Game setting "Panic types" (shared/types.ts). */
+  panicTypes?(): boolean;
   /** Whether players may make Story Rolls on their own (Game settings). Missing: they may. */
   playersStoryRoll?(): boolean;
   /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
@@ -194,7 +200,7 @@ function setUpDeck(c: CombatState, token: Token, ctx: EngineContext | undefined)
     egoUsed: [],
   };
   c.decks[token.id] = deck;
-  for (let i = 0; i < STARTING_HAND; i++) draw(c, token.id);
+  if (panicType(token) !== 2) for (let i = 0; i < STARTING_HAND; i++) draw(c, token.id);
   if (loadout.resistances) token.resistances = loadout.resistances;
   if (loadout.staggerResistances) token.staggerResistances = loadout.staggerResistances;
 }
@@ -355,11 +361,69 @@ function recoverStagger(table: TableState, t: Token, amount: number) {
 /** Clash Win heals 1 Sanity, Clash Lose costs 1. Sanity runs from -max to +max; the minimum means Panic. */
 function changeSanity(table: TableState, t: Token, delta: number) {
   const r = t.resources;
+  // Panic types: Sanity stays at its minimum until they recover.
+  if (panicType(t)) {
+    r.sanity = -r.maxSanity;
+    return;
+  }
   r.sanity = clamp(r.sanity + delta, -r.maxSanity, r.maxSanity);
   const panic = r.sanity <= -r.maxSanity;
   if (panic === !!t.status?.panic) return;
+  if (!panic) return clearPanic(t);
   t.status = { ...t.status, panic };
-  if (panic) trigger(table, "panic", t);
+  rollPanicType(table, t);
+  trigger(table, "panic", t);
+}
+
+// ---- Panic types (Game setting "Panic types") ----
+
+/** How the character is Panicking, when the Game setting is on; undefined otherwise. */
+export function panicType(t: Token | undefined): PanicType | undefined {
+  return t?.status?.panic && engineCtx?.panicTypes?.() ? t.status.panicType : undefined;
+}
+
+/** On Panicking, with the setting on: a d4 says how. Sanity is held at its minimum until they recover. */
+function rollPanicType(table: TableState, t: Token) {
+  if (!engineCtx?.panicTypes?.()) return;
+  const type = rollDie(PANIC_DIE) as PanicType;
+  t.status = { ...t.status, panic: true, panicType: type, panicUpkeeps: 0 };
+  t.resources.sanity = -t.resources.maxSanity;
+  const { label, effect } = PANIC_TYPES[type];
+  log(table, `  ${t.name} Panics! d${PANIC_DIE}: ${type}, ${label}: ${effect} for ${PANIC_UPKEEPS} Upkeeps.`);
+}
+
+function clearPanic(t: Token) {
+  const status = { ...t.status, panic: false };
+  delete status.panicType;
+  delete status.panicUpkeeps;
+  t.status = status;
+}
+
+/** At the character's Upkeep: count it, and recover (Sanity back to 0) after enough while Panicking. */
+function panicUpkeep(table: TableState, t: Token) {
+  const type = panicType(t);
+  if (!type) return;
+  const passed = (t.status?.panicUpkeeps ?? 0) + 1;
+  if (passed >= PANIC_UPKEEPS) {
+    clearPanic(t);
+    t.resources.sanity = 0;
+    log(table, `  ${t.name} recovers from Panic${secret(t, "sanity", " (Sanity 0)")}.`);
+  } else {
+    t.status = { ...t.status, panicUpkeeps: passed };
+    const left = PANIC_UPKEEPS - passed;
+    log(table, `  ${t.name} is Panicking: ${PANIC_TYPES[type].effect} (recovers in ${left} more Upkeep${left === 1 ? "" : "s"}).`);
+  }
+}
+
+/**
+ * The GM set a character's Sanity by hand: at its minimum they Panic (rolling a Panic type when the
+ * setting is on, but no "When I Panic" effects); above it, they're out of Panic.
+ */
+export function panicByOverride(table: TableState, t: Token) {
+  if (t.resources.sanity > -t.resources.maxSanity) return clearPanic(t);
+  if (t.status?.panic) return;
+  t.status = { ...t.status, panic: true };
+  rollPanicType(table, t);
 }
 
 /** A Knocked Out character's slotted Pages go to the discard pile; Pages clashing with them stop clashing. */
@@ -421,18 +485,21 @@ function effectOps(table: TableState): EffectOps<Token> {
     recoverStagger: (t, n) => recoverStagger(table, t, n),
     light: (t, n) => {
       const r = t.resources;
+      if (n > 0 && panicType(t) === 3) return log(table, `  ${t.name} is Panicking and can't gain Light.`);
       const before = r.light;
       r.light = clamp(r.light + n, 0, r.maxLight);
       if (r.light !== before) log(table, secret(t, "light", `  ${t.name} ${r.light > before ? "gains" : "loses"} ${Math.abs(r.light - before)} Light.`));
     },
     sanity: (t, n) => {
       if (!n) return;
+      if (panicType(t)) return log(table, secret(t, "sanity", `  ${t.name}'s Sanity stays at ${-t.resources.maxSanity} while Panicking.`));
       log(table, secret(t, "sanity", `  ${t.name} ${n > 0 ? "gains" : "loses"} ${Math.abs(n)} Sanity (${clamp(t.resources.sanity + n, -t.resources.maxSanity, t.resources.maxSanity)}).`));
       changeSanity(table, t, n);
     },
     draw: (t, n) => {
       const c = table.combat;
       if (!c?.decks[t.id]) return;
+      if (panicType(t) === 2) return log(table, `  ${t.name} is Panicking and can't draw.`);
       const drawn = Array.from({ length: Math.min(n, 10) }, () => draw(c, t.id)).filter(Boolean).length;
       if (drawn) log(table, `  ${t.name} draws ${drawn}.`);
     },
@@ -541,6 +608,10 @@ type RollFx = Pick<TriggerResult, "advantage" | "min" | "rollMax" | "rerollMin">
 function rollWith(table: TableState, owner: Token, sides: number, fx: RollFx): number {
   const max = Math.max(1, sides);
   const min = Math.max(1, Math.min(max, 1 + fx.min));
+  if (panicType(owner) === 1) {
+    log(table, `  ${owner.name} is Panicking: the die rolls its Min (${min}).`);
+    return min;
+  }
   if (fx.rollMax) {
     log(table, `  ${owner.name}'s die rolls its Max (${max}).`);
     return max;
@@ -1035,13 +1106,16 @@ function runPhases(table: TableState) {
 
     // Upkeep: draw, restore Light, then (later) Effects and Passives. Counter Dice expire at its end.
     c.phase = "upkeep";
-    const drawn = Array.from({ length: UPKEEP_DRAW }, () => draw(c, token.id)).filter(Boolean).length;
+    // Panicking (Panic types) can stop the draw or the Light.
+    const noDraw = panicType(token) === 2;
+    const drawn = noDraw ? 0 : Array.from({ length: UPKEEP_DRAW }, () => draw(c, token.id)).filter(Boolean).length;
     const r = token.resources;
-    const light = Math.min(UPKEEP_LIGHT, Math.max(0, r.maxLight - r.light));
+    const light = panicType(token) === 3 ? 0 : Math.min(UPKEEP_LIGHT, Math.max(0, r.maxLight - r.light));
     r.light += light;
-    if (c.decks[token.id] || light) log(table, `  Upkeep: ${c.decks[token.id] ? `draws ${drawn}` : ""}${secret(token, "light", `${c.decks[token.id] && light ? ", " : ""}${light ? `+${light} Light` : ""}`)}.`);
+    if (c.decks[token.id] || light) log(table, `  Upkeep: ${c.decks[token.id] ? (noDraw ? "no draw" : `draws ${drawn}`) : ""}${secret(token, "light", `${c.decks[token.id] && light ? ", " : ""}${light ? `+${light} Light` : ""}`)}.`);
     c.counters[token.id] = [];
     staggerUpkeep(table, token);
+    panicUpkeep(table, token);
     if (staggered(token)) {
       // Staggered: no Combat Actions this turn, but their effects still tick at Endstep.
       c.phase = "endstep";
@@ -1228,7 +1302,7 @@ export function storyRoll(table: TableState, actor: Actor, token: Token, stat: s
   const stats = token.side !== "player" ? { justice: token.justice ?? 0 } : (ctx?.loadout(token.id)?.stats ?? {});
   const key = String(stat).toLowerCase();
   const value = Math.round(Number(stats[key] ?? 0));
-  const roll = rollDie(STORY_DIE);
+  const roll = panicType(token) === 1 ? 1 : rollDie(STORY_DIE);
   const label = key.charAt(0).toUpperCase() + key.slice(1);
   log(table, `${token.name} makes a ${label} Story Roll: ${roll}${secret(token, "justice", `${value >= 0 ? "+" : ""}${value} = ${roll + value}`)}.`);
   table.storyRoll = { id: newId(), tokenId: token.id, stat: key, roll, bonus: value };
@@ -1261,6 +1335,7 @@ export function validTargets(table: TableState, user: Token, page: Page): Token[
 export function aim(table: TableState, actor: Actor, source: PageSource, cardId?: string, die?: number) {
   const token = actingToken(table, actor);
   const src: PageSource = source === "aux" || source === "ego" ? source : "hand";
+  if (src === "aux" && panicType(token) === 4) throw new ActionError(`${token.name} is Panicking and can't use Auxiliary Pages.`);
   const { page, card } = pageFor(table, token, src, cardId);
   if (die !== undefined && page.type !== "instant" && freeDie(table.combat!, token, die) === undefined) {
     throw new ActionError(`Speed Die ${die + 1} isn't free.`);
@@ -1297,6 +1372,7 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   const token = actingToken(table, actor);
   const a = c.aim;
   if (!a || a.tokenId !== token.id) throw new ActionError("Pick a Page first.");
+  if (a.source === "aux" && panicType(token) === 4) throw new ActionError(`${token.name} is Panicking and can't use Auxiliary Pages.`);
   const aimedPage = pageForAim(table, token);
   // With "Ranged Pages use Ammo" on, a player's Ranged Page spends Ammo from their inventory; with
   // none, it's used as a Melee Page and every die rolls with disadvantage.
