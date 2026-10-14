@@ -133,7 +133,8 @@ export function Board() {
         {combat && (
           <aside className="board-side">
             <div className="board-turn">
-              {active && <strong>{active.name}'s turn</strong>}
+              {/* No one active: it's the turn of someone under the fog. */}
+              <strong>{active ? `${active.name}'s turn` : "Someone else's turn"}</strong>
               {aim && aimedPage ? (
                 <>
                   <span>

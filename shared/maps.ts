@@ -9,7 +9,7 @@
 import { ActionError, clamp, log } from "./core.ts";
 import { cleanFog, cleanFogRect, drawFog, fogMask, itemInView, setFogAll, tokenInView } from "./fog.ts";
 import { newId } from "./id.ts";
-import type { MapInfo, MapItem, SavedMap, TableState, Token } from "./types.ts";
+import type { CombatState, MapInfo, MapItem, SavedMap, TableState, Token } from "./types.ts";
 
 export const MAP_MIN = 4;
 export const MAP_MAX = 60;
@@ -386,21 +386,83 @@ export function visibleMap<M extends MapInfo>(map: M): M {
   return out;
 }
 
-/** The tokens players see on a map: none the GM hid, and none under the fog (but their own characters and anyone fighting). */
-export function visibleTokens(map: MapInfo, tokens: Token[], fighting?: Set<string>): Token[] {
+/**
+ * The tokens players see on a map: none the GM hid, and none under the fog. A player's phone
+ * (`viewerId`) still gets their own characters.
+ */
+export function visibleTokens(map: MapInfo, tokens: Token[], viewerId?: string): Token[] {
   const mask = fogMask(map);
-  return tokens.filter((t) => !t.hidden && tokenInView(map, mask, t, fighting));
+  return tokens.filter((t) => !t.hidden && tokenInView(map, mask, t, viewerId));
 }
 
-/** The table as players (and the shared board) see it: everything the GM hid, or the fog covers, is left out. */
-export function playerView(table: TableState): TableState {
-  const fighting = new Set(table.combat?.order.map((c) => c.tokenId));
-  const shown = new Set(visibleTokens(table.map, Object.values(table.tokens), fighting).map((t) => t.id));
-  return {
+/**
+ * Combat as players see it when some fighters aren't shown (under the fog): they're out of the turn
+ * order, and their decks, Pages, Counter Dice, targets and animations are left out too.
+ */
+export function combatShowing(c: CombatState, shown: Set<string>): CombatState {
+  const fighters = c.order.map((x) => x.tokenId);
+  if (fighters.every((id) => shown.has(id))) return c;
+  const keep = <T>(rec: Record<string, T>) => Object.fromEntries(Object.entries(rec).filter(([id]) => shown.has(id)));
+  const active = c.order[c.turn]?.tokenId;
+  const order = c.order.filter((x) => shown.has(x.tokenId));
+  const slots = c.slots
+    .filter((s) => shown.has(s.ownerId))
+    .map((s) => ({ ...s, targets: s.targets.filter((t) => shown.has(t.tokenId)) }));
+  const slotIds = new Set(slots.map((s) => s.id));
+  for (const s of slots) if (s.clashWith && !slotIds.has(s.clashWith)) delete s.clashWith;
+  const decks = keep(c.decks);
+  const counters = keep(c.counters);
+  const fx = c.fx
+    ?.filter((f) => shown.has(f.a) || shown.has(f.b))
+    .map((f) => ({
+      ...f,
+      ...(f.before ? { before: keep(f.before) } : {}),
+      rounds: f.rounds.map((r) => (r.after ? { ...r, after: keep(r.after) } : r)),
+    }));
+  // Pages only the hidden fighters hold aren't sent; ones played where players can see stay.
+  const seen = new Set<string>([
+    ...slots.map((s) => s.pageId),
+    ...Object.values(decks).flatMap((d) => [...d.draw, ...d.hand, ...d.discard, ...d.aux, ...d.auxUsed, ...(d.ego ?? []), ...(d.egoUsed ?? [])].map((x) => x.pageId)),
+    ...Object.values(counters).flatMap((list) => list.map((x) => x.pageId)),
+    ...(fx ?? []).flatMap((f) => [f.pageA, f.pageB ?? ""]),
+  ]);
+  const theirs = new Set(
+    Object.entries(c.decks)
+      .filter(([id]) => !shown.has(id))
+      .flatMap(([, d]) => [...d.draw, ...d.hand, ...d.discard, ...d.aux, ...d.auxUsed, ...(d.ego ?? []), ...(d.egoUsed ?? [])].map((x) => x.pageId)),
+  );
+  const out: CombatState = {
+    ...c,
+    order,
+    // -1: it's a hidden fighter's turn, so no one shows as up.
+    turn: order.findIndex((x) => x.tokenId === active),
+    decks,
+    counters,
+    slots,
+    pages: Object.fromEntries(Object.entries(c.pages).filter(([id]) => !theirs.has(id) || seen.has(id))),
+  };
+  if (fx) out.fx = fx;
+  if (c.aim && !shown.has(c.aim.tokenId)) delete out.aim;
+  else if (c.aim) out.aim = { ...c.aim, targets: c.aim.targets.filter((id) => shown.has(id)) };
+  if (c.speedRoll) out.speedRoll = { ...c.speedRoll, tokenIds: c.speedRoll.tokenIds.filter((id) => shown.has(id)) };
+  if (c.procs) out.procs = c.procs.filter((p) => shown.has(p.tokenId));
+  if (c.used) out.used = keep(c.used);
+  return out;
+}
+
+/**
+ * The table as players see it: everything the GM hid, or the fog covers, is left out. The shared
+ * board gets no `viewerId`; a player's phone gets theirs, so it keeps their own characters.
+ */
+export function playerView(table: TableState, viewerId?: string): TableState {
+  const shown = new Set(visibleTokens(table.map, Object.values(table.tokens), viewerId).map((t) => t.id));
+  const out: TableState = {
     ...table,
     map: visibleMap(table.map),
     tokens: Object.fromEntries(Object.entries(table.tokens).filter(([id]) => shown.has(id))),
   };
+  if (table.combat) out.combat = combatShowing(table.combat, shown);
+  return out;
 }
 
 // ---- Editor geometry (dragging and resizing), in tiles ----
