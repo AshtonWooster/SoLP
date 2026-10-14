@@ -3,13 +3,22 @@
 import { createContext, useContext, useMemo, useRef, useState } from "react";
 import { collection, doc, setDoc } from "firebase/firestore";
 import type { Character, Dice, Passive, Proficiency } from "../../../shared/character.ts";
-import { canPick, neededBy, pickedIds, statLabel, unmetRequirements } from "../../../shared/proficiencies.ts";
+import {
+  canPick,
+  emptyStatFilter,
+  matchesStatFilter,
+  neededBy,
+  pickedIds,
+  statLabel,
+  unmetRequirements,
+  type StatFilter,
+} from "../../../shared/proficiencies.ts";
 import { blankEffect, cleanEffect, effectLibrary, EFFECT_KINDS, isLive, slotPassive, slotProficiency, type EffectDef, type EffectKind } from "../../../shared/effects.ts";
 import { useCollection } from "../../api.ts";
 import { db, friendlyError } from "../../firebase.ts";
 import { Overlay } from "../player/Overlay.tsx";
 import { EffectBuilder, effectText } from "./EffectBuilder.tsx";
-import { type NodeState, ProficiencyTree, TreeLegend } from "./ProficiencyTree.tsx";
+import { type NodeState, ProficiencyTree, StatFilterBar, TreeLegend } from "./ProficiencyTree.tsx";
 import { StableLabel } from "../StableLabel.tsx";
 
 export interface LibraryValue {
@@ -259,9 +268,20 @@ export function PassiveSlots({ passives, max, onChange, disabled }: { passives: 
 export type ProficiencySheet = Pick<Character, "primary" | "secondary" | "rank">;
 
 /**
+ * The Proficiencies left after taking one away, or null if the player backs out. Taking away a
+ * prerequisite is allowed (the sheet's checks flag what it breaks), but they're asked first.
+ */
+function withoutProficiency(proficiencies: Proficiency[], i: number, library: Record<string, EffectDef> | undefined): Proficiency[] | null {
+  const p = proficiencies[i];
+  const needs = library && p.effectId ? neededBy({ proficiencies }, p.effectId, library) : [];
+  if (needs.length && !window.confirm(`${needs.join(", ")} need${needs.length === 1 ? "s" : ""} ${p.name || "this"}. Remove it anyway?`)) return null;
+  return proficiencies.filter((_, j) => j !== i);
+}
+
+/**
  * A character's Proficiencies, picked from the shared library. A player's (with `sheet` and `max`)
- * are picked on the Proficiency tree, which checks each one's prerequisites and Stats; a GM's
- * character picks any of them from a menu.
+ * are picked on the Proficiency tree next to this list (ProficiencyPicker), which checks each one's
+ * prerequisites and Stats; `onOpenTree` takes them there. A GM's character picks any from a menu.
  */
 export function ProficiencySlots({
   proficiencies,
@@ -269,24 +289,22 @@ export function ProficiencySlots({
   onChange,
   disabled,
   sheet,
+  onOpenTree,
 }: {
   proficiencies: Proficiency[];
   max?: number;
   onChange: (p: Proficiency[]) => void;
   disabled?: boolean;
   sheet?: ProficiencySheet;
+  onOpenTree?: () => void;
 }) {
   const lib = useLibrary();
   const pick = useRef<HTMLSelectElement>(null);
-  const [tree, setTree] = useState(false);
   const full = max != null && proficiencies.length >= max;
   const onTree = !!lib && !!sheet && max != null;
   const remove = (i: number) => {
-    const p = proficiencies[i];
-    const needs = lib && p.effectId ? neededBy({ proficiencies }, p.effectId, lib.library) : [];
-    // Taking away a prerequisite is allowed (the sheet's checks flag what it breaks), but say so first.
-    if (needs.length && !window.confirm(`${needs.join(", ")} need${needs.length === 1 ? "s" : ""} ${p.name || "this"}. Remove it anyway?`)) return;
-    onChange(proficiencies.filter((_, j) => j !== i));
+    const next = withoutProficiency(proficiencies, i, lib?.library);
+    if (next) onChange(next);
   };
   return (
     <div className="proficiency-slots">
@@ -317,7 +335,7 @@ export function ProficiencySlots({
             key={`empty-${i}`}
             disabled={disabled}
             onClick={() => {
-              if (onTree) return setTree(true);
+              if (onTree) return onOpenTree?.();
               const el = pick.current;
               if (!el) return;
               el.focus();
@@ -331,11 +349,7 @@ export function ProficiencySlots({
             Open Proficiency: tap to pick one
           </button>
         ))}
-      {onTree ? (
-        <button type="button" className="chip go tree-open" onClick={() => setTree(true)}>
-          Open the Proficiency tree
-        </button>
-      ) : (
+      {!onTree &&
         lib && (
           <LibrarySelect
             kind="proficiency"
@@ -345,92 +359,77 @@ export function ProficiencySlots({
             exclude={proficiencies.map((p) => p.effectId ?? "")}
             onPick={(id, library) => onChange([...proficiencies, slotProficiency(id, library)])}
           />
-        )
-      )}
-      {tree && onTree && (
-        <TreePicker
-          proficiencies={proficiencies}
-          sheet={sheet}
-          max={max}
-          disabled={disabled}
-          onChange={onChange}
-          onRemove={(id) => {
-            const i = proficiencies.findIndex((p) => p.effectId === id);
-            if (i >= 0) remove(i);
-          }}
-          onClose={() => setTree(false)}
-        />
-      )}
+        )}
     </div>
   );
 }
 
-/** The Proficiency tree in a popup: tap a node to see it, then pick it if its requirements are met. */
-function TreePicker({
+/**
+ * The Proficiency tree on its own page of the character sheet: filter it by the Stats each
+ * Proficiency needs, tap a node to see what it does and needs, then pick it if the character meets
+ * every requirement.
+ */
+export function ProficiencyPicker({
   proficiencies,
   sheet,
   max,
   disabled,
   onChange,
-  onRemove,
-  onClose,
 }: {
   proficiencies: Proficiency[];
   sheet: ProficiencySheet;
   max: number;
   disabled?: boolean;
   onChange: (p: Proficiency[]) => void;
-  onRemove: (id: string) => void;
-  onClose: () => void;
 }) {
   const lib = useLibrary()!;
   const [selected, setSelected] = useState<string | null>(null);
   const [making, setMaking] = useState(false);
+  const [filter, setFilter] = useState<StatFilter>(emptyStatFilter);
   const c = { ...sheet, proficiencies };
   const have = pickedIds(c);
   const stateOf = (id: string, d: EffectDef): NodeState =>
     have.includes(id) ? "picked" : d.pending ? "pending" : unmetRequirements(sheet, d, have, lib.library).length ? "locked" : "open";
   const def = selected ? lib.library[selected] : undefined;
   const check = selected ? canPick(c, selected, lib.library, max) : undefined;
+  const all = Object.values(lib.library).filter((d) => d.kind === "proficiency");
   return (
-    <Overlay title="Proficiency tree" onClose={onClose}>
-      <div className="tree-picker">
-        <p className="muted small">
-          {proficiencies.length} of {max} picked at Rank {sheet.rank}. You get 2 at Rank 9 and 2 more at each Rank Up. Tap one to see what it does and needs.
-        </p>
-        <ProficiencyTree library={lib.library} stateOf={stateOf} selected={selected} onSelect={setSelected} />
-        <TreeLegend picking />
-        {def && selected && (
-          <div className="effect-card prof-detail" aria-label="Proficiency">
-            <strong>{def.name || "Unnamed"}</strong>
-            <p>{effectText(def, lib.library) || "No description yet."}</p>
-            {def.page && <p className="small">Adds the Page <strong>{def.page.name || "Unnamed"}</strong> to your Auxiliary Deck.</p>}
-            <RequirementList def={def} sheet={c} library={lib.library} />
-            <div className="row wrap">
-              {have.includes(selected) ? (
-                <button type="button" disabled={disabled} onClick={() => onRemove(selected)}>
-                  Remove it
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="chip go"
-                  disabled={disabled || !check?.ok}
-                  onClick={() => onChange([...proficiencies, slotProficiency(selected, lib.library)])}
-                >
-                  Pick {def.name || "it"}
-                </button>
-              )}
-              {check && !check.ok && !have.includes(selected) && <span className="muted small">{check.why[0]}</span>}
-            </div>
+    <div className="tree-picker">
+      <StatFilterBar filter={filter} onChange={setFilter} matches={all.filter((d) => matchesStatFilter(d, filter)).length} total={all.length} />
+      <ProficiencyTree library={lib.library} stateOf={stateOf} selected={selected} onSelect={setSelected} filter={filter} />
+      <TreeLegend picking />
+      {def && selected && (
+        <div className="effect-card prof-detail" aria-label="Proficiency">
+          <strong>{def.name || "Unnamed"}</strong>
+          <p>{effectText(def, lib.library) || "No description yet."}</p>
+          {def.page && <p className="small">Adds the Page <strong>{def.page.name || "Unnamed"}</strong> to your Auxiliary Deck.</p>}
+          <RequirementList def={def} sheet={c} library={lib.library} />
+          <div className="row wrap">
+            {have.includes(selected) ? (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  const next = withoutProficiency(proficiencies, proficiencies.findIndex((p) => p.effectId === selected), lib.library);
+                  if (next) onChange(next);
+                }}
+              >
+                Remove it
+              </button>
+            ) : (
+              <button type="button" className="chip go" disabled={disabled || !check?.ok} onClick={() => onChange([...proficiencies, slotProficiency(selected, lib.library)])}>
+                Pick {def.name || "it"}
+              </button>
+            )}
+            {check && !check.ok && !have.includes(selected) && <span className="muted small">{check.why[0]}</span>}
           </div>
-        )}
-        <button type="button" className="link" onClick={() => setMaking(true)}>
-          + Add a Proficiency to the tree
-        </button>
-      </div>
+        </div>
+      )}
+      <button type="button" className="link tree-add" onClick={() => setMaking(true)}>
+        + Add a Proficiency to the tree
+      </button>
       {making && <NewEffectPopup kind="proficiency" onCreated={(id) => setSelected(id)} onClose={() => setMaking(false)} />}
-    </Overlay>
+    </div>
   );
 }
 

@@ -8,6 +8,7 @@ import { type GameDoc, PLAYER_EDIT_OPTIONS, type PlayerEditKey, playersCanCreate
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { DeckTab } from "../components/DeckTab.tsx";
 import { AugmentTab } from "../components/creator/AugmentTab.tsx";
+import { ProficienciesTab } from "../components/creator/ProficienciesTab.tsx";
 import { CharacterCreator, type CreatorStep } from "../components/creator/CharacterCreator.tsx";
 import { InventoryTab } from "../components/items/InventoryTab.tsx";
 import { Section } from "../components/Fields.tsx";
@@ -125,7 +126,8 @@ function useCharacter(gameId: string, uid: string, fallbackName: string, canEdit
 
 const TABS = [
   ["sheet", "Character"],
-  ["augment", "Augment & Proficiencies"],
+  ["augment", "Augment"],
+  ["proficiencies", "Proficiencies"],
   ["decks", "Equipment & Decks"],
   ["inventory", "Inventory"],
 ] as const;
@@ -298,6 +300,13 @@ export function CharacterSheet() {
           <fieldset disabled={!canEdit} className="sheet-body">
             {approvalNote("augment")}
             <AugmentTab c={sheet} update={update} />
+          </fieldset>
+        )}
+
+        {tab === "proficiencies" && (
+          <fieldset disabled={!canEdit} className="sheet-body">
+            {approvalNote("augment")}
+            <ProficienciesTab c={sheet} update={update} />
           </fieldset>
         )}
 

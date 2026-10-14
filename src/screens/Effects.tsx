@@ -3,8 +3,8 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { collection, deleteDoc, doc, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 import { blankEffect, cleanEffect, copyEffect, EFFECT_KINDS, effectLibrary, isLive, isPreset, type EffectDef, type EffectKind } from "../../shared/effects.ts";
 import { type GameDoc, playersCanCreateEffects, proficienciesNeedApproval } from "../../shared/types.ts";
-import { placeholderTree } from "../../shared/proficiencies.ts";
-import { ProficiencyTree, TreeLegend } from "../components/effects/ProficiencyTree.tsx";
+import { emptyStatFilter, matchesStatFilter, placeholderTree, type StatFilter } from "../../shared/proficiencies.ts";
+import { ProficiencyTree, StatFilterBar, TreeLegend } from "../components/effects/ProficiencyTree.tsx";
 import { RequirementList } from "../components/effects/library.tsx";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { EffectBuilder, effectText } from "../components/effects/EffectBuilder.tsx";
@@ -133,6 +133,7 @@ export function Effects() {
   const approveProficiencies = proficienciesNeedApproval(game.data);
   // Proficiencies show as a skill tree by default; the list is a tap away.
   const [view, setView] = useState<View>("tree");
+  const [statFilter, setStatFilter] = useState<StatFilter>(emptyStatFilter);
   const [params, setParams] = useSearchParams();
   const kind = kindOf(params.get("kind"));
   const setKind = (k: EffectKind) => setParams({ kind: k }, { replace: true });
@@ -250,7 +251,14 @@ export function Effects() {
               Each player picks 2 Proficiencies at Rank 9 and 2 more at each Rank Up. A Proficiency can need others first and minimum Stats.
               {approveProficiencies ? (isGm ? " Players' new and changed Proficiencies wait for your approval." : " Your GM approves new and changed Proficiencies before anyone can pick them.") : ""}
             </p>
+            <StatFilterBar
+              filter={statFilter}
+              onChange={setStatFilter}
+              matches={Object.values(library).filter((d) => d.kind === "proficiency" && matchesStatFilter(d, statFilter)).length}
+              total={Object.values(library).filter((d) => d.kind === "proficiency").length}
+            />
             <ProficiencyTree
+              filter={statFilter}
               library={library}
               stateOf={(_, d) => (d.pending ? "pending" : "plain")}
               selected={current}

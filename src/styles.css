@@ -1694,15 +1694,29 @@ select.piece.add { color: #6fb4ff; }
 .effects-studio.tree-mode { grid-template-columns: minmax(0, 1fr); }
 .view-toggle { gap: 6px; }
 .tree-picker { display: flex; flex-direction: column; gap: 12px; }
-.overlay-box:has(.tree-picker) { width: min(920px, 96vw); max-width: 96vw; }
 .prof-detail { display: flex; flex-direction: column; gap: 6px; }
 .prof-detail p { margin: 0; }
 .prof-reqs { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
 .prof-fields .chip { display: inline-flex; align-items: center; gap: 4px; }
 .prof-page { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-.tree-open { align-self: flex-start; }
 @media (max-width: 600px) {
   .prof-node { min-width: 120px; max-width: 46vw; }
   .tree-picker { width: 100%; }
 }
 .prof-page .pv-card { width: min(300px, 100%); }
+
+/* The Proficiencies tab: picks on the left, the tree on the right; filtered-out nodes dim. */
+.proficiencies-tab.list-only { grid-template-columns: minmax(0, 520px); }
+.proficiency-tree-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; scroll-margin-top: 12px; }
+.proficiency-tree-card > p { margin: 0; }
+.prof-node.dimmed { border-style: dotted; }
+.prof-node.dimmed > * { opacity: 0.3; }
+.prof-node.match { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+.stat-filter { display: flex; flex-direction: column; gap: 8px; }
+.stat-filter-stats { gap: 6px; align-items: center; }
+.stat-filter-rows { display: flex; flex-direction: column; gap: 6px; }
+.stat-filter-row { gap: 8px; align-items: center; }
+.stat-filter-n { width: 72px; max-width: 72px; flex: 0 0 72px; }
+.stat-filter-count { margin: 0; }
+.tree-add { align-self: flex-start; }
+.augment-tab .augment-card { max-width: 860px; }
