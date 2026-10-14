@@ -295,6 +295,15 @@ test("a character targeted by an enemy's (non-Mass) Page can't move", () => {
   assert.throws(() => s.act({ type: "turnMove", x: 2, y: 4 }), /can't move/);
 });
 
+test("Dash is gone: an old client sending it is refused and nothing changes", () => {
+  const s = setup([page("slash", "melee", [die("slash", 3)])], []);
+  const before = s.c().movementLeft;
+  const light = s.table.tokens.roland.resources.light;
+  assert.throws(() => s.act({ type: "dash" } as never), /Unknown action/);
+  assert.equal(s.c().movementLeft, before);
+  assert.equal(s.table.tokens.roland.resources.light, light);
+});
+
 test("at 0 Health a character is Knocked Out: their Pages are discarded and their turns skipped", () => {
   const s = setup([page("slash", "melee", [die("slash", 40)])], [page("bite", "melee", [die("pierce", 3)])]);
   play(s, "slash", ["rat"]);
@@ -637,13 +646,4 @@ test("clash odds compare two dice's Power ranges", () => {
   const same = clashOdds({ id: "a", kind: "slash", counter: false, sides: 6, basePower: 0 }, { id: "b", kind: "block", counter: false, sides: 6, basePower: 0 });
   assert.equal(same.win, same.lose);
   assert.equal(same.draw, 1 / 6);
-});
-
-test("Dash is gone: an old client sending it is refused and nothing changes", () => {
-  const s = setup([page("slash", "melee", [die("slash", 3)])], []);
-  const before = s.c().movementLeft;
-  const light = s.table.tokens.roland.resources.light;
-  assert.throws(() => s.act({ type: "dash" } as never), /Unknown action/);
-  assert.equal(s.c().movementLeft, before);
-  assert.equal(s.table.tokens.roland.resources.light, light);
 });
