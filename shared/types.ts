@@ -75,6 +75,12 @@ export interface GameSettings {
    */
   playersCreateEffects?: boolean;
   /**
+   * Players' new and changed Proficiencies in the Proficiency tree (shared/proficiencies.ts) wait for
+   * the GM's approval, and nobody can pick them until then. Off unless the GM turns it on: then
+   * players' Proficiencies join the tree right away, as they always have.
+   */
+  approveProficiencies?: boolean;
+  /**
    * A player's Story Roll also plays its dice animation on their own phone, and a GM popup's roll
    * closes the popup (the animation shows the result). Off unless the GM turns it on: then the
    * animation plays only on the board, and the phone shows the result as text as before.
@@ -109,6 +115,10 @@ export function playersCanCreateItems(game: GameDoc | undefined): boolean {
 
 export function playersCanCreateEffects(game: GameDoc | undefined): boolean {
   return game?.settings?.playersCreateEffects === true;
+}
+
+export function proficienciesNeedApproval(game: GameDoc | undefined): boolean {
+  return game?.settings?.approveProficiencies === true;
 }
 
 export function storyRollsOnPhone(game: GameDoc | undefined): boolean {
