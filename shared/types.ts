@@ -81,11 +81,10 @@ export interface GameSettings {
    */
   approveProficiencies?: boolean;
   /**
-   * A player's Story Roll also plays its dice animation on their own phone, and a GM popup's roll
-   * closes the popup (the animation shows the result). Off unless the GM turns it on: then the
-   * animation plays only on the board, and the phone shows the result as text as before.
+   * Players may make Story Rolls on their own from their phone. On unless the GM turns it off: then
+   * the Story roll button is gone and players roll only when a GM popup asks them to.
    */
-  storyRollsOnPhone?: boolean;
+  playerStoryRolls?: boolean;
   /**
    * When the GM ends combat, every automated status Effect (Burn, Poise…) comes off the characters
    * who fought. Off unless the GM turns it on: then Effects stay until they wear off or the GM removes them.
@@ -126,8 +125,8 @@ export function proficienciesNeedApproval(game: GameDoc | undefined): boolean {
   return game?.settings?.approveProficiencies === true;
 }
 
-export function storyRollsOnPhone(game: GameDoc | undefined): boolean {
-  return game?.settings?.storyRollsOnPhone === true;
+export function playersCanStoryRoll(game: GameDoc | undefined): boolean {
+  return game?.settings?.playerStoryRolls !== false;
 }
 
 export function rangedPagesUseAmmo(game: GameDoc | undefined): boolean {

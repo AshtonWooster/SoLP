@@ -5,7 +5,7 @@ import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
 import { blankCharacter, linkInventory, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isAmmo, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import { partsNeedingApproval, proposeEdits, withProposals } from "../../shared/permissions.ts";
-import { rangedPagesUseAmmo, storyRollsOnPhone, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
+import { playersCanStoryRoll, rangedPagesUseAmmo, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
@@ -88,14 +88,13 @@ export function Play() {
   const [notice, setNotice] = useState("");
   // GM popups this player just closed, hidden before the host confirms.
   const [closedPopups, setClosedPopups] = useState<string[]>([]);
-  // The start of the log line we're waiting for after a Story Roll.
-  const [awaitingRoll, setAwaitingRoll] = useState<{ prefix: string; tail: string } | null>(null);
 
   // Clash damage shows once its die has played on the board.
   const { table } = useClashPlayback(snapshot.table);
   const speed = useSpeedRollPlayback(snapshot.table);
-  // With "Story Rolls on players' phones" on (game settings), your own Story Rolls play here too.
-  const storyOnPhone = storyRollsOnPhone(gameDoc.data);
+  // Players make their own Story Rolls unless the GM turned that off (game settings).
+  const canStoryRoll = playersCanStoryRoll(gameDoc.data);
+  // Your own Story Rolls play here as they do on the board.
   const story = useStoryRollPlayback(snapshot.table);
   const combat = table?.combat;
   const mine = table ? Object.values(table.tokens).find((t) => t.ownerId === user?.id) : undefined;
@@ -106,7 +105,7 @@ export function Play() {
   const active = table ? activeToken(table) : undefined;
   const myTurn = !!mine && active?.id === mine.id;
   const canAct = myTurn && combat?.phase === "actions";
-  const myStory = storyOnPhone && story && story.tokenId === mine?.id ? story : null;
+  const myStory = story && story.tokenId === mine?.id ? story : null;
   const myDice = (combat && mine && combat.order?.find((x) => x.tokenId === mine.id)?.dice) || 0;
   const useAmmo = rangedPagesUseAmmo(gameDoc.data);
   const ammo = (c?.inventory.items ?? []).filter(isAmmo);
@@ -146,18 +145,6 @@ export function Play() {
     else if (combat?.aim?.tokenId === mine?.id) client.act({ type: "clearAim" }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAct, selectedCard?.id, source]);
-
-  // Show a Story Roll's result once its log line arrives.
-  const log = table?.log;
-  useEffect(() => {
-    if (!awaitingRoll || !log) return;
-    if (log.slice(-10).join("\n") === awaitingRoll.tail) return;
-    const line = [...log.slice(-10)].reverse().find((l) => l.startsWith(awaitingRoll.prefix));
-    if (line) {
-      setNotice(line);
-      setAwaitingRoll(null);
-    }
-  }, [log, awaitingRoll]);
 
   if (!table || snapshot.status === "closed") return <Waiting snapshot={snapshot} gameId={id} />;
   const sheetUrl = `/games/${id}/characters/${user?.id}`;
@@ -286,12 +273,13 @@ export function Play() {
             </div>
           ))}
         </div>
+        {/* One row under the portrait and resources; Cycle characters takes it all when Story Rolls are off. */}
         <div className="pt-actions">
-          <button type="button" disabled={!mine} onClick={() => setOverlay("story")}>
-            Story roll
-          </button>
-        </div>
-        <div className="pt-side">
+          {canStoryRoll && (
+            <button type="button" disabled={!mine} onClick={() => setOverlay("story")}>
+              Story roll
+            </button>
+          )}
           <button type="button" onClick={() => setOverlay("cycle")}>
             Cycle characters
           </button>
@@ -527,7 +515,7 @@ export function Play() {
           )}
         </Overlay>
       )}
-      {overlay === "story" && mine && (
+      {overlay === "story" && mine && canStoryRoll && (
         <Overlay title="Story Roll" onClose={() => setOverlay(null)}>
           <p className="muted small">Rolls 1d{STORY_DIE} + the Stat. Everyone sees the result in the table log.</p>
           <div className="story-grid">
@@ -536,12 +524,10 @@ export function Play() {
                 type="button"
                 key={s.key}
                 className="story-stat"
-                onClick={async () => {
+                onClick={() => {
                   setOverlay(null);
-                  const tail = table.log.slice(-10).join("\n");
-                  const label = s.key.charAt(0).toUpperCase() + s.key.slice(1).toLowerCase();
-                  // The dice show the result when they play here; otherwise it shows as text.
-                  if ((await act({ type: "storyRoll", tokenId: mine.id, stat: s.key })) && !storyOnPhone) setAwaitingRoll({ prefix: `${mine.name} makes a ${label} Story Roll`, tail });
+                  // The dice show the result here and on the board.
+                  void act({ type: "storyRoll", tokenId: mine.id, stat: s.key });
                 }}
               >
                 <span className="story-name">
@@ -564,7 +550,7 @@ export function Play() {
           onRoll={async (stat) => {
             const popup = gmPopups[0];
             // The dice show the roll on this screen, so the popup closes, unless it has a deal to settle.
-            if ((await act({ type: "popupRoll", popupId: popup.id, stat })) && storyOnPhone && !popup.deal) closeGmPopup(popup.id);
+            if ((await act({ type: "popupRoll", popupId: popup.id, stat })) && !popup.deal) closeGmPopup(popup.id);
           }}
           onBuy={() => void act({ type: "popupBuy", popupId: gmPopups[0].id })}
           ahn={characterDoc.data?.ahn ?? 0}

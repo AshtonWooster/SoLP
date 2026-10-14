@@ -96,7 +96,7 @@ The phone shows one screen with three parts, so players never have to leave it d
 
 Opening panels and popups never clears the selection, ends the turn or changes the category.
 
-**Story Rolls** roll 1d20 + a Stat and post the result to the table log (the d20 is a placeholder in `shared/ruleset.ts`; enemies roll with Justice).
+**Story Rolls** roll 1d20 + a Stat and post the result to the table log (the d20 is a placeholder in `shared/ruleset.ts`; enemies roll with Justice). Every Story Roll plays its die above the character on the board, the GM's map and the roller's phone. The GM can turn off **Players can make Story Rolls** in Game settings: then the Story roll button is gone and players roll only when a GM popup asks.
 
 **Dice effects:** each die on a Page can have its own effect text (e.g. "On Hit: Inflict 1 Fragile next Scene"), shown next to it when the Page is enlarged. Effects are text for now; they don't trigger automatically.
 

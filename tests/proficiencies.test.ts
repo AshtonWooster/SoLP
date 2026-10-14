@@ -5,6 +5,8 @@ import type { Character, Proficiency } from "../shared/character.ts";
 import { cleanEffect, isLive, slotProficiency, type EffectDef } from "../shared/effects.ts";
 import {
   canPick,
+  emptyStatFilter,
+  matchesStatFilter,
   neededBy,
   PLACEHOLDER_TREE,
   placeholderTree,
@@ -12,6 +14,7 @@ import {
   proficiencyMode,
   proficiencyPages,
   proficiencyTree,
+  statFilterText,
   unmetRequirements,
   wouldLoop,
 } from "../shared/proficiencies.ts";
@@ -171,4 +174,32 @@ test("placeholder tree: ten linked nodes with fresh ids, Pages and Stat requirem
   // A starting character can take a first-tier Proficiency.
   const root = nodes.find((x) => x.tier === 0)!;
   assert.equal(canPick(blankCharacter("p1", ""), root.id, tree).ok, true);
+});
+
+test("filtering by required Stats: any amount, at least, exactly or at most, with and/or", () => {
+  const lib: Record<string, EffectDef> = {
+    plain: prof("Plain"),
+    tough: prof("Tough", { minStats: { fortitude: 2 } }),
+    tougher: prof("Tougher", { minStats: { fortitude: 4 } }),
+    sharp: prof("Sharp", { minStats: { insight: 3 } }),
+    both: prof("Both", { minStats: { fortitude: 3, insight: 2 } }),
+  };
+  const names = (f: Parameters<typeof matchesStatFilter>[1]) =>
+    Object.values(lib)
+      .filter((d) => matchesStatFilter(d, f))
+      .map((d) => d.name);
+  // No filter: everything, including Proficiencies with no Stat requirements.
+  assert.deepEqual(names(emptyStatFilter()), ["Plain", "Tough", "Tougher", "Sharp", "Both"]);
+  assert.deepEqual(names(undefined), ["Plain", "Tough", "Tougher", "Sharp", "Both"]);
+  const fort = (cmp: "any" | "atLeast" | "exactly" | "atMost", n = 3) => ({ stat: "fortitude", cmp, n });
+  assert.deepEqual(names({ mode: "and", rows: [fort("any")] }), ["Tough", "Tougher", "Both"]);
+  assert.deepEqual(names({ mode: "and", rows: [fort("atLeast")] }), ["Tougher", "Both"]);
+  assert.deepEqual(names({ mode: "and", rows: [fort("exactly")] }), ["Both"]);
+  assert.deepEqual(names({ mode: "and", rows: [fort("atMost")] }), ["Tough", "Both"]);
+  // Fortitude and/or Insight.
+  const insight = { stat: "insight", cmp: "any" as const, n: 2 };
+  assert.deepEqual(names({ mode: "and", rows: [fort("any"), insight] }), ["Both"]);
+  assert.deepEqual(names({ mode: "or", rows: [fort("any"), insight] }), ["Tough", "Tougher", "Sharp", "Both"]);
+  assert.equal(statFilterText({ mode: "or", rows: [fort("atLeast", 2), insight] }), "Needs Fortitude at least 2 or Insight");
+  assert.equal(statFilterText(emptyStatFilter()), "");
 });

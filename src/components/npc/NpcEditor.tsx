@@ -21,6 +21,7 @@ import {
 import { db, friendlyError } from "../../firebase.ts";
 import { DeckRow, type Peek, PageHoverCard } from "../DeckTab.tsx";
 import { AugmentTab } from "../creator/AugmentTab.tsx";
+import { ProficienciesTab } from "../creator/ProficienciesTab.tsx";
 import { useLibrary } from "../effects/library.tsx";
 import { EquipmentStudio, PageEditor } from "../EquipmentEditor.tsx";
 import { NumberInput, Stepper } from "../Fields.tsx";
@@ -35,7 +36,8 @@ import { ConfirmButton } from "../ConfirmButton.tsx";
 const SAVE_DELAY_MS = 600;
 const TABS = [
   ["profile", "Profile"],
-  ["augment", "Augment & Proficiencies"],
+  ["augment", "Augment"],
+  ["proficiencies", "Proficiencies"],
   ["loadout", "Weapons & Armor"],
   ["deck", "Combat Deck"],
   ["inventory", "Inventory"],
@@ -311,8 +313,8 @@ function LoadoutTab({ t, update, gameId, gear }: { t: NpcTemplate; update: Updat
   );
 }
 
-/** The Augment (with its Passives) and Proficiencies, both picked from the game's shared effect library. */
-function AugmentProficienciesTab({ t, update, gear }: { t: NpcTemplate; update: Update; gear: GearEntry[] }) {
+/** The Augment with its Passives, picked from the game's shared effect library, and Augments to reuse. */
+function AugmentNpcTab({ t, update, gear }: { t: NpcTemplate; update: Update; gear: GearEntry[] }) {
   const lib = useLibrary();
   const [message, setMessage] = useState("");
   return (
@@ -552,7 +554,8 @@ export function NpcEditor({
         ))}
       </nav>
       {tab === "profile" && <ProfileTab t={t} update={update} gameId={gameId} />}
-      {tab === "augment" && <AugmentProficienciesTab t={t} update={update} gear={gear} />}
+      {tab === "augment" && <AugmentNpcTab t={t} update={update} gear={gear} />}
+      {tab === "proficiencies" && <ProficienciesTab c={linkLibrary(t, lib?.library)} update={update as (fn: (d: Character) => void) => void} npc />}
       {tab === "loadout" && <LoadoutTab t={linkLibrary(t, lib?.library)} update={update} gameId={gameId} gear={gear} />}
       {tab === "deck" && <DeckTab t={t} update={update} gameId={gameId} gear={gear} />}
       {tab === "inventory" && (

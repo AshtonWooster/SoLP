@@ -6,6 +6,7 @@ import { activeToken } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
 import { useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
+import { useStoryRollPlayback } from "../components/StoryRollFx.tsx";
 import type { SpeedStep } from "../components/speedRoll.ts";
 import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { isMassAttack, normalizeNpc, NPC_SIDES, npcSpawnData } from "../../shared/ruleset.ts";
@@ -44,6 +45,7 @@ export function Gm() {
   const { step: fx, table: mapTable } = useClashPlayback(snapshot.table);
   // Speed rolls tumble on the map and the turn order deals out once they land.
   const speed = useSpeedRollPlayback(snapshot.table);
+  const story = useStoryRollPlayback(snapshot.table);
   // Status effect VFX, when they're on in Game settings.
   const vfx = useStatusVfx(isGm ? id : "", game.data);
   const online = new Set(snapshot.online);
@@ -302,6 +304,7 @@ export function Gm() {
                   state={mapTable ?? table}
                   fx={fx}
                   speed={speed}
+                  story={story}
                   vfx={vfx}
                   selectedId={selectedId}
                   activeId={table.combat ? activeToken(table)?.id : undefined}

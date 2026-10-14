@@ -514,9 +514,9 @@ test("Status effect VFX is a Game setting only the GM changes", async () => {
   await assertSucceeds(updateDoc(doc(as("gm"), "games", GAME), { "settings.statusVfx": true }));
 });
 
-test("Story Rolls on players' phones is a Game setting only the GM changes", async () => {
-  await assertFails(updateDoc(doc(as("p1"), "games", GAME), { "settings.storyRollsOnPhone": true }));
-  await assertSucceeds(updateDoc(doc(as("gm"), "games", GAME), { "settings.storyRollsOnPhone": true }));
+test("Players can make Story Rolls is a Game setting only the GM changes", async () => {
+  await assertFails(updateDoc(doc(as("p1"), "games", GAME), { "settings.playerStoryRolls": false }));
+  await assertSucceeds(updateDoc(doc(as("gm"), "games", GAME), { "settings.playerStoryRolls": false }));
 });
 
 test("Ranged Pages use Ammo is a Game setting only the GM changes", async () => {

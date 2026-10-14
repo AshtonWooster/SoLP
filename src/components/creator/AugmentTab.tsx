@@ -1,42 +1,13 @@
 import type { Character } from "../../../shared/character.ts";
-import { proficiencyCount, rankTable } from "../../../shared/ruleset.ts";
+import { rankTable } from "../../../shared/ruleset.ts";
 import { PassiveList } from "../EquipmentEditor.tsx";
-import { ProficiencySlots } from "../effects/library.tsx";
 
-/**
- * The Augment & Proficiencies tab, laid out like the Inventory: Proficiencies as a slim list on
- * the left, and the Augment (name, description and Passives) on the right.
- */
+/** The Augment tab: its name, description and Passives. Proficiencies have their own tab (ProficienciesTab). */
 export function AugmentTab({ c, update, npc }: { c: Character; update: (fn: (d: Character) => void) => void; npc?: boolean }) {
   const t = rankTable(c.rank);
-  const profMax = proficiencyCount(c.rank);
 
   return (
-    <div className="inv-tab augment-tab">
-      <aside className="inv-list" aria-label="Proficiencies" id="proficiencies">
-        <div className="inv-head">
-          <h3>Proficiencies</h3>
-          {npc ? (
-            <span className="muted">{c.proficiencies.length}</span>
-          ) : (
-            <span className={c.proficiencies.length > profMax ? "error" : c.proficiencies.length === profMax ? "ok-text" : "warn-text"}>
-              {c.proficiencies.length} / {profMax}
-            </span>
-          )}
-        </div>
-        <p className="muted small">
-          {npc
-            ? "Their background and training, picked from the game's shared Proficiencies."
-            : `They reflect your background, like a workshop Fixer with Proficiencies in modifying weapons. You get ${profMax} at Rank ${c.rank}. Pick them on the game's shared Proficiency tree: some need other Proficiencies or minimum Stats first.`}
-        </p>
-        <ProficiencySlots
-          proficiencies={c.proficiencies}
-          max={npc ? undefined : profMax}
-          sheet={npc ? undefined : c}
-          onChange={(p) => update((d) => void (d.proficiencies = p))}
-        />
-      </aside>
-
+    <div className="augment-tab">
       <section className="augment-card" id="augment" aria-label="Augment">
         <div className="augment-head">
           <span className="kicker">Augment</span>

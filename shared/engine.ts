@@ -478,6 +478,8 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       aim(table, actor, action.source, action.cardId, action.die === undefined ? undefined : clamp(action.die, 0, 20));
       return true;
     case "storyRoll":
+      // A popup's roll (popupRoll) is the GM asking, so it works either way.
+      if (actor.role !== "gm" && ctx?.playersStoryRoll?.() === false) throw new ActionError("Your GM has turned off Story Rolls from players.");
       storyRoll(table, actor, tokenOf(action.tokenId), action.stat, ctx);
       return true;
     // Nothing in the log: the log is shared, and a popup may be meant for some players only.

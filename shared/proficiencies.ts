@@ -138,6 +138,61 @@ export function proficiencyPages(c: Pick<Character, "proficiencies">, library: R
   });
 }
 
+// ---- Filtering by required Stats ----
+
+/** How a Stat requirement is compared: needs it at all, or needs at least, exactly or at most N. */
+export type StatCmp = "any" | "atLeast" | "exactly" | "atMost";
+
+export const STAT_CMP_OPTIONS: { value: StatCmp; label: string }[] = [
+  { value: "any", label: "any amount" },
+  { value: "atLeast", label: "at least" },
+  { value: "exactly", label: "exactly" },
+  { value: "atMost", label: "at most" },
+];
+
+/** One line of the filter: "needs Fortitude at least 2". */
+export interface StatFilterRow {
+  stat: string;
+  cmp: StatCmp;
+  n: number;
+}
+
+/** Proficiencies whose Stat requirements match every line ("and") or any line ("or"). */
+export interface StatFilter {
+  rows: StatFilterRow[];
+  mode: "and" | "or";
+}
+
+export const emptyStatFilter = (): StatFilter => ({ rows: [], mode: "and" });
+
+/** Whether a Proficiency's own Stat requirement fits one line of the filter. No requirement for that Stat never fits. */
+export function matchesStatRow(def: EffectDef, row: StatFilterRow): boolean {
+  const need = def.minStats?.[row.stat];
+  if (!need) return false;
+  switch (row.cmp) {
+    case "any":
+      return true;
+    case "atLeast":
+      return need >= row.n;
+    case "exactly":
+      return need === row.n;
+    case "atMost":
+      return need <= row.n;
+  }
+}
+
+/** Whether a Proficiency passes the filter. An empty filter lets everything through. */
+export function matchesStatFilter(def: EffectDef, filter: StatFilter | undefined): boolean {
+  if (!filter?.rows.length) return true;
+  return filter.mode === "or" ? filter.rows.some((r) => matchesStatRow(def, r)) : filter.rows.every((r) => matchesStatRow(def, r));
+}
+
+/** "Needs Fortitude at least 2 and Insight": the filter in words. */
+export function statFilterText(filter: StatFilter): string {
+  const rows = filter.rows.map((r) => `${statLabel(r.stat)}${r.cmp === "any" ? "" : ` ${STAT_CMP_OPTIONS.find((o) => o.value === r.cmp)!.label} ${r.n}`}`);
+  return rows.length ? `Needs ${rows.join(filter.mode === "or" ? " or " : " and ")}` : "";
+}
+
 // ---- Placeholder tree ----
 
 const prof = (name: string, note: string, extra: Partial<EffectDef> = {}): EffectDef => ({ name, kind: "proficiency", note, decay: "none", rules: [], ...extra });
