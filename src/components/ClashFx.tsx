@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ClashFx, FxDie, FxState, TableState } from "../../shared/types.ts";
+import type { ClashFx, FxDie, FxMassSide, FxRound, FxState, TableState } from "../../shared/types.ts";
 
 type Stage = "intro" | "roll" | "reveal" | "result";
 /** What the clash animation is showing right now. */
@@ -102,34 +102,115 @@ function RollingNumber({ die }: { die: FxDie }) {
   return <>{n}</>;
 }
 
-/** The animation above one character: their Page's name, then the die they're rolling. */
-export function FxBubble({ step, side }: { step: FxStep; side: "a" | "b" }) {
-  const { fx, round, stage } = step;
-  const pageName = side === "a" ? fx.pageA : fx.pageB;
+/** "1/3" over a die; a Mass Summation check is labelled "Sum" and the dice after it count from 1. */
+function stepLabel(fx: ClashFx, round: number) {
   const r = fx.rounds[round];
-  const die = r?.[side];
-  const other = side === "a" ? "b" : "a";
+  if (r?.aDice) return "Sum";
+  const offset = fx.rounds[0]?.aDice ? 1 : 0;
+  const n = fx.rounds.length - offset;
+  return n > 1 ? `${round + 1 - offset}/${n}` : null;
+}
+
+/** How a die looks once the step plays out, from its owner's side ("a" is the attacker). */
+function outcomeClass(result: FxRound["result"], mine: "a" | "b") {
+  return result === "hit" ? " hit" : result === "draw" ? " draw" : result === mine ? " win" : " lose";
+}
+
+function OneDie({ die, stage, outcome, mini }: { die: FxDie; stage: Stage; outcome: string; mini?: boolean }) {
+  return (
+    <div className={`fx-die ${die.kind}${mini ? " mini" : ""}${stage === "roll" ? " rolling" : ""}${outcome}`}>
+      <span className="fx-num">{stage === "roll" ? <RollingNumber die={die} /> : die.power}</span>
+      <span className="fx-kind">
+        {die.counter ? "Counter " : ""}
+        {mini ? KIND_LABELS[die.kind].slice(0, 2) : KIND_LABELS[die.kind]}
+      </span>
+    </div>
+  );
+}
+
+/** A Summation check: every die rolled together, then their sum. */
+function DiceSum({ dice, stage, outcome }: { dice: FxDie[]; stage: Stage; outcome: string }) {
+  const settled = stage !== "roll";
+  return (
+    <div className="fx-sum">
+      <div className="fx-sum-dice">
+        {dice.map((d, i) => (
+          <OneDie key={i} die={d} stage={stage} outcome="" mini />
+        ))}
+      </div>
+      <div className={"fx-total" + (settled ? outcome : " rolling")}>{settled ? dice.reduce((x, d) => x + d.power, 0) : "Σ"}</div>
+    </div>
+  );
+}
+
+const MASS_TAGS: Partial<Record<FxRound["result"], string>> = { a: "Negated", b: "Held", draw: "Tie" };
+
+/** A Mass Attack target's side of a step: their die or dice (if they answered), then how it went. */
+function MassTarget({ step, side }: { step: FxStep; side: FxMassSide | undefined }) {
+  const { stage } = step;
+  const done = stage === "result";
+  if (!side) return null;
+  const outcome = done ? outcomeClass(side.result, "b") : "";
+  if (side.dice?.length) {
+    return (
+      <div className="fx-stack">
+        <DiceSum dice={side.dice} stage={stage} outcome={outcome} />
+        {done && MASS_TAGS[side.result] && <div className="fx-tag">{MASS_TAGS[side.result]}</div>}
+      </div>
+    );
+  }
+  if (side.die) {
+    return (
+      <div className="fx-stack">
+        <OneDie die={side.die} stage={stage} outcome={outcome} />
+        {done && side.result === "draw" && <div className="fx-tag">Draw</div>}
+        {done && side.result === "a" && !step.fx.rounds[step.round].aDice && <div className="fx-impact">✸</div>}
+      </div>
+    );
+  }
+  // Struck unopposed: an impact once it lands. The Summation check isn't a hit yet.
+  return done && side.result === "hit" && !step.fx.rounds[step.round].aDice ? <div className="fx-impact">✸</div> : null;
+}
+
+/** The animation above one character: their Page's name, then the die they're rolling. `side` is "a", "b" or a Mass Attack target's id. */
+export function FxBubble({ step, side }: { step: FxStep; side: string }) {
+  const { fx, round, stage } = step;
+  const mass = !!fx.targets && side !== "a";
+  const pageName = side === "a" ? fx.pageA : mass ? fx.pages?.[side] : fx.pageB;
   if (stage === "intro") return pageName ? <div className="fx-page" title={pageName}>{pageName}</div> : null;
+  const r = fx.rounds[round];
+  if (!r) return null;
+  const label = stepLabel(fx, round);
+  if (mass) {
+    const vs = r.vs?.[side];
+    return vs ? (
+      <div className="fx-stack">
+        {label && (vs.die || vs.dice) && <div className="fx-page small">{label}</div>}
+        <MassTarget step={step} side={vs} />
+      </div>
+    ) : null;
+  }
 
   const done = stage === "result";
+  const me = side === "b" ? "b" : "a";
+  const other = me === "a" ? "b" : "a";
+  const outcome = done ? outcomeClass(r.result, me) : "";
+  if (me === "a" && r.aDice) {
+    return (
+      <div className="fx-stack">
+        <div className="fx-page small">{label}</div>
+        <DiceSum dice={r.aDice} stage={stage} outcome={outcome} />
+      </div>
+    );
+  }
+  const die = r[me];
   // Struck by an unopposed die: an impact instead of a die.
   if (!die) return done && r.result === "hit" && r[other] ? <div className="fx-impact">✸</div> : null;
 
-  const outcome = !done ? "" : r.result === "hit" ? " hit" : r.result === "draw" ? " draw" : r.result === side ? " win" : " lose";
   return (
     <div className="fx-stack">
-      {fx.rounds.length > 1 && (
-        <div className="fx-page small">
-          {round + 1}/{fx.rounds.length}
-        </div>
-      )}
-      <div className={`fx-die ${die.kind}${stage === "roll" ? " rolling" : ""}${outcome}`}>
-        <span className="fx-num">{stage === "roll" ? <RollingNumber die={die} /> : die.power}</span>
-        <span className="fx-kind">
-          {die.counter ? "Counter " : ""}
-          {KIND_LABELS[die.kind]}
-        </span>
-      </div>
+      {label && <div className="fx-page small">{label}</div>}
+      <OneDie die={die} stage={stage} outcome={outcome} />
       {done && r.result === "draw" && <div className="fx-tag">Draw</div>}
     </div>
   );

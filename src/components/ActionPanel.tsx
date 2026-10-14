@@ -1,6 +1,6 @@
 import type { Page } from "../../shared/character.ts";
 import { pinnedBy, validTargets } from "../../shared/engine.ts";
-import { DASH_LIGHT_COST, DASH_MOVEMENT, isMassAttack } from "../../shared/ruleset.ts";
+import { isMassAttack } from "../../shared/ruleset.ts";
 import type { Card, PageSource, TableAction, TableState, Token } from "../../shared/types.ts";
 import { PageSummary } from "./PageSummary.tsx";
 
@@ -44,7 +44,7 @@ function PageButton({
 
 /**
  * Combat Actions for whoever's turn it is: use a Page from the hand or Auxiliary Deck, pick
- * targets, Dash, and end the turn. The GM uses this for enemies too.
+ * targets, and end the turn. The GM uses this for enemies too.
  */
 export function ActionPanel({ table, token, canAct, send }: Props) {
   const c = table.combat!;
@@ -166,9 +166,6 @@ export function ActionPanel({ table, token, canAct, send }: Props) {
 
       {live && (
         <div className="row wrap">
-          <button type="button" disabled={light < DASH_LIGHT_COST} onClick={() => send({ type: "dash" })}>
-            Dash (−{DASH_LIGHT_COST} Light, +{DASH_MOVEMENT} Movement)
-          </button>
           <button type="button" className="big-button" onClick={() => send({ type: "endTurn" })}>
             End turn
           </button>

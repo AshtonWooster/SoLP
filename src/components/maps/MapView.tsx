@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { HOME, isHome, MAX_ZOOM, MIN_ZOOM, panBy, viewTransform, wheelFactor, ZOOM_STEP, zoomAt, type Point, type View } from "../zoom.ts";
+import { HOME, isHome, MAX_ZOOM, MIN_ZOOM, panBy, stageStyle, wheelFactor, ZOOM_STEP, zoomAt, type Point, type View } from "../zoom.ts";
 
 /** How far a press has to move before it counts as a drag instead of a click. */
 const DRAG_PX = 4;
@@ -163,7 +163,7 @@ export function MapView({ children }: { children: ReactNode }) {
         }}
         onAuxClick={(e) => e.button === 1 && e.preventDefault()}
       >
-        <div className="map-stage" style={isHome(view) ? undefined : { transform: viewTransform(view) }}>
+        <div className="map-stage" style={stageStyle(view) as React.CSSProperties}>
           {children}
         </div>
       </div>

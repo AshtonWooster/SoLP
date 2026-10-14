@@ -458,6 +458,37 @@ test("effect library: members read it; players' effects need the GM's approval u
   await assertFails(setDoc(fx("stranger", "s"), { ...burn, createdBy: "stranger" }));
 });
 
+test("Proficiency tree: with \"Approve changes to the Proficiency tree\" on, players' Proficiencies wait for the GM", async () => {
+  const fx = (who: string, id: string) => doc(as(who), "games", GAME, "effects", id);
+  const prof = { name: "Bladework", kind: "proficiency", decay: "none", rules: [], requires: [], createdBy: "p1" };
+  const settings = (on: boolean) =>
+    env.withSecurityRulesDisabled((ctx) => updateDoc(doc(ctx.firestore(), "games", GAME), { "settings.approveProficiencies": on, "settings.playersCreateEffects": false }));
+  // Off (the default): players add Proficiencies to the tree as before.
+  await settings(false);
+  await assertSucceeds(setDoc(fx("p1", "p-old"), { ...prof, approved: false }));
+  await assertSucceeds(updateDoc(fx("p1", "p-old"), { name: "Bladework II" }));
+  // On: a player's new or changed Proficiency must be pending and not approved.
+  await settings(true);
+  await assertFails(setDoc(fx("p1", "p-new"), { ...prof, approved: false }));
+  await assertSucceeds(setDoc(fx("p1", "p-new"), { ...prof, approved: false, pending: true }));
+  await assertFails(updateDoc(fx("p1", "p-new"), { pending: false }));
+  await assertFails(updateDoc(fx("p1", "p-old"), { name: "Bladework III" }));
+  await assertSucceeds(updateDoc(fx("p1", "p-old"), { name: "Bladework III", pending: true }));
+  // Turning a Proficiency into another kind doesn't get around it.
+  await assertSucceeds(updateDoc(fx("gm", "p-old"), { pending: false }));
+  await assertFails(updateDoc(fx("p1", "p-old"), { kind: "passive" }));
+  // Only the GM approves it, and players can delete only their pending ones.
+  await assertSucceeds(updateDoc(fx("gm", "p-new"), { pending: false, approved: true }));
+  await assertFails(deleteDoc(fx("p1", "p-old")));
+  await assertSucceeds(updateDoc(fx("p1", "p-old"), { pending: true }));
+  await assertSucceeds(deleteDoc(fx("p1", "p-old")));
+  // Other kinds of effects aren't affected.
+  await assertSucceeds(setDoc(fx("p1", "status"), { name: "Chill", kind: "status", decay: "none", rules: [], createdBy: "p1", approved: false }));
+  // The GM's own Proficiencies never wait.
+  await assertSucceeds(setDoc(fx("gm", "gm-prof"), { name: "Drills", kind: "proficiency", decay: "none", rules: [] }));
+  await settings(false);
+});
+
 test("VFX library: members read it; only the GM makes, changes and deletes VFX, kept small", async () => {
   const v = (who: string, id: string) => doc(as(who), "games", GAME, "vfx", id);
   const layer = { id: "l1", type: "aura", color: "#ff8a3d", size: 1, speed: 1, opacity: 0.8, aura: "glow" };
@@ -481,6 +512,11 @@ test("VFX library: members read it; only the GM makes, changes and deletes VFX, 
 test("Status effect VFX is a Game setting only the GM changes", async () => {
   await assertFails(updateDoc(doc(as("p1"), "games", GAME), { "settings.statusVfx": true }));
   await assertSucceeds(updateDoc(doc(as("gm"), "games", GAME), { "settings.statusVfx": true }));
+});
+
+test("Story Rolls on players' phones is a Game setting only the GM changes", async () => {
+  await assertFails(updateDoc(doc(as("p1"), "games", GAME), { "settings.storyRollsOnPhone": true }));
+  await assertSucceeds(updateDoc(doc(as("gm"), "games", GAME), { "settings.storyRollsOnPhone": true }));
 });
 
 test("only the GM sees the invite code and GM notes", async () => {
