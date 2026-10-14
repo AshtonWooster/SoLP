@@ -633,10 +633,19 @@ button.pv-card:hover { filter: brightness(1.12); }
 .mini-res .res-light { background: var(--p-light); }
 .speed-die-row { border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
 .speed-die-row h4 { margin: 0 0 6px; }
-.sd-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
-.sd-cols { display: grid; grid-template-columns: 1fr 1fr; font-size: 0.75rem; color: var(--muted); }
-.sd-scroll { max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
-.sd-target { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 6px; }
+.sd-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; }
+/* Page, Targets and Response share one header row, so the Page and the first Response line up, card for card. */
+.sd-page { display: flex; flex-direction: column; gap: 4px; }
+.sd-col { font-size: 0.75rem; line-height: 1.2; color: var(--muted); }
+.sd-targets { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 8px; row-gap: 6px; align-content: start; overflow-y: auto; scrollbar-gutter: stable; }
+.sd-target { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: start; }
+/* Every list keeps the same scrollbar gutter so the Response column sits at the same spot, but only Mass Attacks cap their height and scroll. */
+.sd-targets.mass { max-height: 260px; }
+.sd-resp { display: flex; }
+.sd-more { margin: 6px 0 0; }
+/* The player's own Speed Dice, filling the space between the turn strip and their hand. */
+.player-slots { display: flex; flex-direction: column; gap: 8px; }
+.sd-target .clash-preview { grid-column: 1 / -1; margin-top: 2px; }
 .sd-who { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 
 .dice-list, .target-list { display: flex; flex-direction: column; gap: 6px; margin: 0; }

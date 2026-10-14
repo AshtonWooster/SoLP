@@ -455,12 +455,19 @@ export class Host {
     // Players see how many Pages are left in each draw pile, but not their order, and nothing the GM
     // hid: on the map, or on their characters' sheets (shared/secrets.ts). The board is a shared
     // screen, so it gets the same, even on the GM's account.
-    let forPlayers: TableState | undefined;
+    // Under the fog, a player's phone still gets their own characters, so players' tables are made per
+    // player ("" for the board, which gets none of them).
+    const forPlayers = new Map<string, TableState>();
+    const playersTable = (viewerId: string) => {
+      let t = forPlayers.get(viewerId);
+      if (!t) forPlayers.set(viewerId, (t = tableForPlayers(playerView(this.table!, viewerId || undefined))));
+      return t;
+    };
     let forGm: TableState | undefined;
     for (const peer of this.peers) {
       if (!peer.view) continue;
       const gm = peer.actor.role === "gm";
-      const table = gm && peer.view !== "board" ? (forGm ??= tableForGm(this.table)) : (forPlayers ??= tableForPlayers(playerView(this.table)));
+      const table = gm && peer.view !== "board" ? (forGm ??= tableForGm(this.table)) : playersTable(peer.view === "board" ? "" : peer.actor.uid);
       this.send(peer, {
         t: "state",
         table,

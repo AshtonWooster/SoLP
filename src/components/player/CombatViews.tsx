@@ -2,10 +2,12 @@ import { useState } from "react";
 import type { Page } from "../../../shared/character.ts";
 import { withheld } from "../../../shared/secrets.ts";
 import type { EffectDef } from "../../../shared/effects.ts";
-import type { SlottedPage, TableState, Token } from "../../../shared/types.ts";
+import type { TableState, Token } from "../../../shared/types.ts";
 import { EffectsBar } from "../effects/StatusIcons.tsx";
 import { Overlay } from "./Overlay.tsx";
 import { PageCard } from "./PageCard.tsx";
+import { ClashPreview } from "./SlotChoice.tsx";
+import { speedDiceOf } from "./speedDice.ts";
 
 const MAX = { hp: "maxHp", sanity: "maxSanity", stagger: "maxStagger", light: "maxLight" } as const;
 
@@ -16,12 +18,6 @@ export function Portrait({ token, size = 48 }: { token?: Token; size?: number })
       {token?.portrait ? <img src={token.portrait} alt="" /> : <span>{(token?.name ?? "?").charAt(0).toUpperCase()}</span>}
     </span>
   );
-}
-
-/** The Page answering this one: clashing with it, or defending against this Mass Attack on that target. */
-function responseTo(table: TableState, slot: SlottedPage, targetId: string): SlottedPage | undefined {
-  const c = table.combat!;
-  return c.slots.find((s) => s.ownerId === targetId && (s.clashWith === slot.id || slot.clashWith === s.id));
 }
 
 /** Inspect other characters: their Speed Dice, the Page on each, and its targets with any response. */
@@ -95,47 +91,64 @@ export function CycleCharacters({
               </div>
               {!c && <p className="muted">Not in combat.</p>}
               {c && dice === 0 && <p className="muted">Not in the turn order.</p>}
-              {c &&
-                Array.from({ length: dice }, (_, i) => {
-                  const slot = c.slots.find((s) => s.ownerId === who.id && s.die === i);
-                  const page = slot && c.pages[slot.pageId];
-                  return (
-                    <section className="speed-die-row" key={i}>
-                      <h4>Speed Dice {i + 1}</h4>
-                      <div className="sd-body">
-                        <div className="sd-page">{page ? <PageCard page={page} size="small" onClick={() => onOpenPage(page)} /> : <span className="muted small">No Page</span>}</div>
-                        <div className="sd-targets">
-                          <div className="sd-cols">
-                            <span>Targets</span>
-                            <span>Response</span>
-                          </div>
-                          <div className="sd-scroll">
-                            {slot?.targets.map((t) => {
-                              const target = table.tokens[t.tokenId];
-                              const resp = responseTo(table, slot, t.tokenId);
-                              const rp = resp && c.pages[resp.pageId];
-                              return (
-                                <div className="sd-target" key={t.tokenId}>
-                                  <span className="sd-who">
-                                    <Portrait token={target} size={44} />
-                                    <span className="small">{target?.name}</span>
-                                  </span>
-                                  <span>{rp ? <PageCard page={rp} size="small" onClick={() => onOpenPage(rp)} /> : <span className="muted small">One-Sided</span>}</span>
-                                </div>
-                              );
-                            })}
-                            {!slot && <span className="muted small">—</span>}
-                          </div>
-                          {slot && slot.targets.length > 2 && <span className="muted small">Scroll for {slot.targets.length} targets</span>}
-                        </div>
-                      </div>
-                    </section>
-                  );
-                })}
+              {c && <SpeedDiceRows table={table} tokenId={who.id} onOpenPage={onOpenPage} />}
             </div>
           )}
         </>
       )}
     </Overlay>
+  );
+}
+
+/**
+ * A character's Speed Dice, one row each: the Page on it, its targets and each target's response.
+ * With `preview`, a target answering with a Page also shows the clash preview against it.
+ */
+export function SpeedDiceRows({
+  table,
+  tokenId,
+  onOpenPage,
+  preview = false,
+}: {
+  table: TableState;
+  tokenId: string;
+  onOpenPage: (p: Page) => void;
+  preview?: boolean;
+}) {
+  return (
+    <>
+      {speedDiceOf(table, tokenId).map(({ die, slot, page, mass, targets }) => (
+        <section className="speed-die-row" key={die}>
+          <h4>Speed Dice {die + 1}</h4>
+          <div className="sd-body">
+            <div className="sd-page">
+              <span className="sd-col">Page</span>
+              {page ? <PageCard page={page} size="small" onClick={() => onOpenPage(page)} /> : <span className="muted small">No Page</span>}
+            </div>
+            {/* Only a Mass Attack's many targets get a scrolling list; with previews, the whole panel scrolls instead. */}
+            <div className={"sd-targets" + (mass && !preview ? " mass" : "")}>
+              <span className="sd-col">Targets</span>
+              <span className="sd-col">Response</span>
+              {targets.map((t) => {
+                const target = table.tokens[t.tokenId];
+                const rp = t.responsePage;
+                return (
+                  <div className="sd-target" key={t.tokenId}>
+                    <span className="sd-who">
+                      <Portrait token={target} size={44} />
+                      <span className="small">{target?.name}</span>
+                    </span>
+                    <span className="sd-resp">{rp ? <PageCard page={rp} size="small" onClick={() => onOpenPage(rp)} /> : <span className="muted small">One-Sided</span>}</span>
+                    {preview && page && rp && <ClashPreview mine={page} theirs={rp} theirName={target?.name ?? "Their"} />}
+                  </div>
+                );
+              })}
+              {!slot && <span className="muted small">—</span>}
+            </div>
+          </div>
+          {mass && !preview && targets.length > 2 && <p className="muted small sd-more">Scroll for all {targets.length} targets</p>}
+        </section>
+      ))}
+    </>
   );
 }

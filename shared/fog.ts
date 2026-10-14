@@ -3,7 +3,8 @@
 // so maps made before fog existed look the same. The tools are always there for the GM.
 //
 // Players never get what's under the fog: `playerView` (shared/maps.ts) leaves out the tokens, pins
-// and assets inside hidden areas before the table is sent, and their screens cover the hidden tiles.
+// and assets inside hidden areas (and a hidden token's part in combat) before the table is sent, and
+// their screens cover the hidden tiles.
 import { ActionError, clamp } from "./core.ts";
 import type { MapInfo, MapItem, Token } from "./types.ts";
 
@@ -159,9 +160,13 @@ export function cleanFog(map: MapInfo) {
   tidyFog(map);
 }
 
-/** Whether players may see a token on a fogged map. Their own characters and anyone in the fight always show. */
-export function tokenInView(map: MapInfo, mask: boolean[] | undefined, t: Token, fighting?: Set<string>): boolean {
-  if (!mask || t.side === "player" || t.ownerId || fighting?.has(t.id)) return true;
+/**
+ * Whether players may see a token on a fogged map: not when it stands on a hidden tile, whoever it
+ * is (other players' characters and anyone in the fight included). A player's phone (`viewerId`)
+ * still gets that player's own characters, so they can keep playing them.
+ */
+export function tokenInView(map: MapInfo, mask: boolean[] | undefined, t: Token, viewerId?: string): boolean {
+  if (!mask || (viewerId && t.ownerId === viewerId)) return true;
   return !isFogged(map, mask, t.x, t.y);
 }
 

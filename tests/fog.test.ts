@@ -111,23 +111,95 @@ test("fogAreas merges hidden tiles into boxes for drawing", () => {
   ]);
 });
 
-test("players don't get tokens under the fog, but always get their own characters", () => {
+test("no token under the fog is sent to the board, players' characters included", () => {
   const t = table();
   act(t, { type: "fogAll", mapId: "lib", hidden: true });
   act(t, { type: "drawFog", mapId: "lib", x: 8, y: 4, w: 1, h: 1, reveal: true });
   const view = playerView(t);
-  assert.deepEqual(Object.keys(view.tokens).sort(), ["guard", "roland"], "the rat is under the fog; Roland is a player");
+  assert.deepEqual(Object.keys(view.tokens), ["guard"], "only the guard stands on a revealed tile");
   assert.deepEqual(view.map.fog, t.map.fog, "the fog comes along so screens can cover it");
   // The GM's own table keeps everything.
   assert.equal(Object.keys(t.tokens).length, 3);
 });
 
-test("anyone in the turn order stays in view, so combat still makes sense", () => {
+test("a player's phone keeps their own characters under the fog, but not anyone else's", () => {
   const t = table();
-  act(t, { type: "startCombat", tokenIds: ["roland", "rat"] });
+  t.tokens.anjela = token("anjela", "player", 2, 2, { ownerId: "p2" });
   act(t, { type: "fogAll", mapId: "lib", hidden: true });
-  const view = playerView(t);
-  assert.deepEqual(Object.keys(view.tokens).sort(), ["rat", "roland"]);
+  assert.deepEqual(Object.keys(playerView(t, "p1").tokens), ["roland"]);
+  assert.deepEqual(Object.keys(playerView(t, "p2").tokens), ["anjela"]);
+  assert.deepEqual(Object.keys(playerView(t).tokens), [], "the board gets no one");
+});
+
+test("a token on the edge of the fog shows; one step in, it's hidden", () => {
+  const t = table();
+  act(t, { type: "drawFog", mapId: "lib", x: 6, y: 0, w: 4, h: 6 });
+  assert.ok(playerView(t).tokens.roland, "Roland is in the open");
+  t.tokens.roland.x = 5;
+  assert.ok(playerView(t).tokens.roland, "the tile beside the fog is open");
+  t.tokens.roland.x = 6;
+  assert.equal(playerView(t).tokens.roland, undefined, "on a hidden tile");
+});
+
+test("a fighter under the fog is left out of the turn order and the rest of combat", () => {
+  const t = table();
+  act(t, { type: "startCombat", tokenIds: ["roland", "rat", "guard"] });
+  const c = t.combat!;
+  // Fill in what screens would show of the rat: its Pages, a Page aimed at Roland, a clash, Counter Dice.
+  const ratPage = "claw";
+  c.pages[ratPage] = { id: ratPage, name: "Claw" } as never;
+  c.decks.rat.hand = [{ id: "card1", pageId: ratPage }];
+  c.slots = [
+    { id: "s1", ownerId: "rat", die: 0, pageId: "bite", targets: [{ tokenId: "roland", die: 0 }], clashWith: "s2" },
+    { id: "s2", ownerId: "roland", die: 0, pageId: "rp", targets: [{ tokenId: "rat", die: 0 }], clashWith: "s1" },
+  ];
+  c.counters = { rat: [{ id: "c1", die: { kind: "block", sides: 4, basePower: 2 } as never, pageId: "x" }] };
+  c.fx = [
+    { id: 1, a: "roland", b: "rat", pageA: "rp", pageB: "x", rounds: [{ result: "a", after: { roland: { resources: t.tokens.roland.resources }, rat: { resources: t.tokens.rat.resources } } }] },
+    { id: 2, a: "rat", b: "guard", pageA: "x", rounds: [] },
+  ];
+  c.speedRoll = { id: "r", tokenIds: ["roland", "rat", "guard"] };
+  c.procs = [{ id: 1, tokenId: "rat", defId: "burn" }];
+  c.aim = { tokenId: "roland", pageId: "rp", source: "hand", targets: ["rat"] };
+  const ratTurn = c.order.findIndex((x) => x.tokenId === "rat");
+  c.turn = ratTurn;
+
+  act(t, { type: "drawFog", mapId: "lib", x: 7, y: 3, w: 1, h: 1 });
+  const v = playerView(t).combat!;
+  assert.deepEqual(v.order.map((x) => x.tokenId).sort(), ["guard", "roland"]);
+  assert.equal(v.turn, -1, "it's the rat's turn, so no one shows as up");
+  assert.equal(v.decks.rat, undefined);
+  assert.equal(v.counters.rat, undefined);
+  assert.equal(v.pages[ratPage], undefined, "the rat's own Pages aren't sent");
+  assert.deepEqual(v.slots.map((s) => s.id), ["s2"], "the rat's slotted Page is left out");
+  assert.deepEqual(v.slots[0].targets, [], "Roland's Page no longer points at the rat");
+  assert.equal(v.slots[0].clashWith, undefined);
+  assert.deepEqual(v.fx!.map((f) => f.id), [1, 2], "Roland's and the guard's animations still play");
+  assert.deepEqual(Object.keys(v.fx![0].rounds[0].after!), ["roland"], "without the rat's Health");
+  assert.deepEqual(v.speedRoll!.tokenIds, ["roland", "guard"]);
+  assert.deepEqual(v.procs, []);
+  assert.deepEqual(v.aim!.targets, []);
+  // The GM's table is untouched.
+  assert.equal(t.combat!.order.length, 3);
+  assert.equal(t.combat!.turn, ratTurn);
+
+  // Once the rat steps into the open, it's back, and so is its turn.
+  t.tokens.rat.x = 2;
+  const back = playerView(t).combat!;
+  assert.equal(back.order.length, 3);
+  assert.equal(back.turn, ratTurn);
+  assert.equal(back, t.combat, "nothing hidden: combat is sent as it is");
+});
+
+test("whose turn it is still lines up when someone earlier in the order is hidden", () => {
+  const t = table();
+  act(t, { type: "startCombat", tokenIds: ["roland", "rat", "guard"] });
+  const c = t.combat!;
+  c.order = [c.order.find((x) => x.tokenId === "rat")!, ...c.order.filter((x) => x.tokenId !== "rat")];
+  c.turn = c.order.findIndex((x) => x.tokenId === "guard");
+  act(t, { type: "drawFog", mapId: "lib", x: 7, y: 3, w: 1, h: 1 });
+  const v = playerView(t).combat!;
+  assert.equal(v.order[v.turn].tokenId, "guard");
 });
 
 test("pins and assets under the fog aren't sent; an asset partly in the open still is", () => {

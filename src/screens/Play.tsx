@@ -12,7 +12,7 @@ import { ConnectionBadge } from "../components/Status.tsx";
 import { Waiting } from "../components/Waiting.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
 import { SpeedRollCard, useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
-import { CycleCharacters, Portrait } from "../components/player/CombatViews.tsx";
+import { CycleCharacters, Portrait, SpeedDiceRows } from "../components/player/CombatViews.tsx";
 import { EffectsBar } from "../components/effects/StatusIcons.tsx";
 import { useEffectLibrary } from "../components/effects/library.tsx";
 import { InfoPanel, PANELS, type PanelKey } from "../components/player/InfoPanels.tsx";
@@ -285,7 +285,7 @@ export function Play() {
       <div className={"turn-strip" + (myTurn ? " mine" : "")}>
         {combat ? (
           <span>
-            <strong>{myTurn ? "Your turn" : `${active?.name ?? "—"}'s turn`}</strong> · Round {combat.round} · {PHASE_LABELS[combat.phase]}
+            <strong>{myTurn ? "Your turn" : active ? `${active.name}'s turn` : "Someone else's turn"}</strong> · Round {combat.round} · {PHASE_LABELS[combat.phase]}
             {myTurn && ` · ${combat.movementLeft} Movement, move on the board`}
           </span>
         ) : (
@@ -313,6 +313,13 @@ export function Play() {
             Create my character
           </Link>
         </div>
+      )}
+
+      {/* ---- Middle: your slotted Pages, with a clash preview for each clash (like Cycle characters) ---- */}
+      {combat && mine && myDice > 0 && (
+        <section className="player-slots" aria-label="Your slotted Pages">
+          <SpeedDiceRows table={table} tokenId={mine.id} onOpenPage={(p) => setViewing({ page: p })} preview />
+        </section>
       )}
 
       {/* ---- Bottom: Pages you can use ---- */}
