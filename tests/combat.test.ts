@@ -351,33 +351,44 @@ test("Mass Attack (Individual): each die is rolled once, checked against every t
   }
 });
 
-test("a Page answering a Mass Attack waits for it on its own turn, even against a single target", () => {
-  for (const linked of [true, false]) {
-    const s = setup([page("barrage", "massIndividual", [die("pierce", 6)])], [page("bite", "melee", [die("pierce", 3)])]);
-    if (linked) {
-      play(s, "barrage", ["rat"]);
-      endTurn(s, p1);
-      enemyPlay(s, "bite", ["roland"]); // clashes with the Barrage
-    } else {
-      endTurn(s, p1);
-      enemyPlay(s, "bite", ["roland"]);
-      endTurn(s);
-      play(s, "barrage", ["rat"]); // aimed at the Speed Die the Bite is on
-    }
-    const bite = s.c().slots.find((x) => x.ownerId === "rat")!;
-    assert.equal(!!bite.clashWith, linked);
-    // The Rat's turn comes next, before Roland resolves the Barrage on his.
-    s.c().turn = s.c().order.findIndex((x) => x.tokenId === "roland");
-    endTurn(s, p1);
-    assert.equal(activeToken(s.table)!.id, "rat");
-    assert.ok(s.c().slots.some((x) => x.id === bite.id), "the Bite is still slotted");
-    assert.equal(s.hp("roland"), 30);
-    endTurn(s); // Roland's turn: Pierce 6 beats Pierce 3 and lands
-    assert.equal(activeToken(s.table)!.id, "roland");
-    assert.equal(s.hp("rat"), 24);
-    assert.equal(s.hp("roland"), 30, "the Bite was Negated");
-    assert.deepEqual(s.c().fx!.at(-1)!.targets, ["rat"]);
-  }
+/** The Rat's turn comes next, before Roland resolves his Mass Attack on his. */
+function ratTurnNext(s: ReturnType<typeof setup>) {
+  s.c().turn = s.c().order.findIndex((x) => x.tokenId === "roland");
+  endTurn(s, p1);
+  assert.equal(activeToken(s.table)!.id, "rat");
+}
+
+test("a Page that clashed with a Mass Attack waits for it on its own turn, even against a single target", () => {
+  const s = setup([page("barrage", "massIndividual", [die("pierce", 6)])], [page("bite", "melee", [die("pierce", 3)])]);
+  play(s, "barrage", ["rat"]);
+  endTurn(s, p1);
+  enemyPlay(s, "bite", ["roland"]); // clashes with the Barrage
+  const bite = s.c().slots.find((x) => x.ownerId === "rat")!;
+  assert.ok(bite.clashWith);
+  ratTurnNext(s);
+  assert.ok(s.c().slots.some((x) => x.id === bite.id), "the Bite is still slotted");
+  assert.equal(s.hp("roland"), 30);
+  endTurn(s); // Roland's turn: Pierce 6 beats Pierce 3 and lands
+  assert.equal(s.hp("rat"), 24);
+  assert.equal(s.hp("roland"), 30, "the Bite was Negated");
+  assert.deepEqual(s.c().fx!.at(-1)!.targets, ["rat"]);
+});
+
+test("a Page slotted before a Mass Attack was aimed at its Speed Die still resolves on its owner's turn", () => {
+  const s = setup([page("barrage", "massIndividual", [die("pierce", 6)])], [page("bite", "melee", [die("pierce", 3)])]);
+  endTurn(s, p1);
+  enemyPlay(s, "bite", ["roland"]);
+  endTurn(s);
+  play(s, "barrage", ["rat"]); // aimed at the Speed Die the Bite is on
+  assert.ok(!s.c().slots.find((x) => x.ownerId === "rat")!.clashWith);
+  ratTurnNext(s); // the Bite doesn't wait: it hits Roland One-Sided
+  assert.ok(!s.c().slots.some((x) => x.ownerId === "rat"));
+  assert.equal(s.hp("roland"), 27);
+  endTurn(s); // Roland's turn: the Barrage lands unopposed
+  assert.equal(s.hp("rat"), 24);
+  const fx = s.c().fx!.at(-1)!;
+  assert.deepEqual(fx.targets, ["rat"]);
+  assert.deepEqual(fx.pages, {}, "nothing left to answer it with");
 });
 
 test("Instant Pages resolve right away and never clash", () => {
