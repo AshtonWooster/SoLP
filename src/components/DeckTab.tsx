@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { DieEffectNames } from "./effects/library.tsx";
+import { DieEffectNames, useLibrary } from "./effects/library.tsx";
+import { proficiencyPages } from "../../shared/proficiencies.ts";
 import { createPortal } from "react-dom";
 import type { Character, Page } from "../../shared/character.ts";
 import { auxiliaryDeck, blankPage, cleanDeck, DECK_SIZE, deckSize, equipmentPages, maxCopies } from "../../shared/ruleset.ts";
@@ -111,6 +112,8 @@ export function DeckTab({
     });
   const maxFor = (page: Page) => Math.min(maxCopies(page), copiesOf(page.id) + Math.max(0, room));
   const aux = auxiliaryDeck(c);
+  // Proficiencies can add a Page each to the Auxiliary Deck (shared/proficiencies.ts).
+  const profPages = proficiencyPages(c, useLibrary()?.library);
   const hands = c.weapons.reduce((n, w) => n + w.hands, 0);
   const ego = c.ego ?? [];
 
@@ -177,10 +180,13 @@ export function DeckTab({
         )}
 
         <div className="inv-section">Auxiliary Deck</div>
-        {aux.length === 0 && <div className="inv-row empty">No Usable items in your Inventory</div>}
+        {aux.length === 0 && profPages.length === 0 && <div className="inv-row empty">No Usable items in your Inventory</div>}
         <div className="deck-aux">
           {aux.map(({ item, page, copies }) => (
             <DeckRow key={item.id} page={page} copies={copies} note={item.consumable ? "consumed on use" : undefined} onPeek={setPeek} />
+          ))}
+          {profPages.map(({ proficiencyId, page }) => (
+            <DeckRow key={proficiencyId} page={page} copies={1} note="from a Proficiency" onPeek={setPeek} />
           ))}
           {ego.map((p) => (
             <DeckRow key={p.id} page={p} copies="E" note="E.G.O., once per combat" onPeek={setPeek} />

@@ -41,7 +41,7 @@ import {
   updateMapItem,
 } from "./maps.ts";
 import { newId } from "./id.ts";
-import { closePopup, popupBuy, popupRoll, removePopup, sendPopup } from "./popups.ts";
+import { clearPopups, closePopup, popupBuy, popupRoll, removePopup, sendPopup } from "./popups.ts";
 import { setAhn } from "./rewards.ts";
 import { createMapFolder, deleteMapFolder, renameMapFolder, setMapFolder } from "./mapFolders.ts";
 import { moveCost } from "./ruleset.ts";
@@ -486,9 +486,12 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
     case "removePopup":
       gmOnly();
       return removePopup(table, action.popupId);
+    case "clearPopups":
+      gmOnly();
+      return clearPopups(table, action.popupId);
     case "closePopup":
       if (isGm) throw new ActionError("Take a popup down instead.");
-      return closePopup(table, actor, action.popupId);
+      return closePopup(table, actor, action.popupId, ctx);
     case "popupRoll":
       if (isGm) throw new ActionError("Players roll for their own popups.");
       popupRoll(table, actor, action.popupId, action.stat, ctx);

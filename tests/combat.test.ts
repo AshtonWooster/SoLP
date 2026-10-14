@@ -276,6 +276,110 @@ test("Mass Attack (Individual): each Mass die beats a lower target die and lands
   assert.equal(s.hp("rat"), 24);
 });
 
+/** A die with real sides, so a second roll would show up as a different number. */
+const d20 = (kind: DiceKind): Dice => ({ id: `d${n++}`, kind, counter: false, sides: 20, basePower: 0 });
+
+/** Roland, a Rat and a Wolf (no Page): Roland's Mass Attack aimed at both, the Rat answering it with `ratPage`. */
+function massSetup(mass: Page, ratPage: Page) {
+  const s = setup([mass], [ratPage]);
+  s.table.tokens.wolf = token("wolf", "enemy", 2, 3, { justice: -200, resources: { hp: 500, maxHp: 500, stagger: 500, maxStagger: 500, light: 5, maxLight: 5, sanity: 0, maxSanity: 15 } });
+  s.table.tokens.rat.resources = { ...s.table.tokens.rat.resources, hp: 500, maxHp: 500, stagger: 500, maxStagger: 500 };
+  s.act({ type: "addCombatant", tokenId: "wolf" }, gm);
+  play(s, mass.id, ["rat", "wolf"]);
+  endTurn(s, p1);
+  enemyPlay(s, ratPage.id, ["roland"]);
+  endTurn(s);
+  endTurn(s); // the Wolf passes; Roland's turn resolves the Mass Attack
+  const fx = s.c().fx!.at(-1)!;
+  return { s, fx };
+}
+
+test("Mass Attack (Summation): one roll is the check and the damage; every target plays in one animation", () => {
+  for (let i = 0; i < 20; i++) {
+    const { s, fx } = massSetup(page("sweep", "massSummation", [d20("slash"), d20("slash"), d20("slash")]), page("nip", "melee", [die("pierce", 2)]));
+    assert.deepEqual(fx.targets, ["rat", "wolf"], "one animation for both targets");
+    assert.equal(fx.a, "roland");
+    assert.deepEqual(fx.pages, { rat: "nip" }, "only the Rat answers with a Page");
+    // The check: all three dice at once, against the Rat's Page summed; the Wolf has nothing to answer with.
+    const [check, ...hits] = fx.rounds;
+    const powers = check.aDice!.map((d) => d.power);
+    const total = powers.reduce((x, y) => x + y, 0);
+    assert.equal(powers.length, 3);
+    assert.equal(check.a, undefined);
+    assert.deepEqual(check.vs!.rat.dice!.map((d) => d.power), [2]);
+    assert.equal(check.vs!.rat.result, "a", `${total} beats 2`);
+    assert.equal(check.vs!.wolf.result, "hit");
+    // Then each die lands on both at once, with the number it rolled for the check.
+    assert.deepEqual(hits.map((r) => r.a!.power), powers, "never rolled again");
+    for (const r of hits) assert.deepEqual(Object.keys(r.vs!).sort(), ["rat", "wolf"]);
+    assert.equal(s.hp("rat"), 500 - total);
+    assert.equal(s.hp("wolf"), 500 - total);
+    assert.equal(fx.rounds.at(-1)!.after!.wolf.resources.hp, s.hp("wolf"));
+    assert.ok(!s.c().slots.some((x) => x.ownerId === "rat"), "the Nip was Negated");
+  }
+});
+
+test("Mass Attack (Summation): a target whose Page sums higher holds and isn't hit; one die at a time on the rest", () => {
+  const { s, fx } = massSetup(page("sweep", "massSummation", [die("slash", 3), die("slash", 4)]), page("wall", "melee", [die("block", 5), die("block", 5)]));
+  const [check, ...hits] = fx.rounds;
+  assert.deepEqual(check.vs!.rat.dice!.map((d) => d.power), [5, 5], "the Rat's dice are rolled together too");
+  assert.equal(check.vs!.rat.result, "b");
+  assert.equal(check.result, "hit", "it still lands on the Wolf");
+  assert.deepEqual(hits.map((r) => [r.a!.power, Object.keys(r.vs!)]), [[3, ["wolf"]], [4, ["wolf"]]]);
+  assert.equal(s.hp("rat"), 500);
+  assert.equal(s.hp("wolf"), 493);
+});
+
+test("Mass Attack (Individual): each die is rolled once, checked against every target and lands with that number", () => {
+  for (let i = 0; i < 20; i++) {
+    const { s, fx } = massSetup(page("barrage", "massIndividual", [d20("pierce"), d20("pierce")]), page("claw", "melee", [die("slash", 10)]));
+    assert.deepEqual(fx.targets, ["rat", "wolf"]);
+    assert.deepEqual(fx.pages, { rat: "claw" });
+    assert.equal(fx.rounds.length, 2, "one step per die, no separate check");
+    const [first, second] = fx.rounds;
+    // The first die meets the Claw and the unopposed Wolf at the same moment, with the same number.
+    const fp1 = first.a!.power;
+    assert.equal(first.vs!.rat.die!.power, 10);
+    assert.equal(first.vs!.rat.result, fp1 > 10 ? "a" : fp1 === 10 ? "draw" : "b");
+    assert.equal(first.vs!.wolf.result, "hit");
+    // The Claw is used up: the second die lands on both.
+    const fp2 = second.a!.power;
+    assert.equal(second.vs!.rat.result, "hit");
+    assert.equal(second.vs!.wolf.result, "hit");
+    assert.equal(s.hp("wolf"), 500 - fp1 - fp2, "the Wolf takes exactly the rolled numbers");
+    assert.equal(s.hp("rat"), 500 - (fp1 > 10 ? fp1 : 0) - fp2);
+  }
+});
+
+test("a Page answering a Mass Attack waits for it on its own turn, even against a single target", () => {
+  for (const linked of [true, false]) {
+    const s = setup([page("barrage", "massIndividual", [die("pierce", 6)])], [page("bite", "melee", [die("pierce", 3)])]);
+    if (linked) {
+      play(s, "barrage", ["rat"]);
+      endTurn(s, p1);
+      enemyPlay(s, "bite", ["roland"]); // clashes with the Barrage
+    } else {
+      endTurn(s, p1);
+      enemyPlay(s, "bite", ["roland"]);
+      endTurn(s);
+      play(s, "barrage", ["rat"]); // aimed at the Speed Die the Bite is on
+    }
+    const bite = s.c().slots.find((x) => x.ownerId === "rat")!;
+    assert.equal(!!bite.clashWith, linked);
+    // The Rat's turn comes next, before Roland resolves the Barrage on his.
+    s.c().turn = s.c().order.findIndex((x) => x.tokenId === "roland");
+    endTurn(s, p1);
+    assert.equal(activeToken(s.table)!.id, "rat");
+    assert.ok(s.c().slots.some((x) => x.id === bite.id), "the Bite is still slotted");
+    assert.equal(s.hp("roland"), 30);
+    endTurn(s); // Roland's turn: Pierce 6 beats Pierce 3 and lands
+    assert.equal(activeToken(s.table)!.id, "roland");
+    assert.equal(s.hp("rat"), 24);
+    assert.equal(s.hp("roland"), 30, "the Bite was Negated");
+    assert.deepEqual(s.c().fx!.at(-1)!.targets, ["rat"]);
+  }
+});
+
 test("Instant Pages resolve right away and never clash", () => {
   const s = setup([page("jab", "instant", [die("blunt", 4)])], [page("bite", "melee", [die("pierce", 3)])]);
   endTurn(s, p1);
@@ -416,6 +520,31 @@ test("using a Tool's Auxiliary Page tells the host which item, so its uses can c
   assert.deepEqual(used, ["roland:item-1"]);
   assert.equal(table.tokens.rat.resources.hp, 25);
   assert.equal(table.combat!.decks.roland.aux.length, 0, "gone until combat ends");
+});
+
+test("a Proficiency's Page sits in the Auxiliary Deck with no Tool to count down", () => {
+  const used: string[] = [];
+  const table: TableState = {
+    map: { name: "m", width: 16, height: 10 },
+    tokens: {
+      roland: token("roland", "player", 2, 2, { ownerId: "p1", justice: 100 }),
+      rat: token("rat", "enemy", 3, 2, { justice: -100, pages: [page("bite", "melee", [die("pierce", 3)])] }),
+    },
+    log: [],
+  };
+  const flurry = page("flurry", "instant", [die("slash", 5)]);
+  const ctx: EngineContext = {
+    loadout: (id) => (id === "roland" ? { pages: { flurry }, deck: [], aux: [{ pageId: "flurry" }] } : undefined),
+    onToolUsed: (tokenId, itemId) => used.push(`${tokenId}:${itemId}`),
+  };
+  applyAction(table, { type: "startCombat", tokenIds: ["roland", "rat"] }, gm, ctx);
+  const card = table.combat!.decks.roland.aux[0];
+  assert.equal(card.itemId, undefined);
+  applyAction(table, { type: "aim", source: "aux", cardId: card.id }, p1, ctx);
+  applyAction(table, { type: "slot", targets: ["rat"] }, p1, ctx);
+  assert.deepEqual(used, [], "no inventory Tool to use up");
+  assert.equal(table.tokens.rat.resources.hp, 25);
+  assert.equal(table.combat!.decks.roland.aux.length, 0, "used once per combat");
 });
 
 test("E.G.O. Pages are available from the start and used once per combat", () => {

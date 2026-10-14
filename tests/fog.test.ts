@@ -141,6 +141,26 @@ test("a token on the edge of the fog shows; one step in, it's hidden", () => {
   assert.equal(playerView(t).tokens.roland, undefined, "on a hidden tile");
 });
 
+test("a Mass Attack's animation only plays on the targets players can see", () => {
+  const t = table();
+  act(t, { type: "startCombat", tokenIds: ["roland", "rat", "guard"] });
+  const c = t.combat!;
+  const res = (id: string) => ({ resources: t.tokens[id].resources });
+  c.fx = [
+    {
+      id: 1, a: "roland", b: "rat", pageA: "Sweep", targets: ["rat", "guard"], pages: { rat: "Claw", guard: "Shield" },
+      rounds: [{ result: "hit", vs: { rat: { result: "a" }, guard: { result: "hit" } }, after: { roland: res("roland"), rat: res("rat"), guard: res("guard") } }],
+    },
+  ];
+  act(t, { type: "drawFog", mapId: "lib", x: 7, y: 3, w: 1, h: 1 });
+  const fx = playerView(t).combat!.fx![0];
+  assert.deepEqual(fx.targets, ["guard"]);
+  assert.equal(fx.b, "guard");
+  assert.deepEqual(fx.pages, { guard: "Shield" }, "the rat's Page isn't named");
+  assert.deepEqual(Object.keys(fx.rounds[0].vs!), ["guard"]);
+  assert.deepEqual(Object.keys(fx.rounds[0].after!).sort(), ["guard", "roland"]);
+});
+
 test("a fighter under the fog is left out of the turn order and the rest of combat", () => {
   const t = table();
   act(t, { type: "startCombat", tokenIds: ["roland", "rat", "guard"] });

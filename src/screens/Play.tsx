@@ -5,13 +5,14 @@ import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
 import { blankCharacter, linkInventory, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import { partsNeedingApproval, proposeEdits, withProposals } from "../../shared/permissions.ts";
-import { type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
+import { storyRollsOnPhone, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { Waiting } from "../components/Waiting.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
 import { SpeedRollCard, useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
+import { StoryRollCard, useStoryRollPlayback } from "../components/StoryRollFx.tsx";
 import { CycleCharacters, Portrait, SpeedDiceRows } from "../components/player/CombatViews.tsx";
 import { EffectsBar } from "../components/effects/StatusIcons.tsx";
 import { useEffectLibrary } from "../components/effects/library.tsx";
@@ -85,6 +86,9 @@ export function Play() {
   // Clash damage shows once its die has played on the board.
   const { table } = useClashPlayback(snapshot.table);
   const speed = useSpeedRollPlayback(snapshot.table);
+  // With "Story Rolls on players' phones" on (game settings), your own Story Rolls play here too.
+  const storyOnPhone = storyRollsOnPhone(gameDoc.data);
+  const story = useStoryRollPlayback(snapshot.table);
   const combat = table?.combat;
   const mine = table ? Object.values(table.tokens).find((t) => t.ownerId === user?.id) : undefined;
   const library = useCollection<ItemTemplate>(`games/${id}/items`);
@@ -94,6 +98,7 @@ export function Play() {
   const active = table ? activeToken(table) : undefined;
   const myTurn = !!mine && active?.id === mine.id;
   const canAct = myTurn && combat?.phase === "actions";
+  const myStory = storyOnPhone && story && story.tokenId === mine?.id ? story : null;
   const myDice = (combat && mine && combat.order?.find((x) => x.tokenId === mine.id)?.dice) || 0;
 
   const cardsIn = (cat: Category): Card[] => (!deck ? [] : cat === "combat" ? (deck.hand ?? []) : cat === "ego" ? (deck.ego ?? []) : (deck.aux ?? []));
@@ -245,6 +250,10 @@ export function Play() {
   ];
   const cards = cardsIn(category);
   const gmPopups = (snapshot.popups ?? []).filter((p) => !closedPopups.includes(p.id));
+  const closeGmPopup = (popupId: string) => {
+    setClosedPopups((x) => [...x, popupId]);
+    void act({ type: "closePopup", popupId }).then((ok) => !ok && setClosedPopups((x) => x.filter((y) => y !== popupId)));
+  };
 
   return (
     <main className="player-screen">
@@ -291,6 +300,7 @@ export function Play() {
         <ConnectionBadge status={snapshot.status} />
       </div>
       {speed && combat && <SpeedRollCard step={speed} tokenId={mine?.id} order={combat.order} />}
+      {myStory && <StoryRollCard step={myStory} />}
       {mine?.status?.staggered && (
         <div className="player-msg staggered" role="status">
           <strong>Staggered.</strong> You can't act and your Resistances are {STAGGERED_RESISTANCE}x.{" "}
@@ -476,7 +486,8 @@ export function Play() {
                   setOverlay(null);
                   const tail = table.log.slice(-10).join("\n");
                   const label = s.key.charAt(0).toUpperCase() + s.key.slice(1).toLowerCase();
-                  if (await act({ type: "storyRoll", tokenId: mine.id, stat: s.key })) setAwaitingRoll({ prefix: `${mine.name} makes a ${label} Story Roll`, tail });
+                  // The dice show the result when they play here; otherwise it shows as text.
+                  if ((await act({ type: "storyRoll", tokenId: mine.id, stat: s.key })) && !storyOnPhone) setAwaitingRoll({ prefix: `${mine.name} makes a ${label} Story Roll`, tail });
                 }}
               >
                 <span className="story-name">
@@ -496,14 +507,14 @@ export function Play() {
           more={gmPopups.length - 1}
           stats={Object.fromEntries(stats.map((s) => [s.key, s.v]))}
           canRoll={!!mine}
-          onRoll={(stat) => void act({ type: "popupRoll", popupId: gmPopups[0].id, stat })}
+          onRoll={async (stat) => {
+            const popup = gmPopups[0];
+            // The dice show the roll on this screen, so the popup closes, unless it has a deal to settle.
+            if ((await act({ type: "popupRoll", popupId: popup.id, stat })) && storyOnPhone && !popup.deal) closeGmPopup(popup.id);
+          }}
           onBuy={() => void act({ type: "popupBuy", popupId: gmPopups[0].id })}
           ahn={characterDoc.data?.ahn ?? 0}
-          onClose={() => {
-            const popupId = gmPopups[0].id;
-            setClosedPopups((x) => [...x, popupId]);
-            void act({ type: "closePopup", popupId }).then((ok) => !ok && setClosedPopups((x) => x.filter((y) => y !== popupId)));
-          }}
+          onClose={() => closeGmPopup(gmPopups[0].id)}
         />
       )}
       {/* Last, so a Page opened from another popup (e.g. Cycle characters) shows on top of it. */}
