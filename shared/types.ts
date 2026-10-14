@@ -660,8 +660,6 @@ export type TableAction =
   | { type: "endTurn" }
   /** Move the active character to a tile, spending Movement Points. Used from the board and phones. */
   | { type: "turnMove"; x: number; y: number }
-  /** Convert Light into Movement Points. */
-  | { type: "dash" }
   /** Roll a Story Roll with one of the character's Stats; the result goes in the log. */
   | { type: "storyRoll"; tokenId: string; stat: string }
   // GM popups (shared/popups.ts).

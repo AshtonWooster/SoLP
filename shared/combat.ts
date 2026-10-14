@@ -22,9 +22,7 @@ import {
 } from "./effects.ts";
 import { newId, rollDie } from "./id.ts";
 import {
-  DASH_LIGHT_COST,
   enemyDeck,
-  DASH_MOVEMENT,
   isMassAttack,
   isOffensive,
   moveCost,
@@ -1103,14 +1101,6 @@ export function storyRoll(table: TableState, actor: Actor, token: Token, stat: s
   const label = key.charAt(0).toUpperCase() + key.slice(1);
   log(table, `${token.name} makes a ${label} Story Roll: ${roll}${secret(token, "justice", `${value >= 0 ? "+" : ""}${value} = ${roll + value}`)}.`);
   return roll + value;
-}
-
-export function dash(table: TableState, actor: Actor) {
-  const token = actingToken(table, actor);
-  if (token.resources.light < DASH_LIGHT_COST) throw new ActionError(`Dashing costs ${DASH_LIGHT_COST} Light.`);
-  token.resources.light -= DASH_LIGHT_COST;
-  table.combat!.movementLeft += DASH_MOVEMENT;
-  log(table, `${token.name} Dashes: ${secret(token, "light", `-${DASH_LIGHT_COST} Light, `)}+${DASH_MOVEMENT} Movement.`);
 }
 
 /** The card being used from the hand, Auxiliary Deck or E.G.O. Pages. */
