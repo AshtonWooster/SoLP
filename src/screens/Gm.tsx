@@ -28,6 +28,7 @@ import { useHost } from "../net/hooks.ts";
 import { useDrag } from "../components/drag.ts";
 import { gmTurnToken } from "../../shared/combat.ts";
 import { BLANK_DRAFT, GmPopups, type PopupDraft } from "../components/GmPopups.tsx";
+import { upPopups } from "../../shared/popups.ts";
 import { useStatusVfx } from "../components/vfx/useVfx.ts";
 import { StableLabel } from "../components/StableLabel.tsx";
 
@@ -98,6 +99,8 @@ export function Gm() {
   const table = snapshot.table;
   const selected = selectedId ? table?.tokens[selectedId] : undefined;
   const players = playerList(id, game.data!, characters, true);
+  // Finished popups stay in the menu's record but don't count as up.
+  const popupsUp = table ? upPopups(table).length : 0;
   const setTab = (next: "table" | "maps") => {
     setActionError("");
     setParams(next === "maps" ? { tab: "maps" } : {}, { replace: true });
@@ -248,9 +251,9 @@ export function Gm() {
               label={
                 <>
                   Popups
-                  {table.popups?.length ? (
-                    <span className="count-badge" aria-label={`${table.popups.length} up`}>
-                      {table.popups.length}
+                  {popupsUp ? (
+                    <span className="count-badge" aria-label={`${popupsUp} up`}>
+                      {popupsUp}
                     </span>
                   ) : null}
                 </>

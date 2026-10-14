@@ -12,6 +12,7 @@ import { aimTargets, Grid } from "../components/Grid.tsx";
 import { MapView } from "../components/maps/MapView.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
 import { useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
+import { useStoryRollPlayback } from "../components/StoryRollFx.tsx";
 import { TurnOrder } from "../components/TurnOrder.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
 import { TableError } from "../components/TableError.tsx";
@@ -41,6 +42,7 @@ export function Board() {
   // Damage from a clash shows once its die has played on the board.
   const { step: fx, table } = useClashPlayback(snapshot.table);
   const speed = useSpeedRollPlayback(snapshot.table);
+  const story = useStoryRollPlayback(snapshot.table);
   // Status effect VFX, when they're on in Game settings.
   const vfx = useStatusVfx(isMember ? id : "", game.data);
   const active = table ? activeToken(table) : undefined;
@@ -99,6 +101,7 @@ export function Board() {
               reachable={reachable}
               fx={fx}
               speed={speed}
+              story={story}
               vfx={vfx}
               fog="players"
               onTokenClick={(t) => {
