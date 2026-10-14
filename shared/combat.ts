@@ -83,8 +83,6 @@ export interface EngineContext {
   effectDef?(id: string): EffectDef | undefined;
   /** The Game setting "Effects wear off when combat ends" (shared/types.ts). */
   clearEffectsAfterCombat?(): boolean;
-  /** The Game setting "Rewards and costs in popups" (shared/types.ts). */
-  popupRewards?(): boolean;
   /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
   sheets?: SheetAccess;
 }
