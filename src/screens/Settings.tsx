@@ -26,7 +26,7 @@ import {
   playersCanCreateEffects,
   proficienciesNeedApproval,
   playersCanCreateItems,
-  storyRollsOnPhone,
+  playersCanStoryRoll,
 } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
@@ -516,12 +516,12 @@ export function Settings() {
         <section className="panel settings-section" aria-label="Story Rolls">
           <h2>Story Rolls</h2>
           <Toggle
-            label="Story Rolls on players' phones"
-            hint="Every Story Roll plays its dice on the board. On: a player's own Story Rolls also play on their phone, and a popup closes once they've rolled for it (unless it has a reward or cost to show). Off: their phone shows the result as text."
-            on={storyRollsOnPhone(g)}
+            label="Players can make Story Rolls"
+            hint="On: players roll a Story Roll whenever they like from the Story roll button on their phone. Off: the button is gone and they roll only when one of your popups asks them to. Either way, every roll plays its dice on the board, your map and the roller's phone."
+            on={playersCanStoryRoll(g)}
             onChange={async (on) => {
               try {
-                await updateDoc(ref, { "settings.storyRollsOnPhone": on });
+                await updateDoc(ref, { "settings.playerStoryRolls": on });
               } catch (err) {
                 setMessage({ at: "story", text: friendlyError(err) });
               }
