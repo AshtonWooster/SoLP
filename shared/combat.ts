@@ -1100,6 +1100,7 @@ export function storyRoll(table: TableState, actor: Actor, token: Token, stat: s
   const roll = rollDie(STORY_DIE);
   const label = key.charAt(0).toUpperCase() + key.slice(1);
   log(table, `${token.name} makes a ${label} Story Roll: ${roll}${secret(token, "justice", `${value >= 0 ? "+" : ""}${value} = ${roll + value}`)}.`);
+  table.storyRoll = { id: newId(), tokenId: token.id, stat: key, roll, bonus: value };
   return roll + value;
 }
 
