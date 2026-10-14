@@ -113,7 +113,7 @@ export function DieEditor({ dice, onChange, onRemove }: { dice: Dice; onChange: 
       >
         Counter
       </button>
-      <ConfirmButton className="icon die-remove" aria-label="Remove dice" confirmLabel="Remove?" onConfirm={onRemove}>
+      <ConfirmButton className="icon die-remove" aria-label="Remove dice" confirmLabel="✕" confirmHint="Tap again to remove this die" onConfirm={onRemove}>
         ✕
       </ConfirmButton>
       <input
@@ -214,7 +214,7 @@ export function PageCardEditor({
           <option value="special">Special Page</option>
         </select>
         {onRemove && (
-          <ConfirmButton className="danger" aria-label="Remove page" confirmLabel="Confirm remove" ms={3000} onConfirm={onRemove}>
+          <ConfirmButton className="danger" aria-label="Remove page" confirmLabel="Remove?" ms={3000} onConfirm={onRemove}>
             Remove Page
           </ConfirmButton>
         )}

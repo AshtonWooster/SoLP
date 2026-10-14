@@ -3,6 +3,7 @@ import { STORY_DIE } from "../../../shared/ruleset.ts";
 import type { PlayerPopup } from "../../../shared/types.ts";
 import { AnyStatIcon } from "../LorIcons.tsx";
 import { Overlay } from "./Overlay.tsx";
+import { StableLabel } from "../StableLabel.tsx";
 
 /**
  * A popup the GM sent this player: any mix of text, an image and a Story Roll prompt. The roll goes
@@ -67,7 +68,7 @@ export function GmPopupView({
         <div className="row-between">
           <span className="muted small">{more > 0 ? `${more} more from your GM` : ""}</span>
           <button type="button" onClick={onClose}>
-            {roll && popup.rolled === undefined ? "Close without rolling" : more > 0 ? "Next" : "Close"}
+            <StableLabel labels={roll ? ["Close", "Next", "Close without rolling"] : ["Close", "Next"]} show={roll && popup.rolled === undefined ? 2 : more > 0 ? 1 : 0} />
           </button>
         </div>
       </div>

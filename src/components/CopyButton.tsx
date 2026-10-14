@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { StableLabel } from "./StableLabel.tsx";
 
-/** Copies some text to the clipboard, then says so for a moment. */
+const STATES = ["", "copied", "failed"] as const;
+
+/** Copies some text to the clipboard, then says so for a moment, without the button changing size. */
 export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
-  const [state, setState] = useState<"" | "copied" | "failed">("");
+  const [state, setState] = useState<(typeof STATES)[number]>("");
   useEffect(() => {
     if (!state) return;
     const t = setTimeout(() => setState(""), 1500);
@@ -20,7 +23,7 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
           .catch(() => setState("failed"))
       }
     >
-      {state === "copied" ? "Copied ✓" : state === "failed" ? "Couldn't copy" : label}
+      <StableLabel labels={[label, "Copied ✓", "Not copied"]} show={STATES.indexOf(state)} />
     </button>
   );
 }

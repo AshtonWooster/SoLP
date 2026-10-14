@@ -6,6 +6,7 @@ import { useCollection } from "../../api.ts";
 import { db, friendlyError } from "../../firebase.ts";
 import { ConfirmButton } from "../ConfirmButton.tsx";
 import { IMAGE_ACCEPT, useImageUpload } from "../ImageUpload.tsx";
+import { StableLabel } from "../StableLabel.tsx";
 
 /** The drag type for an image dragged from the library onto the map. */
 export const ASSET_DRAG_TYPE = "application/x-solp-asset";
@@ -95,7 +96,7 @@ export function AssetLibrary({
         </button>
       </div>
       <label className={"button-like me-library-upload" + (busy ? " disabled" : "")} title="Upload an image to the library and place it on this map">
-        {busy ? "Uploading…" : "＋ Upload image"}
+        <StableLabel labels={["＋ Upload image", "Uploading…"]} show={busy ? 1 : 0} />
         <input
           type="file"
           accept={IMAGE_ACCEPT}
@@ -139,7 +140,8 @@ export function AssetLibrary({
             </span>
             <ConfirmButton
               className="icon me-library-remove"
-              confirmLabel="Remove?"
+              confirmLabel="×"
+              confirmHint="Tap again to remove it from the library"
               onConfirm={() => remove(e)}
               title="Remove from the library (it stays on any map it's already on)"
               aria-label={`Remove ${e.name} from the library`}

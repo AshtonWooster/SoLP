@@ -204,7 +204,7 @@ export function ItemCardEditor({ item, onChange, onRemove, artFolder }: { item: 
       {onRemove && (
         <div className="pv-edit-foot">
           <span className="muted small">Changes reach every inventory holding it.</span>
-          <ConfirmButton className="danger" confirmLabel="Confirm delete" onConfirm={onRemove}>
+          <ConfirmButton className="danger" confirmLabel="Delete?" confirmHint="Inventories holding it lose it" onConfirm={onRemove}>
             Delete item
           </ConfirmButton>
         </div>

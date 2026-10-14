@@ -6,6 +6,7 @@ import { useAuth } from "../api.ts";
 import { createGameFn, db, friendlyError } from "../firebase.ts";
 import { TopBar } from "../components/TopBar.tsx";
 import { Footer } from "../components/Footer.tsx";
+import { StableLabel } from "../components/StableLabel.tsx";
 
 export function Home() {
   const { user } = useAuth();
@@ -118,7 +119,7 @@ function Dashboard({ uid }: { uid: string }) {
             <h3>Create a game</h3>
             <p className="muted">You'll be the GM.</p>
             <input placeholder="Game name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required />
-            <button disabled={busy}>{busy ? "Creating…" : "Create game"}</button>
+            <button disabled={busy}><StableLabel labels={["Create game", "Creating…"]} show={busy ? 1 : 0} /></button>
           </form>
           <form className="panel stack" onSubmit={join}>
             <h3>Join a game</h3>

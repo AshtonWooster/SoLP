@@ -140,12 +140,12 @@ export function Board() {
                     {table.tokens[aim.tokenId]?.name} is using <strong>{aimedPage.name}</strong>.{" "}
                     {aiming ? (mass ? "Tap lit tokens to pick targets." : "Tap a lit token to target it.") : ""}
                   </span>
+                  {aiming && <button onClick={() => send({ type: "clearAim" })}>Cancel</button>}
                   {aiming && mass && (
                     <button className="big-button" disabled={aim.targets.length === 0} onClick={() => send({ type: "slot" })}>
                       Use on {aim.targets.length} target{aim.targets.length === 1 ? "" : "s"}
                     </button>
                   )}
-                  {aiming && <button onClick={() => send({ type: "clearAim" })}>Cancel</button>}
                 </>
               ) : playerTurn ? (
                 <span className="muted">

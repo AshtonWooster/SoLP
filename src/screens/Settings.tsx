@@ -33,6 +33,7 @@ import { CopyButton } from "../components/CopyButton.tsx";
 import { ImageUpload } from "../components/ImageUpload.tsx";
 import { TopBar } from "../components/TopBar.tsx";
 import { db, deleteGameFn, friendlyError, newInviteCodeFn, removePlayerFn } from "../firebase.ts";
+import { StableLabel } from "../components/StableLabel.tsx";
 
 /** One player: their character at a glance, a link to the sheet, and Kick. */
 function PlayerCard({ gameId, uid, displayName, character, formulas, onKick }: { gameId: string; uid: string; displayName: string; character?: Character; formulas: StatFormulas; onKick: () => void }) {
@@ -60,7 +61,7 @@ function PlayerCard({ gameId, uid, displayName, character, formulas, onKick }: {
             Open sheet
           </Link>
         )}
-        <ConfirmButton className="danger" confirmLabel={`Kick ${displayName}?`} ms={3000} aria-label={`Kick ${displayName}`} onConfirm={onKick}>
+        <ConfirmButton className="danger" confirmLabel="Kick?" confirmHint={`Removes ${displayName} and deletes their sheet`} ms={3000} aria-label={`Kick ${displayName}`} onConfirm={onKick}>
           Kick
         </ConfirmButton>
       </div>
@@ -71,7 +72,8 @@ function PlayerCard({ gameId, uid, displayName, character, formulas, onKick }: {
 /** The game's name and image: the name titles the game everywhere, the image shows on its page and its box on the front page. */
 function GameSection({ gameId, game }: { gameId: string; game: GameDoc }) {
   const [draft, setDraft] = useState(game.name);
-  const [note, setNote] = useState("");
+  // The name's note shows beside Save name, so it doesn't push the page down; the image's shows under it.
+  const [note, setNote] = useState<{ at: "name" | "image"; text: string } | null>(null);
   // Follow a rename from elsewhere unless the GM is typing a new name here.
   const [lastName, setLastName] = useState(game.name);
   if (game.name !== lastName) {
@@ -85,17 +87,17 @@ function GameSection({ gameId, game }: { gameId: string; game: GameDoc }) {
     try {
       await updateDoc(doc(db, "games", gameId), { name: next });
       setDraft(next);
-      setNote("Name saved.");
+      setNote({ at: "name", text: "Name saved." });
     } catch (err) {
-      setNote(friendlyError(err));
+      setNote({ at: "name", text: friendlyError(err) });
     }
   };
   const setImage = async (url: string | undefined) => {
     try {
       await updateDoc(doc(db, "games", gameId), { image: url ?? deleteField() });
-      setNote(url ? "Image saved. It shows on the game's page and on everyone's front page." : "Image removed.");
+      setNote({ at: "image", text: url ? "Image saved. It shows on the game's page and on everyone's front page." : "Image removed." });
     } catch (err) {
-      setNote(friendlyError(err));
+      setNote({ at: "image", text: friendlyError(err) });
     }
   };
   return (
@@ -104,20 +106,25 @@ function GameSection({ gameId, game }: { gameId: string; game: GameDoc }) {
       <form className="row wrap game-name-form" onSubmit={save}>
         <label className="field">
           <span>Name</span>
-          <input aria-label="Game name" value={draft} maxLength={60} required onChange={(e) => (setDraft(e.target.value), setNote(""))} />
+          <input aria-label="Game name" value={draft} maxLength={60} required onChange={(e) => (setDraft(e.target.value), setNote(null))} />
         </label>
         <button type="submit" disabled={!next || next === game.name}>
           Save name
         </button>
+        {note?.at === "name" && (
+          <span className="muted small inline-note" role="status">
+            {note.text}
+          </span>
+        )}
       </form>
       <div className="field">
         <span>Image</span>
         <span className="muted small">Shown at the top of the game's page and behind its box on everyone's front page.</span>
         <ImageUpload folder={`games/${gameId}/assets/cover`} kind="gameCover" shape="cover" label="Game image" value={game.image} onChange={setImage} />
       </div>
-      {note && (
+      {note?.at === "image" && (
         <p className="muted settings-note" role="status">
-          {note}
+          {note.text}
         </p>
       )}
     </section>
@@ -246,12 +253,13 @@ function StatFormulasSection({ game, note, onSave }: { game: GameDoc; note: stri
           </button>
         )}
         {dirty && <span className="chip static warn">Not saved yet</span>}
+        {/* In the button row, so the sections below don't move when it shows. */}
+        {note && !dirty && (
+          <span className="muted small inline-note" role="status">
+            {note}
+          </span>
+        )}
       </div>
-      {note && (
-        <p className="muted settings-note" role="status">
-          {note}
-        </p>
-      )}
     </section>
   );
 }
@@ -286,7 +294,7 @@ function ClearLogSection({ gameId }: { gameId: string }) {
           </p>
           <div className="row wrap">
             <button type="button" className="danger" onClick={clear} disabled={busy}>
-              {busy ? "Clearing…" : "Yes, clear it"}
+              <StableLabel labels={["Yes, clear it", "Clearing…"]} show={busy ? 1 : 0} />
             </button>
             <button type="button" onClick={() => setSure(false)} disabled={busy}>
               Cancel
@@ -374,7 +382,7 @@ function DeleteGameSection({ gameId, name }: { gameId: string; name: string }) {
           {error && <p className="error small">{error}</p>}
           <div className="row wrap">
             <button type="submit" className="danger" disabled={!deleteNameMatches(typed, name) || busy}>
-              {busy ? "Deleting…" : "Delete this game forever"}
+              <StableLabel labels={["Delete this game forever", "Deleting…"]} show={busy ? 1 : 0} />
             </button>
             <button type="button" onClick={cancel} disabled={busy}>
               Cancel
@@ -462,7 +470,7 @@ export function Settings() {
             Invite code: <strong className="invite-code">{inviteCode ?? "…"}</strong>
             {inviteCode && <CopyButton text={inviteCode} label="Copy code" />}
             {inviteCode && (
-              <ConfirmButton className="link small" confirmLabel="Old code stops working. Confirm?" ms={3000} onConfirm={newCode}>
+              <ConfirmButton className="link small" confirmLabel="Sure?" confirmHint="The old code stops working" ms={3000} onConfirm={newCode}>
                 New code
               </ConfirmButton>
             )}

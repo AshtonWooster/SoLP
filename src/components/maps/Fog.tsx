@@ -110,7 +110,7 @@ export function FogTools({ mode, setMode, onAll }: { mode: FogMode; setMode: (m:
       <button onClick={() => onAll(true)} title="Cover the whole map; then reveal areas as the party explores">
         Hide all
       </button>
-      <ConfirmButton onConfirm={() => onAll(false)} confirmLabel="Reveal everything?" title="Show the whole map to players">
+      <ConfirmButton onConfirm={() => onAll(false)} confirmLabel="Sure?" confirmHint="Shows the whole map to players" title="Show the whole map to players">
         Reveal all
       </ConfirmButton>
     </span>

@@ -10,6 +10,7 @@ import { db, friendlyError } from "../firebase.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { StatusVfxPicker } from "../components/vfx/StatusVfxPicker.tsx";
 import { useVfxLibrary } from "../components/vfx/useVfx.ts";
+import { StableLabel } from "../components/StableLabel.tsx";
 
 const SAVE_DELAY_MS = 500;
 
@@ -197,7 +198,7 @@ export function Effects() {
                       className={def.approved ? "" : "chip go"}
                       onClick={() => updateDoc(doc(db, "games", id, "effects", current), { approved: !def.approved }).catch((e) => setMessage(friendlyError(e)))}
                     >
-                      {def.approved ? "Withdraw approval" : `Approve ${maker(def)}'s effect`}
+                      <StableLabel labels={[`Approve ${maker(def)}'s effect`, "Withdraw approval"]} show={def.approved ? 1 : 0} />
                     </button>
                   )}
                   <button type="button" onClick={() => create(def)}>
@@ -207,7 +208,8 @@ export function Effects() {
                   {autoApprove || !def.approved ? (
                     <ConfirmButton
                       className="danger"
-                      confirmLabel="Confirm delete (sheets keep its words)"
+                      confirmLabel="Delete?"
+                      confirmHint="Sheets keep its words"
                       ms={3000}
                       onConfirm={async () => {
                         await deleteDoc(doc(db, "games", id, "effects", current)).catch((e) => setMessage(friendlyError(e)));

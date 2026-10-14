@@ -171,7 +171,7 @@ export function DeckTab({
           </div>
         )}
         {size > 0 && !decksLocked && (
-          <ConfirmButton className="link small" confirmLabel="Confirm: empty the whole deck" ms={3000} onConfirm={() => update((d) => void (d.deck = []))}>
+          <ConfirmButton className="link small" confirmLabel="Empty it?" confirmHint="Takes every Page out of the deck" ms={3000} onConfirm={() => update((d) => void (d.deck = []))}>
             Clear the deck
           </ConfirmButton>
         )}
