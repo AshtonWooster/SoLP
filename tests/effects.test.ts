@@ -5,7 +5,12 @@ import { test } from "node:test";
 import type { Character, Dice, DiceKind, Page } from "../shared/character.ts";
 import { applyAction, type Actor, type EngineContext, type Loadout } from "../shared/engine.ts";
 import {
+  ACTION_OPTIONS,
+  alphabetical,
+  AMOUNT_OPTIONS,
   blankEffect,
+  CHECK_OPTIONS,
+  DIE_WHEN_OPTIONS,
   cleanEffect,
   copyEffect,
   describeEffect,
@@ -15,6 +20,7 @@ import {
   PRESET_EFFECTS,
   slotPassive,
   slotProficiency,
+  WHEN_OPTIONS,
   type EffectDef,
   type Rule,
 } from "../shared/effects.ts";
@@ -388,4 +394,17 @@ test("the library cleans what it reads, so a broken entry can't crash a screen",
   assert.doesNotThrow(() => effectWarnings(lib.odd));
   assert.doesNotThrow(() => describeEffect(lib.odd, lib));
   assert.ok(lib["preset:burn"]);
+});
+
+test("effect builder menus list their options alphabetically, placeholders first", () => {
+  const labels = (o: { label: string }[]) => o.map((x) => x.label);
+  for (const list of [WHEN_OPTIONS, DIE_WHEN_OPTIONS, ACTION_OPTIONS, CHECK_OPTIONS, AMOUNT_OPTIONS]) {
+    const sorted = labels(alphabetical(list));
+    assert.deepEqual(sorted, [...sorted].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true })));
+    assert.equal(sorted.length, list.length);
+  }
+  assert.equal(alphabetical(WHEN_OPTIONS)[0].label, "At the end of my turn");
+  assert.deepEqual(labels(alphabetical([{ label: "Choose…" }, { label: "burn" }, { label: "Ash" }], 1)), ["Choose…", "Ash", "burn"]);
+  // The constants themselves keep their order (blank picks and saved effects read them).
+  assert.equal(WHEN_OPTIONS[0].value, "turnEnd");
 });
