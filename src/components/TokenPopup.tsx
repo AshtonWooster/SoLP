@@ -9,6 +9,7 @@ import type { TokenGear } from "../../shared/tokenPreview.ts";
 import type { Resources, TableAction, Token } from "../../shared/types.ts";
 import { effectText } from "./effects/EffectBuilder.tsx";
 import { useEffectLibrary } from "./effects/library.tsx";
+import { EffectsBar } from "./effects/StatusIcons.tsx";
 import { RESOURCES, ResourceIcon } from "./LorIcons.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { NumberField } from "./NumberField.tsx";
@@ -34,6 +35,8 @@ export interface GmControls {
 export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: TokenGear; gm?: GmControls; onClose: () => void }) {
   const [viewing, setViewing] = useState<Page | null>(null);
   const drag = useDrag();
+  const { id: gameId = "" } = useParams();
+  const library = useEffectLibrary(gameId);
   useEffect(() => {
     // Escape closes the popup, unless a Page opened from it is on top.
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector(".overlay") && onClose();
@@ -80,6 +83,7 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
 
       {/* Only this part scrolls, so the header and its close button stay in view. */}
       <div className="tp-body">
+        {(gm || shown("effects")) && <EffectsBar className="tp-effects" effects={token.effects ?? []} library={library} size={34} />}
         <div className="tp-resources">
           {RESOURCES.map(({ key, max, label }) => (
             <div className={"tp-res" + (gm ? " editable" : "")} key={key} title={label}>
@@ -182,21 +186,7 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
           </section>
         )}
 
-        {gm ? (
-          <EffectsEditor token={token} act={gm.act} />
-        ) : (
-          shown("effects") &&
-          (token.effects ?? []).length > 0 && (
-            <div className="row wrap">
-              {token.effects!.map((e) => (
-                <span key={e.id} className="chip static" title={e.description}>
-                  {e.name || "Effect"} {e.count}
-                  {e.pending ? ` (+${e.pending} next round)` : ""}
-                </span>
-              ))}
-            </div>
-          )
-        )}
+        {gm && <EffectsEditor token={token} act={gm.act} />}
 
         {gm && token.side !== "player" && <SecretsEditor token={token} act={gm.act} />}
         {gm && <GmFooter token={token} gm={gm} />}
@@ -288,7 +278,7 @@ function EffectsEditor({ token, act }: { token: Token; act: (action: TableAction
   const statuses = Object.entries(library).filter(([, d]) => d.kind === "status" && isLive(d));
   return (
     <details className="enemy-pages effects-editor">
-      <summary>Effects ({effects.length})</summary>
+      <summary>Edit effects ({effects.length})</summary>
       {effects.map((e, i) =>
         e.defId ? (
           <div className="effect-edit automated" key={e.id}>

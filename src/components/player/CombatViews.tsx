@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { Page } from "../../../shared/character.ts";
 import { withheld } from "../../../shared/secrets.ts";
-import type { Effect, SlottedPage, TableState, Token } from "../../../shared/types.ts";
+import type { EffectDef } from "../../../shared/effects.ts";
+import type { SlottedPage, TableState, Token } from "../../../shared/types.ts";
+import { EffectsBar } from "../effects/StatusIcons.tsx";
 import { Overlay } from "./Overlay.tsx";
 import { PageCard } from "./PageCard.tsx";
 
@@ -26,11 +28,13 @@ function responseTo(table: TableState, slot: SlottedPage, targetId: string): Slo
 export function CycleCharacters({
   table,
   meId,
+  library,
   onClose,
   onOpenPage,
 }: {
   table: TableState;
   meId?: string;
+  library: Record<string, EffectDef>;
   onClose: () => void;
   onOpenPage: (p: Page) => void;
 }) {
@@ -86,7 +90,7 @@ export function CycleCharacters({
                       </span>
                     ))}
                   </div>
-                  {(who.effects ?? []).length > 0 && <p className="muted small">Effects: {who.effects!.map((e) => `${e.name} ${e.count}`).join(", ")}</p>}
+                  <EffectsBar key={who.id} className="cycle-effects" effects={who.effects ?? []} library={library} size={40} />
                 </div>
               </div>
               {!c && <p className="muted">Not in combat.</p>}
@@ -132,47 +136,6 @@ export function CycleCharacters({
           )}
         </>
       )}
-    </Overlay>
-  );
-}
-
-/** Every Effect on the character: count, icon, name, description and duration. */
-export function EffectsView({ effects, onClose }: { effects: Effect[]; onClose: () => void }) {
-  return (
-    <Overlay title="Effects" onClose={onClose}>
-      <table className="nd-table effects-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th />
-            <th>Name</th>
-            <th>Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          {effects.map((e) => (
-            <tr key={e.id}>
-              <td className="effect-count">{e.count}</td>
-              <td>
-                <span className="effect-icon">{(e.name || "?").charAt(0).toUpperCase()}</span>
-              </td>
-              <td>
-                <strong>{e.name || "Effect"}</strong>
-                {e.duration && <div className="muted small">{e.duration}</div>}
-                {e.pending ? <div className="muted small">+{e.pending} next round</div> : null}
-              </td>
-              <td className="pre">{e.description}</td>
-            </tr>
-          ))}
-          {effects.length === 0 && (
-            <tr>
-              <td colSpan={4} className="muted">
-                No effects right now.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
     </Overlay>
   );
 }

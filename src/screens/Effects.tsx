@@ -11,6 +11,8 @@ import { ConfirmButton } from "../components/ConfirmButton.tsx";
 import { StatusVfxPicker } from "../components/vfx/StatusVfxPicker.tsx";
 import { useVfxLibrary } from "../components/vfx/useVfx.ts";
 import { StableLabel } from "../components/StableLabel.tsx";
+import { ImageUpload } from "../components/ImageUpload.tsx";
+import { LibraryStatusIcon } from "../components/effects/StatusIcons.tsx";
 
 const SAVE_DELAY_MS = 500;
 
@@ -33,6 +35,7 @@ function DefEditor({
   autoApprove: boolean;
   footer?: React.ReactNode;
 }) {
+  const { user } = useAuth();
   const [d, setD] = useState(def);
   const [status, setStatus] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -64,6 +67,20 @@ function DefEditor({
   return (
     <div className="item-editor">
       <span className={"save-state " + (status === "Saved" ? "saved" : "")}>{status}</span>
+      {d.kind === "status" && (
+        // The picture on its icon at the table; without one it gets a glyph or its initials.
+        <div className="effect-icon-field">
+          <span className="muted small">Icon</span>
+          <LibraryStatusIcon id={id} def={d} size={44} />
+          <ImageUpload
+            folder={isGm ? `games/${gameId}/assets/effect-icons` : `games/${gameId}/users/${user?.id}/effect-icons`}
+            kind="statusIcon"
+            label="Icon"
+            value={d.icon}
+            onChange={(icon) => update(icon ? { ...d, icon } : (({ icon: _i, ...rest }) => rest)(d))}
+          />
+        </div>
+      )}
       <EffectBuilder def={d} library={{ ...library, [id]: d }} onChange={update} footer={footer} />
     </div>
   );
@@ -265,7 +282,10 @@ export function Effects() {
                 <li key={key}>
                   <button type="button" className={"effect-row" + (key === current ? " selected" : "")} onClick={() => setSelected(key)}>
                     <span className="row-between">
-                      <strong>{d.name || "Unnamed"}</strong>
+                      <span className="row">
+                        {d.kind === "status" && <LibraryStatusIcon id={key} def={d} size={26} />}
+                        <strong>{d.name || "Unnamed"}</strong>
+                      </span>
                       <span className="row">
                         {isPreset(key) && <span className="chip static">Built in</span>}
                         {hasVfx.has(key) && <span className="chip static">VFX</span>}

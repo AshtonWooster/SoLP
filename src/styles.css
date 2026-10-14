@@ -638,8 +638,6 @@ button.pv-card:hover { filter: brightness(1.12); }
 .sd-scroll { max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
 .sd-target { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 6px; }
 .sd-who { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
-.effects-table .effect-count { font-weight: 800; font-size: 1.1rem; text-align: center; }
-.effect-icon { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #3a2a22; font-weight: 800; }
 
 .dice-list, .target-list { display: flex; flex-direction: column; gap: 6px; margin: 0; }
 .die-pick, .target-pick { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; }
@@ -1612,3 +1610,25 @@ select.piece.add { color: #6fb4ff; }
 .vfx-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .vfx-picker { align-items: center; gap: 6px; width: 100%; }
 .vfx-picker .chip-x { border: none; background: none; padding: 0 0 0 6px; color: var(--muted); cursor: pointer; }
+
+/* ---- Status effect icons (src/components/effects/StatusIcons.tsx) ---- */
+.status-icon { position: relative; display: inline-block; flex: none; line-height: 1; }
+.status-icon-face { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 22%; overflow: hidden; color: #fff; border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.status-icon-face img { width: 100%; height: 100%; object-fit: cover; }
+.status-icon-initials { font-weight: 800; letter-spacing: -0.02em; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4); }
+.status-icon-count { position: absolute; right: -5px; bottom: -5px; min-width: 1.45em; height: 1.45em; padding: 0 0.25em; border-radius: 999px; background: #120e0a; color: #fff; border: 1px solid var(--accent); font-size: max(10px, 0.62em); font-weight: 800; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+.status-icon-pending { position: absolute; right: -5px; top: -5px; padding: 0 0.25em; border-radius: 999px; background: var(--panel); color: var(--accent); border: 1px solid var(--line); font-size: max(9px, 0.5em); font-weight: 700; }
+.effects-bar { position: relative; min-width: 0; }
+.effects-bar-icons { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 5px 5px 5px 0; }
+.status-icon-btn { padding: 0; border: 0; background: none; border-radius: 22%; cursor: pointer; line-height: 0; }
+.status-icon-btn:hover .status-icon-face, .status-icon-btn.open .status-icon-face { outline: 2px solid var(--accent); outline-offset: 1px; }
+.status-details { display: flex; gap: 10px; align-items: flex-start; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); text-align: left; }
+.status-details p { margin: 4px 0 0; }
+.effects-bar.floating .status-details { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+/* The player's own bar: under the top row, icons big enough to tap. */
+.player-effects { border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; min-height: 58px; display: flex; flex-direction: column; justify-content: center; }
+.player-effects .effects-bar-icons { min-height: 48px; }
+.tp-effects { margin: 2px 0 4px; }
+.cycle-effects { margin-top: 6px; }
+.effect-icon-field { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.effect-icon-field .image-upload.square .image-preview { width: 64px; height: 64px; }

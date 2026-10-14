@@ -12,7 +12,9 @@ import { ConnectionBadge } from "../components/Status.tsx";
 import { Waiting } from "../components/Waiting.tsx";
 import { useClashPlayback } from "../components/ClashFx.tsx";
 import { SpeedRollCard, useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
-import { CycleCharacters, EffectsView, Portrait } from "../components/player/CombatViews.tsx";
+import { CycleCharacters, Portrait } from "../components/player/CombatViews.tsx";
+import { EffectsBar } from "../components/effects/StatusIcons.tsx";
+import { useEffectLibrary } from "../components/effects/library.tsx";
 import { InfoPanel, PANELS, type PanelKey } from "../components/player/InfoPanels.tsx";
 import { AnyStatIcon } from "../components/LorIcons.tsx";
 import { Overlay } from "../components/player/Overlay.tsx";
@@ -43,7 +45,7 @@ const INFO_BUTTONS: { key: PanelKey; label: string }[] = [
   { key: "P", label: "Proficiencies" },
 ];
 
-type OverlayKey = "cycle" | "effects" | "info" | "story" | "targets";
+type OverlayKey = "cycle" | "info" | "story" | "targets";
 
 /** A single-target Page about to be slotted, waiting on Clash or Unopposed (and which Speed Die). */
 interface PendingSlot {
@@ -86,6 +88,7 @@ export function Play() {
   const combat = table?.combat;
   const mine = table ? Object.values(table.tokens).find((t) => t.ownerId === user?.id) : undefined;
   const library = useCollection<ItemTemplate>(`games/${id}/items`);
+  const effectLibrary = useEffectLibrary(id);
   const c: Character | undefined = characterDoc.data && user ? linkInventory({ ...blankCharacter(user.id, ""), ...characterDoc.data }, library) : undefined;
   const deck = combat && mine ? combat.decks?.[mine.id] : undefined;
   const active = table ? activeToken(table) : undefined;
@@ -273,11 +276,10 @@ export function Play() {
           <button type="button" onClick={() => setOverlay("cycle")}>
             Cycle characters
           </button>
-          <button type="button" onClick={() => setOverlay("effects")}>
-            Effects{mine?.effects?.length ? ` (${mine.effects.length})` : ""}
-          </button>
         </div>
       </section>
+      {/* Effects on you: tap an icon for what it does. Always one row tall, so nothing under it moves. */}
+      <EffectsBar className="player-effects" effects={mine?.effects ?? []} library={effectLibrary} size={44} floating empty="No effects on you." />
 
       {/* ---- Turn state ---- */}
       <div className={"turn-strip" + (myTurn ? " mine" : "")}>
@@ -386,8 +388,7 @@ export function Play() {
       </section>
 
       {/* ---- Popups ---- */}
-      {overlay === "cycle" && <CycleCharacters table={table} meId={mine?.id} onClose={() => setOverlay(null)} onOpenPage={(p) => setViewing({ page: p })} />}
-      {overlay === "effects" && <EffectsView effects={mine?.effects ?? []} onClose={() => setOverlay(null)} />}
+      {overlay === "cycle" && <CycleCharacters table={table} meId={mine?.id} library={effectLibrary} onClose={() => setOverlay(null)} onOpenPage={(p) => setViewing({ page: p })} />}
       {overlay === "info" && (
         <Overlay title="Character information" onClose={() => setOverlay(null)}>
           {c ? (
