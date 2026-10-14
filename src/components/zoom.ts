@@ -55,3 +55,12 @@ export const isHome = (v: View) => v.scale === 1 && v.x === 0 && v.y === 0;
 
 /** The CSS transform that draws the map at this view. */
 export const viewTransform = (v: View) => `translate(${v.x * 100}%, ${v.y * 100}%) scale(${v.scale})`;
+
+/**
+ * The style for the box the map is drawn in at this view. It also hands the zoom to everything on
+ * the map as `--map-zoom`, so things that should keep their on-screen size however far in you are
+ * (the dice animations, token borders and names, pins) can divide by it.
+ */
+export function stageStyle(v: View): Record<string, string> {
+  return isHome(v) ? { "--map-zoom": "1" } : { "--map-zoom": String(v.scale), transform: viewTransform(v) };
+}

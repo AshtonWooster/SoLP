@@ -9,7 +9,6 @@ import {
   addCombatant,
   aim,
   aimTarget,
-  dash,
   dropCombatant,
   endTurn,
   finishCombat,
@@ -473,9 +472,6 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       endTurn(table);
       return true;
     }
-    case "dash":
-      dash(table, actor);
-      return true;
     case "aim":
       aim(table, actor, action.source, action.cardId, action.die === undefined ? undefined : clamp(action.die, 0, 20));
       return true;

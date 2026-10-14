@@ -4,6 +4,7 @@ import { ANY_STAT, finishedPopups, POPUP_STATS, POPUP_TEXT_MAX, POPUP_TITLE_MAX,
 import type { PlayerListEntry } from "../../shared/players.ts";
 import { dealSummary, MAX_AHN, MAX_DEAL_COUNT, OUTCOME_LABELS } from "../../shared/rewards.ts";
 import type { GmPopup, PopupDeal, TableAction, TableState } from "../../shared/types.ts";
+import { useCollection } from "../api.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { NumberInput } from "./Fields.tsx";
 import { ImageUpload } from "./ImageUpload.tsx";
@@ -29,14 +30,6 @@ export interface PopupDraft {
 }
 
 export const BLANK_DRAFT: PopupDraft = { title: "", text: "", stat: "", everyone: true, picked: [], dealKind: "", itemId: "", count: 1, ahn: 0, when: "now", need: 10, price: 10 };
-
-/** What the Popups menu needs when the Game setting "Rewards and costs in popups" is on. */
-export interface RewardsData {
-  /** The item library (undefined while loading). */
-  library: Record<string, ItemTemplate> | undefined;
-  /** Players' characters, by user id, for their Ahn. */
-  characters: Record<string, Character> | undefined;
-}
 
 function draftDeal(d: PopupDraft): PopupDeal | undefined {
   if (!d.dealKind) return undefined;
@@ -64,7 +57,7 @@ export function GmPopups({
   act,
   draft,
   setDraft,
-  rewards,
+  characters,
 }: {
   gameId: string;
   table: TableState;
@@ -73,13 +66,15 @@ export function GmPopups({
   /** Kept by the GM screen, so closing the menu doesn't lose a half-written popup. */
   draft: PopupDraft;
   setDraft: (d: PopupDraft) => void;
-  /** Set when the GM turned on "Rewards and costs in popups" in Game settings. */
-  rewards?: RewardsData;
+  /** Players' characters, by user id, for their Ahn. */
+  characters: Record<string, Character> | undefined;
 }) {
+  // The item library, for rewards and costs: read only while this menu is open.
+  const library = useCollection<ItemTemplate>(`games/${gameId}/items`);
   const { title, text, image, stat, everyone, picked } = draft;
   const set = (patch: Partial<PopupDraft>) => (setDraft({ ...draft, ...patch }), setSent(false));
   const [sent, setSent] = useState(false);
-  const deal = rewards ? draftDeal(draft) : undefined;
+  const deal = draftDeal(draft);
   const dealProblem = !deal
     ? ""
     : !deal.itemId && !deal.ahn
@@ -106,7 +101,7 @@ export function GmPopups({
   const uids = players.map((p) => p.uid);
   return (
     <div className="gm-popups">
-      <p className="muted small">Shows on players' phones until they close it, then takes itself down. Use any mix of text, an image and a Story Roll.</p>
+      <p className="muted small">Shows on players' phones until they close it, then takes itself down. Use any mix of text, an image, a Story Roll and a reward or cost.</p>
       <label className="field">
         <span>Title</span>
         <input value={title} maxLength={POPUP_TITLE_MAX} placeholder="Optional" onChange={(e) => set({ title: e.target.value })} />
@@ -128,7 +123,7 @@ export function GmPopups({
           ))}
         </select>
       </label>
-      {rewards && <DealFields draft={draft} set={set} library={rewards.library} problem={dealProblem} />}
+      <DealFields draft={draft} set={set} library={library} problem={dealProblem} />
       <fieldset className="popup-to">
         <legend>Send to</legend>
         <label>
@@ -194,7 +189,7 @@ export function GmPopups({
         </details>
       )}
 
-      {rewards && <PartyAhn players={players} characters={rewards.characters} act={act} />}
+      <PartyAhn players={players} characters={characters} act={act} />
     </div>
   );
 }

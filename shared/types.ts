@@ -85,12 +85,6 @@ export interface GameSettings {
    */
   statusVfx?: boolean;
   /**
-   * The GM's popups can hand out or take away items and Ahn: right away, on a Story Roll, or for a
-   * price in Ahn the player pays (shared/rewards.ts). The Popups menu also lists each player's Ahn
-   * to edit. Off unless the GM turns it on: then popups are text, images and Story Rolls only.
-   */
-  popupRewards?: boolean;
-  /**
    * How Rank and Stats set max Health, Stagger Resist, Sanity and Light (shared/formulas.ts). New
    * games start with the standard formulas; a game from before formulas has none saved and keeps
    * its old numbers until the GM changes them.
@@ -113,10 +107,6 @@ export function playersCanCreateEffects(game: GameDoc | undefined): boolean {
 
 export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {
   return game?.settings?.clearEffectsAfterCombat === true;
-}
-
-export function popupRewardsOn(game: GameDoc | undefined): boolean {
-  return game?.settings?.popupRewards === true;
 }
 
 export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: string; fields: string[] }[] = [
@@ -676,8 +666,6 @@ export type TableAction =
   | { type: "endTurn" }
   /** Move the active character to a tile, spending Movement Points. Used from the board and phones. */
   | { type: "turnMove"; x: number; y: number }
-  /** Convert Light into Movement Points. */
-  | { type: "dash" }
   /** Roll a Story Roll with one of the character's Stats; the result goes in the log. */
   | { type: "storyRoll"; tokenId: string; stat: string }
   // GM popups (shared/popups.ts).
