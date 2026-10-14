@@ -23,9 +23,7 @@ import {
 import { newId, rollDie } from "./id.ts";
 import {
   DASH_LIGHT_COST,
-  EMOTION_POINTS,
   enemyDeck,
-  MAX_EMOTION,
   DASH_MOVEMENT,
   isMassAttack,
   isOffensive,
@@ -85,8 +83,6 @@ export interface EngineContext {
   effectDef?(id: string): EffectDef | undefined;
   /** The Game setting "Effects wear off when combat ends" (shared/types.ts). */
   clearEffectsAfterCombat?(): boolean;
-  /** The Game setting "Emotion Levels" (shared/types.ts). */
-  emotionLevels?(): boolean;
   /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
   sheets?: SheetAccess;
 }
@@ -341,35 +337,6 @@ function recoverStagger(table: TableState, t: Token, amount: number) {
   if (wasStaggered && !t.status?.staggered) trigger(table, "recovered", t);
 }
 
-// ---- Emotion Levels (a Game setting) ----
-
-const emotionOn = () => !!engineCtx?.emotionLevels?.();
-
-/** Emotion Points: each die a character wins, loses, lands or is hit by earns them 1. */
-function emotionPoint(table: TableState, ...tokens: Token[]) {
-  if (!emotionOn() || !table.combat) return;
-  for (const t of tokens) addEmotion(t, 1);
-}
-
-function addEmotion(t: Token, n: number) {
-  if (!emotionOn() || n <= 0) return;
-  const e = (t.emotion ??= { level: 0, points: 0 });
-  if (e.level < MAX_EMOTION) e.points += n;
-}
-
-/** End of the round: anyone with enough Emotion Points goes up a level ("When my Emotion Level rises"). */
-function emotionLevelUp(table: TableState, t: Token) {
-  const e = t.emotion;
-  if (!emotionOn() || !e) return;
-  while (e.level < MAX_EMOTION && e.points >= EMOTION_POINTS[e.level]) {
-    e.points -= EMOTION_POINTS[e.level];
-    e.level += 1;
-    log(table, `  ${t.name} reaches Emotion Level ${e.level}.`);
-    trigger(table, "emotionUp", t, { event: { amount: e.level } });
-  }
-  if (e.level >= MAX_EMOTION) e.points = 0;
-}
-
 /** Clash Win heals 1 Sanity, Clash Lose costs 1. Sanity runs from -max to +max; the minimum means Panic. */
 function changeSanity(table: TableState, t: Token, delta: number) {
   const r = t.resources;
@@ -483,12 +450,6 @@ function effectOps(table: TableState): EffectOps<Token> {
     resource: (t, key) => t.resources[key],
     hand: (t) => table.combat?.decks[t.id]?.hand.length ?? 0,
     used: (t) => table.combat?.used?.[t.id] ?? 0,
-    emotion: (t) => (emotionOn() ? (t.emotion?.level ?? 0) : 0),
-    addEmotion: (t, n) => {
-      if (!emotionOn() || n <= 0) return;
-      addEmotion(t, n);
-      log(table, `  ${t.name} gains ${n} Emotion ${n === 1 ? "Point" : "Points"}.`);
-    },
     discard: (t, n) => {
       const deck = table.combat?.decks[t.id];
       if (!deck) return 0;
@@ -642,7 +603,6 @@ function clashDice(
   const aWins = fa > fb;
   const [w, l, fw, fl] = aWins ? [a, b, fa, fb] : [b, a, fb, fa];
   log(table, ` ${desc}: ${w.owner.name} wins.`);
-  emotionPoint(table, w.owner, l.owner);
   const wPlay: PagePlay = { ...w.play, oneSided: false };
   changeSanity(table, w.owner, 1);
   changeSanity(table, l.owner, -1);
@@ -735,7 +695,6 @@ function oneSided(table: TableState, attacker: Token, target: Token, page: Page,
     }
     if (isOffensive(die.kind)) {
       log(table, ` ${attacker.name}'s ${diceText(die)} (${fp}) hits ${target.name}.`);
-      emotionPoint(table, attacker, target);
       dealDamage(table, target, fp, die.kind, attacker, die, { ...play, oneSided: true });
       rounds.push({ a: fxDie(die, fp), result: "hit", after: fxState(attacker, target) });
     } else storeCounter(c, attacker, die, page.id);
@@ -800,7 +759,6 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
       if (isOffensive(d.die.kind)) {
         const fp = rollPower(table, d.die, me, them, d.play);
         log(table, ` ${me.name}'s ${diceText(d.die)} (${fp}) hits ${them.name} unopposed.`);
-        emotionPoint(table, me, them);
         dealDamage(table, them, fp, d.die.kind, me, d.die, { ...d.play, oneSided: true });
         rounds.push({ [me === ta ? "a" : "b"]: fxDie(d.die, fp), result: "hit", after: fxState(ta, tb) });
       } else storeCounter(c, me, d.die, page.id);
@@ -992,7 +950,6 @@ function endRound(table: TableState) {
   const round = table.combat?.round;
   for (const t of fighters(table)) trigger(table, "roundEnd", t);
   for (const t of fighters(table)) decayAtEnd(ops, t, "round");
-  for (const t of fighters(table)) emotionLevelUp(table, t);
   // Resistances changed "until the end of the round" go back.
   for (const t of Object.values(table.tokens)) {
     if (!t.resistMods) continue;
@@ -1036,13 +993,11 @@ function endstep(table: TableState, token: Token) {
 // ---- Starting, joining and leaving combat ----
 
 export function startCombat(table: TableState, ids: string[], ctx?: EngineContext) {
-  // "Once a combat" rules can fire again; Emotion starts from 0.
+  // "Once a combat" rules can fire again.
   for (const id of ids) {
     const t = table.tokens[id];
     delete t.effectUses;
     delete t.resistMods;
-    if (ctx?.emotionLevels?.()) t.emotion = { level: 0, points: 0 };
-    else delete t.emotion;
   }
   const c: CombatState = { round: 1, order: [], turn: 0, phase: "resolve", movementLeft: 0, pages: {}, decks: {}, slots: [], counters: {} };
   table.combat = c;
@@ -1068,7 +1023,6 @@ export function finishCombat(table: TableState, ctx?: EngineContext) {
   for (const t of tokens) {
     delete t.effectUses;
     delete t.resistMods;
-    delete t.emotion;
     if (!ctx?.clearEffectsAfterCombat?.() || !t.effects?.some((e) => e.defId)) continue;
     t.effects = t.effects.filter((e) => !e.defId);
     log(table, `  ${t.name}'s automated Effects wear off.`);

@@ -80,11 +80,6 @@ export interface GameSettings {
    */
   clearEffectsAfterCombat?: boolean;
   /**
-   * Characters build Emotion in combat (Library of Ruina's Emotion Levels, 0 to 5), which automated
-   * effects can check and react to. Off unless the GM turns it on: then nobody gains Emotion.
-   */
-  emotionLevels?: boolean;
-  /**
    * Status Effects play the VFX the GM built for them in the VFX editor (shared/vfx.ts) on the map.
    * Off unless the GM turns it on: then the map looks as it always did and loads no VFX.
    */
@@ -112,10 +107,6 @@ export function playersCanCreateEffects(game: GameDoc | undefined): boolean {
 
 export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {
   return game?.settings?.clearEffectsAfterCombat === true;
-}
-
-export function emotionLevelsOn(game: GameDoc | undefined): boolean {
-  return game?.settings?.emotionLevels === true;
 }
 
 export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: string; fields: string[] }[] = [
@@ -204,8 +195,6 @@ export interface Token {
   effectUses?: Record<string, number>;
   /** Resistances changed by automated effects for a while (cleared when combat ends). */
   resistMods?: ResistMod[];
-  /** Emotion Level and the Emotion Points toward the next one, while the Game setting is on. */
-  emotion?: { level: number; points: number };
   status?: TokenStatus;
   /** Only the GM sees it (map editor). Joining combat reveals it. */
   hidden?: boolean;

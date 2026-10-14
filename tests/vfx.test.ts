@@ -40,7 +40,7 @@ const vfx = (name: string, statuses: string[], extra: Partial<VfxDef> = {}): Vfx
 test("Status effect VFX is off by default, so existing games look the same", () => {
   assert.equal(statusVfxOn(undefined), false);
   assert.equal(statusVfxOn(game()), false);
-  assert.equal(statusVfxOn(game({ emotionLevels: true })), false);
+  assert.equal(statusVfxOn(game({ clearEffectsAfterCombat: true })), false);
   assert.equal(statusVfxOn(game({ statusVfx: false })), false);
   assert.equal(statusVfxOn(game({ statusVfx: true })), true);
 });

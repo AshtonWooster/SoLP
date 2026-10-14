@@ -70,3 +70,32 @@ export function effectLabel(effect: Pick<Effect, "name" | "count" | "pending">):
   const stacks = `${effect.count} ${effect.count === 1 ? "stack" : "stacks"}`;
   return [name, stacks, effect.pending ? `+${effect.pending} next round` : ""].filter(Boolean).join(", ");
 }
+
+export interface DetailsPlacement {
+  left: number;
+  width: number;
+  /** Set when the details open below the bar. */
+  top?: number;
+  /** Set when they open above it (distance from the viewport's bottom edge). */
+  bottom?: number;
+  maxHeight: number;
+}
+
+/**
+ * Where an effect's details float, in viewport pixels: under the bar (or over it, when there's
+ * more room above), at least `minWidth` wide, and kept inside the screen. They're drawn on top of
+ * the page, so opening them never moves anything and no scrolling box cuts them off.
+ */
+export function detailsPlacement(
+  bar: { left: number; top: number; bottom: number; width: number },
+  viewport: { width: number; height: number },
+  { gap = 4, margin = 8, minWidth = 260 } = {},
+): DetailsPlacement {
+  const width = Math.max(0, Math.min(Math.max(bar.width, minWidth), viewport.width - 2 * margin));
+  const left = Math.max(margin, Math.min(bar.left, viewport.width - margin - width));
+  const below = viewport.height - bar.bottom - gap - margin;
+  const above = bar.top - gap - margin;
+  return below >= 160 || below >= above
+    ? { left, width, top: bar.bottom + gap, maxHeight: Math.max(0, below) }
+    : { left, width, bottom: viewport.height - bar.top + gap, maxHeight: Math.max(0, above) };
+}
