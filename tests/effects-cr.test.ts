@@ -255,6 +255,23 @@ test("Indomitable: the first time I'm Staggered each combat, I recover all Stagg
   assert.ok(s.t("rat").status?.staggered || s.t("rat").status?.knockedOut, "only once a combat");
 });
 
+test("Recovering from Stagger refills Stagger Resist to full, even when the effect recovers only 1", () => {
+  const steady = def("Steady", "passive", [{ when: "staggered", checks: [], actions: [{ kind: "recoverStagger", target: me, amount: num(1) }] }]);
+  const survivor = def("Survivor", "passive", [{ when: "recovered", checks: [], actions: [{ kind: "give", target: me, amount: num(1), effectId: "preset:strength" }] }]);
+  const s = setup({ page: page(25), rat: { passiveEffects: ["steady", "survivor"] }, library: { steady, survivor } });
+  s.hit();
+  assert.ok(!s.t("rat").status?.staggered);
+  assert.equal(s.t("rat").resources.stagger, 20);
+  assert.equal(s.stacks("rat", "preset:strength"), 1, "\"When I recover from Stagger\" fires once");
+  assert.ok(s.table.log.some((l) => l.includes("rat recovers from Stagger")));
+
+  // Not Staggered: recovering only adds the amount.
+  const mend = def("Mend", "passive", [{ when: "hit", checks: [], actions: [{ kind: "recoverStagger", target: me, amount: num(1) }] }]);
+  const s2 = setup({ page: page(5), roland: { resources: { hp: 30, maxHp: 30, stagger: 10, maxStagger: 20, light: 3, maxLight: 5, sanity: 0, maxSanity: 15 } }, library: { mend }, passives: ["mend"] });
+  s2.hit();
+  assert.equal(s2.t("roland").resources.stagger, 11);
+});
+
 test("Bloodthirst: when I Knock Someone Out, Strength next round; the first round gives Power", () => {
   const bloodthirst = def("Bloodthirst", "passive", [
     { when: "knockOut", checks: [], actions: [{ kind: "give", target: me, amount: num(2), effectId: "preset:strength", later: true }] },
