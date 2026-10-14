@@ -24,6 +24,7 @@ import {
   type PlayerEditKey,
   playerCanEdit,
   playersCanCreateEffects,
+  proficienciesNeedApproval,
   playersCanCreateItems,
   storyRollsOnPhone,
 } from "../../shared/types.ts";
@@ -555,6 +556,18 @@ export function Settings() {
             onChange={async (on) => {
               try {
                 await updateDoc(ref, { "settings.playersCreateEffects": on });
+              } catch (err) {
+                setMessage({ at: "effects", text: friendlyError(err) });
+              }
+            }}
+          />
+          <Toggle
+            label="Approve changes to the Proficiency tree"
+            hint="Players add Proficiencies to the shared tree and change the ones they made. On: each new or changed one waits for your approval in the effect library, and nobody can pick it until then. Off: they join the tree right away."
+            on={proficienciesNeedApproval(g)}
+            onChange={async (on) => {
+              try {
+                await updateDoc(ref, { "settings.approveProficiencies": on });
               } catch (err) {
                 setMessage({ at: "effects", text: friendlyError(err) });
               }
