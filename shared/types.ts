@@ -81,6 +81,12 @@ export interface GameSettings {
    */
   approveProficiencies?: boolean;
   /**
+   * A player's Story Roll also plays its dice animation on their own phone, and a GM popup's roll
+   * closes the popup (the animation shows the result). Off unless the GM turns it on: then the
+   * animation plays only on the board, and the phone shows the result as text as before.
+   */
+  storyRollsOnPhone?: boolean;
+  /**
    * When the GM ends combat, every automated status Effect (Burn, Poise…) comes off the characters
    * who fought. Off unless the GM turns it on: then Effects stay until they wear off or the GM removes them.
    */
@@ -90,12 +96,6 @@ export interface GameSettings {
    * Off unless the GM turns it on: then the map looks as it always did and loads no VFX.
    */
   statusVfx?: boolean;
-  /**
-   * The GM's popups can hand out or take away items and Ahn: right away, on a Story Roll, or for a
-   * price in Ahn the player pays (shared/rewards.ts). The Popups menu also lists each player's Ahn
-   * to edit. Off unless the GM turns it on: then popups are text, images and Story Rolls only.
-   */
-  popupRewards?: boolean;
   /**
    * How Rank and Stats set max Health, Stagger Resist, Sanity and Light (shared/formulas.ts). New
    * games start with the standard formulas; a game from before formulas has none saved and keeps
@@ -121,12 +121,12 @@ export function proficienciesNeedApproval(game: GameDoc | undefined): boolean {
   return game?.settings?.approveProficiencies === true;
 }
 
-export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {
-  return game?.settings?.clearEffectsAfterCombat === true;
+export function storyRollsOnPhone(game: GameDoc | undefined): boolean {
+  return game?.settings?.storyRollsOnPhone === true;
 }
 
-export function popupRewardsOn(game: GameDoc | undefined): boolean {
-  return game?.settings?.popupRewards === true;
+export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {
+  return game?.settings?.clearEffectsAfterCombat === true;
 }
 
 export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: string; fields: string[] }[] = [
@@ -422,6 +422,20 @@ export interface FxRound {
   result: "a" | "b" | "draw" | "hit";
   /** Both characters' resources and statuses right after this step, so screens can apply the damage when the animation gets here. */
   after?: FxState;
+  /** A Mass Summation check: all of the attacker's dice, rolled together and summed (`a` is then left out). */
+  aDice?: FxDie[];
+  /** A Mass Attack: each target's side of this step at once, by token id. Targets left out sit this step out. */
+  vs?: Record<string, FxMassSide>;
+}
+
+/** One Mass Attack target's side of a step: what they answered with, and how it went. */
+export interface FxMassSide {
+  /** The die they answered with: a die of their Page, or a Counter Die. */
+  die?: FxDie;
+  /** A Summation check: every die of the Page they defend with, rolled together and summed. */
+  dice?: FxDie[];
+  /** "a": the Mass Attack won and lands, "b": the target held, "draw", or "hit": it landed unopposed. */
+  result: FxRound["result"];
 }
 
 /** Resources and statuses of the characters in a resolution, by token id. */
@@ -438,6 +452,10 @@ export interface ClashFx {
   rounds: FxRound[];
   /** Both characters as they were before the first die. */
   before?: FxState;
+  /** A Mass Attack: every target, which all play at once with `a`. `b` is the first of them. */
+  targets?: string[];
+  /** A Mass Attack: the Page each target defends with, by token id. */
+  pages?: Record<string, string>;
 }
 
 /** Everything on the table that every member may see. GM-only data lives under games/{id}/gm. */
@@ -519,8 +537,20 @@ export interface TableState {
   tokens: Record<string, Token>;
   log: string[];
   combat?: CombatState;
-  /** Popups the GM sent to players: text, an image, a Story Roll prompt (shared/popups.ts). Newest last. */
+  /** Popups the GM sent to players: text, an image, a Story Roll prompt (shared/popups.ts). Newest last. Finished ones stay for the GM's record. */
   popups?: GmPopup[];
+  /** The latest Story Roll, for screens to play its dice (shared/combat.ts). */
+  storyRoll?: StoryRoll;
+}
+
+/** A Story Roll: 1d20 (the roll) + a Stat (the bonus). Players' copy leaves out a hidden bonus. */
+export interface StoryRoll {
+  id: string;
+  tokenId: string;
+  /** The Stat rolled, as "insight", "justice"… */
+  stat: string;
+  roll: number;
+  bonus?: number;
 }
 
 /** A popup the GM sends to every player or to some of them. Any mix of text, an image and a Story Roll prompt. */
@@ -543,6 +573,12 @@ export interface GmPopup {
   deal?: PopupDeal;
   /** How the deal turned out for each player, by user id. */
   outcomes?: Record<string, DealOutcome>;
+  /**
+   * When it came down: every player it's for closed it, or the GM took it down (`takenDown`). It's
+   * off every phone then; the GM's screen keeps it, with its results, until they clear it.
+   */
+  doneAt?: number;
+  takenDown?: boolean;
 }
 
 /**
@@ -680,15 +716,15 @@ export type TableAction =
   | { type: "endTurn" }
   /** Move the active character to a tile, spending Movement Points. Used from the board and phones. */
   | { type: "turnMove"; x: number; y: number }
-  /** Convert Light into Movement Points. */
-  | { type: "dash" }
   /** Roll a Story Roll with one of the character's Stats; the result goes in the log. */
   | { type: "storyRoll"; tokenId: string; stat: string }
   // GM popups (shared/popups.ts).
   /** GM: show players a popup. `to` missing or empty: every player. */
   | { type: "sendPopup"; id?: string; title?: string; text?: string; image?: string; roll?: { stat: string }; to?: string[]; deal?: PopupDeal }
-  /** GM: take a popup down from every screen. */
+  /** GM: take a popup down from every screen. Its results stay in the GM's finished list. */
   | { type: "removePopup"; popupId: string }
+  /** GM: clear a finished popup from their list, or every finished one when `popupId` is missing. */
+  | { type: "clearPopups"; popupId?: string }
   /** A player closes a popup sent to them. */
   | { type: "closePopup"; popupId: string }
   /** A player makes the Story Roll a popup asks for. `stat`: their pick, when the popup lets them choose. */

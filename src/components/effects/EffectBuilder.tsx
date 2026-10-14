@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   ACTION_OPTIONS,
+  alphabetical,
   AMOUNT_OPTIONS,
   blankAction,
   blankActionFor,
@@ -40,7 +41,7 @@ import { wouldLoop } from "../../../shared/proficiencies.ts";
 import { PageCardEditor } from "../player/LorCard.tsx";
 import { NumberInput } from "../Fields.tsx";
 
-const STATS = [...PRIMARY_STATS, ...SECONDARY_STATS].map((s) => ({ value: s.key, label: s.label }));
+const STATS = alphabetical([...PRIMARY_STATS, ...SECONDARY_STATS].map((s) => ({ value: s.key, label: s.label })));
 const STAT_NAMES = Object.fromEntries(STATS.map((s) => [s.value, s.label]));
 
 /** The effect's card text, written from its pieces. */
@@ -77,9 +78,11 @@ const WHO_IS: { value: Whose; label: string }[] = [
 
 /** The library's status Effects, for the menus that name one. */
 const statusOptions = (library: Record<string, EffectDef>) =>
-  Object.entries(library)
-    .filter(([, d]) => d.kind === "status")
-    .map(([id, d]) => ({ value: id, label: d.name || "Unnamed" }));
+  alphabetical(
+    Object.entries(library)
+      .filter(([, d]) => d.kind === "status")
+      .map(([id, d]) => ({ value: id, label: d.name || "Unnamed" })),
+  );
 
 /** A small number box inside a sentence. */
 function Num({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (n: number) => void }) {
@@ -141,7 +144,7 @@ function AmountPicker({ amount, onChange, label, library }: { amount: Amount; on
         </span>
       )}
       {amount.kind === "speed" && <Select label={`${label} whose Speed`} value={amount.whose ?? "me"} options={WHOSE_OPTIONS} onChange={(whose) => onChange({ ...amount, whose })} />}
-      <Select label={label} value={amount.kind} options={AMOUNT_OPTIONS} onChange={set} />
+      <Select label={label} value={amount.kind} options={alphabetical(AMOUNT_OPTIONS)} onChange={set} />
       {amount.kind === "roll" && <Select label={`${label} die`} value={amount.sides ?? 6} options={dice} onChange={(sides) => onChange({ ...amount, sides })} />}
       {amount.kind === "stat" && <Select label={`${label} Stat`} value={amount.stat ?? "justice"} options={STATS} onChange={(stat) => onChange({ ...amount, stat })} />}
       {amount.kind === "effectStacks" && (
@@ -158,11 +161,14 @@ function AmountPicker({ amount, onChange, label, library }: { amount: Amount; on
           <Select
             label={`${label} stacks of`}
             value={amount.effectId ? `${amount.whose ?? "me"}:${amount.effectId}` : ""}
-            options={[
-              { value: "", label: "stack of this" },
-              ...statuses.map((o) => ({ value: `me:${o.value}`, label: `${o.label} on me` })),
-              ...statuses.map((o) => ({ value: `them:${o.value}`, label: `${o.label} on them` })),
-            ]}
+            options={alphabetical(
+              [
+                { value: "", label: "stack of this" },
+                ...statuses.map((o) => ({ value: `me:${o.value}`, label: `${o.label} on me` })),
+                ...statuses.map((o) => ({ value: `them:${o.value}`, label: `${o.label} on them` })),
+              ],
+              1,
+            )}
             onChange={(v) => {
               const { effectId: _e, whose: _w, ...rest } = amount;
               if (!v) return onChange(rest);
@@ -342,7 +348,7 @@ function CheckPiece({ check, library, onChange, onRemove }: { check: Check; libr
           <Select
             label="Page check"
             value={check.pageIs ?? "melee"}
-            options={PAGE_IS_OPTIONS}
+            options={alphabetical(PAGE_IS_OPTIONS)}
             onChange={(pageIs) => {
               const { n: _n, cmp: _c, text: _t, effectId: _e, ...rest } = check;
               onChange({ ...rest, pageIs, ...(pageIs === "cost" || pageIs === "dice" || pageIs === "kinds" ? { cmp: "atLeast" as const, n: pageIs === "cost" ? 3 : 1 } : {}), ...(pageIs === "named" ? { text: "" } : {}), ...(pageIs === "gives" ? { effectId: "preset:burn" } : {}) });
@@ -448,7 +454,7 @@ function ActionPiece({
             <Select
               label="Who"
               value={action.target?.who ?? "me"}
-              options={WHO_OPTIONS}
+              options={alphabetical(WHO_OPTIONS)}
               onChange={(who) =>
                 onChange({
                   ...action,
@@ -479,7 +485,7 @@ function ActionPiece({
             )}
           </>
         )}{" "}
-        <Select label="Action" value={action.kind} options={options.map((o) => ({ value: o.value, label: o.label }))} onChange={(kind: ActionKind) => onChange({ ...blankAction(kind), ...(ACTION_OPTIONS.find((o) => o.value === kind)!.targets ? { target: action.target ?? { who: "me" } } : {}) })} />{" "}
+        <Select label="Action" value={action.kind} options={alphabetical(options.map((o) => ({ value: o.value, label: o.label })))} onChange={(kind: ActionKind) => onChange({ ...blankAction(kind), ...(ACTION_OPTIONS.find((o) => o.value === kind)!.targets ? { target: action.target ?? { who: "me" } } : {}) })} />{" "}
         {opt.effect && <Select label="Effect given" value={action.effectId ?? ""} options={statuses} onChange={(effectId) => onChange({ ...action, effectId })} />}{" "}
         {!opt.noAmount && <AmountPicker label="Amount" library={library} amount={action.amount} onChange={(amount) => onChange({ ...action, amount })} />}
         {PERCENT_ACTIONS.includes(action.kind) && (
@@ -552,7 +558,7 @@ function RuleCard({
         <Select
           label="When"
           value={rule.when}
-          options={whens.some((o) => o.value === rule.when) ? whens : [...whens, { value: rule.when, label: rule.when, hint: "" }]}
+          options={alphabetical(whens.some((o) => o.value === rule.when) ? whens : [...whens, { value: rule.when, label: rule.when, hint: "" }])}
           onChange={(when) => {
             const { effectId: _e, ...rest } = rule;
             onChange(EFFECT_WHENS.includes(when) ? { ...rule, when } : { ...rest, when });
@@ -617,7 +623,7 @@ function RuleCard({
       <div className="row wrap rule-add">
         <select aria-label="Add a check" className="piece add" value="" disabled={rule.checks.length >= 4} onChange={(e) => onChange({ ...rule, checks: [...rule.checks, blankCheck(e.target.value as CheckKind)] })}>
           <option value="">+ Only if…</option>
-          {CHECK_OPTIONS.map((o) => (
+          {alphabetical(CHECK_OPTIONS).map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>

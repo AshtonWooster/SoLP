@@ -7,6 +7,8 @@ import { arrowHitSegment, boardArrows } from "./arrows.ts";
 import { FxBubble, type FxStep } from "./ClashFx.tsx";
 import { SlotPages } from "./SlotPages.tsx";
 import { SpeedBubble } from "./SpeedRollFx.tsx";
+import { StoryBubble } from "./StoryRollFx.tsx";
+import type { StoryStep } from "./storyRoll.ts";
 import type { SpeedStep } from "./speedRoll.ts";
 import { AssetLayer, PinLayer, type GrabItem } from "./maps/MapLayers.tsx";
 import { FogLayer } from "./maps/Fog.tsx";
@@ -26,6 +28,8 @@ interface Props {
   fx?: FxStep | null;
   /** The Speed roll to draw above the characters who rolled, if any. */
   speed?: SpeedStep | null;
+  /** The Story Roll to draw above the character who rolled, if any. */
+  story?: StoryStep | null;
   /** How to draw fog of war: a tint the GM sees through, or the players' solid cover. Missing: no fog. */
   fog?: "gm" | "players";
   /**
@@ -59,7 +63,7 @@ export function aimTargets(table: TableState): { targetable: Set<string>; picked
  * The battle map: the background image, the assets layer, a tile grid with tokens on it, and pins on
  * top. Used full-screen on the board, smaller on the GM screen (where hidden things show faded).
  */
-export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, speed, fog, layer = "tokens", snap = true, onMoveItem, vfx, children }: Props) {
+export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onCellClick, fx, speed, story, fog, layer = "tokens", snap = true, onMoveItem, vfx, children }: Props) {
   const { width, height } = state.map;
   const { targetable, picked } = aimTargets(state);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -151,11 +155,11 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
   const arrows = boardArrows(state);
   // While a Page is being aimed, taps go to the lit tokens, not to the arrows over them.
   const arrowsTappable = targetable.size === 0;
+  // A Mass Attack plays above the attacker and every target at once.
   const fxSides = fx
-    ? ([
-        ["a", state.tokens[fx.fx.a]],
-        ["b", state.tokens[fx.fx.b]],
-      ] as const).filter(([, t]) => t)
+    ? ([["a", fx.fx.a], ...(fx.fx.targets ? fx.fx.targets.map((id) => [id, id]) : [["b", fx.fx.b]])] as [string, string][])
+        .map(([side, id]) => [side, state.tokens[id]] as const)
+        .filter(([, t]) => t)
     : [];
   return (
     <div
@@ -287,6 +291,18 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
           </div>
         );
       })}
+      {story &&
+        (() => {
+          const t = state.tokens[story.tokenId];
+          if (!t) return null;
+          return (
+            <div key={story.id} className={"fx-anchor" + (t.y < 2 ? " below" : "")} style={{ gridColumn: t.x + 1, gridRow: t.y + 1 }} aria-hidden="true">
+              <div className="fx-float">
+                <StoryBubble step={story} />
+              </div>
+            </div>
+          );
+        })()}
       <PinLayer map={drawn} onGrab={editing && layer === "pins" ? grab : undefined} wasDragged={() => dragged.current} />
       {openSlots && <SlotPages state={state} slotIds={openSlots} onClose={() => setOpenSlots(null)} />}
       {children}

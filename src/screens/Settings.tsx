@@ -18,7 +18,6 @@ import {
 import { pendingCount } from "../../shared/permissions.ts";
 import {
   effectsClearAfterCombat,
-  popupRewardsOn,
   type GameDoc,
   type GmMeta,
   PLAYER_EDIT_OPTIONS,
@@ -27,6 +26,7 @@ import {
   playersCanCreateEffects,
   proficienciesNeedApproval,
   playersCanCreateItems,
+  storyRollsOnPhone,
 } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { ConfirmButton } from "../components/ConfirmButton.tsx";
@@ -395,7 +395,7 @@ function DeleteGameSection({ gameId, name }: { gameId: string; name: string }) {
   );
 }
 
-type Area = "invite" | "players" | "permissions" | "items" | "effects" | "formulas";
+type Area = "invite" | "players" | "permissions" | "story" | "items" | "effects" | "formulas";
 
 /** The GM's game settings: the game's name and image, inviting players, the players (open their sheets, kick them) and what players may edit. */
 export function Settings() {
@@ -513,6 +513,23 @@ export function Settings() {
           {message?.at === "permissions" && <p className="muted settings-note" role="status">{message.text}</p>}
         </section>
 
+        <section className="panel settings-section" aria-label="Story Rolls">
+          <h2>Story Rolls</h2>
+          <Toggle
+            label="Story Rolls on players' phones"
+            hint="Every Story Roll plays its dice on the board. On: a player's own Story Rolls also play on their phone, and a popup closes once they've rolled for it (unless it has a reward or cost to show). Off: their phone shows the result as text."
+            on={storyRollsOnPhone(g)}
+            onChange={async (on) => {
+              try {
+                await updateDoc(ref, { "settings.storyRollsOnPhone": on });
+              } catch (err) {
+                setMessage({ at: "story", text: friendlyError(err) });
+              }
+            }}
+          />
+          {message?.at === "story" && <p className="muted settings-note" role="status">{message.text}</p>}
+        </section>
+
         <section className="panel settings-section" aria-label="Item library">
           <h2>Item library</h2>
           <Toggle
@@ -522,18 +539,6 @@ export function Settings() {
             onChange={async (on) => {
               try {
                 await updateDoc(ref, { "settings.playersCreateItems": on });
-              } catch (err) {
-                setMessage({ at: "items", text: friendlyError(err) });
-              }
-            }}
-          />
-          <Toggle
-            label="Rewards and costs in popups"
-            hint="On: your popups to players can give or take an item from the item library and Ahn: right away, on a Story Roll they must beat, or for a price in Ahn they choose to pay. The Popups menu also lists each player's Ahn to change. Off: popups are text, images and Story Rolls only."
-            on={popupRewardsOn(g)}
-            onChange={async (on) => {
-              try {
-                await updateDoc(ref, { "settings.popupRewards": on });
               } catch (err) {
                 setMessage({ at: "items", text: friendlyError(err) });
               }
