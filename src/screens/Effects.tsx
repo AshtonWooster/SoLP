@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { collection, deleteDoc, doc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 import { blankEffect, cleanEffect, copyEffect, EFFECT_KINDS, effectLibrary, isLive, isPreset, type EffectDef, type EffectKind } from "../../shared/effects.ts";
-import { type GameDoc, playersCanCreateEffects } from "../../shared/types.ts";
+import { type GameDoc, playersCanCreateEffects, proficienciesNeedApproval } from "../../shared/types.ts";
+import { placeholderTree } from "../../shared/proficiencies.ts";
+import { ProficiencyTree, TreeLegend } from "../components/effects/ProficiencyTree.tsx";
+import { RequirementList } from "../components/effects/library.tsx";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { EffectBuilder, effectText } from "../components/effects/EffectBuilder.tsx";
 import { TopBar } from "../components/TopBar.tsx";
@@ -24,6 +27,7 @@ function DefEditor({
   library,
   isGm,
   autoApprove,
+  approveProficiencies,
   footer,
 }: {
   gameId: string;
@@ -33,6 +37,8 @@ function DefEditor({
   isGm: boolean;
   /** "Players can create effects" is on: a player's changes work without the GM's approval. */
   autoApprove: boolean;
+  /** "Approve changes to the Proficiency tree" is on: a player's Proficiency waits for the GM after every change. */
+  approveProficiencies: boolean;
   footer?: React.ReactNode;
 }) {
   const { user } = useAuth();
@@ -47,7 +53,10 @@ function DefEditor({
 
   const update = (next: EffectDef) => {
     // A player's change needs the GM's approval again, unless the GM lets players make effects.
-    if (!isGm && next.createdBy) next = { ...next, approved: autoApprove };
+    if (!isGm && next.createdBy) {
+      const pending = approveProficiencies && (next.kind === "proficiency" || def.kind === "proficiency");
+      next = { ...next, approved: autoApprove && !pending, pending };
+    }
     setD(next);
     dirty.current = true;
     setStatus("Saving…");
@@ -81,13 +90,31 @@ function DefEditor({
           />
         </div>
       )}
-      <EffectBuilder def={d} library={{ ...library, [id]: d }} onChange={update} footer={footer} />
+      <EffectBuilder def={d} library={{ ...library, [id]: d }} selfId={id} onChange={update} footer={footer} />
     </div>
   );
 }
 
-/** Waiting on the GM: a player's automated entry the GM hasn't approved. Words-only entries never wait. */
-const waiting = (d: EffectDef) => d.rules.length > 0 && !isLive(d);
+type View = "tree" | "list";
+
+/** Proficiencies: the skill tree, or the plain list every kind has. */
+function ViewToggle({ view, setView }: { view: View; setView: (v: View) => void }) {
+  return (
+    <div className="row view-toggle" role="group" aria-label="View">
+      {(["tree", "list"] as const).map((v) => (
+        <button key={v} type="button" className={"chip" + (view === v ? " active" : "")} aria-pressed={view === v} onClick={() => setView(v)}>
+          {v === "tree" ? "Tree" : "List"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Waiting on the GM: a player's automated entry the GM hasn't approved (words-only entries never
+ * wait), or a player's Proficiency pending under "Approve changes to the Proficiency tree".
+ */
+const waiting = (d: EffectDef) => d.pending === true || ((d.rules.length > 0 || !!d.page) && !isLive(d));
 const kindOf = (k: string | null): EffectKind => EFFECT_KINDS.find((x) => x.value === k)?.value ?? "status";
 
 /**
@@ -103,6 +130,9 @@ export function Effects() {
   const member = !!user && !!game.data?.members[user.id];
   // Players' effects work right away when the GM lets players make effects; otherwise they wait for approval.
   const autoApprove = isGm || playersCanCreateEffects(game.data);
+  const approveProficiencies = proficienciesNeedApproval(game.data);
+  // Proficiencies show as a skill tree by default; the list is a tap away.
+  const [view, setView] = useState<View>("tree");
   const [params, setParams] = useSearchParams();
   const kind = kindOf(params.get("kind"));
   const setKind = (k: EffectKind) => setParams({ kind: k }, { replace: true });
@@ -139,14 +169,29 @@ export function Effects() {
   const create = async (from?: EffectDef) => {
     const ref = doc(collection(db, "games", id, "effects"));
     const def = from ? copyEffect(from, `${from.name} (variant)`) : { ...blankEffect(kind), name: `New ${info.label}` };
+    const pending = !isGm && approveProficiencies && def.kind === "proficiency";
     try {
-      await setDoc(ref, cleanEffect({ ...def, updatedAt: Date.now(), ...(isGm ? {} : { createdBy: user!.id, approved: autoApprove }) }));
+      await setDoc(ref, cleanEffect({ ...def, updatedAt: Date.now(), ...(isGm ? {} : { createdBy: user!.id, approved: autoApprove && !pending, pending }) }));
       setSelected(ref.id);
     } catch (err) {
       setMessage(friendlyError(err));
     }
   };
+  // The GM's starter tree: placeholder Proficiencies to rename, change or delete.
+  const addPlaceholders = async () => {
+    const batch = writeBatch(db);
+    for (const [key, d] of Object.entries(placeholderTree(() => doc(collection(db, "games", id, "effects")).id))) {
+      batch.set(doc(db, "games", id, "effects", key), cleanEffect({ ...d, updatedAt: Date.now() }));
+    }
+    try {
+      await batch.commit();
+      setMessage("Added 10 placeholder Proficiencies. Rename, change or delete any of them.");
+    } catch (err) {
+      setMessage(friendlyError(err));
+    }
+  };
   const info = EFFECT_KINDS.find((k) => k.value === kind)!;
+  const treeView = kind === "proficiency" && view === "tree";
   const current = selected && library[selected]?.kind === kind ? selected : null;
   const def = current ? library[current] : undefined;
   const mayEdit = (key: string, d: EffectDef) => !isPreset(key) && (isGm || d.createdBy === user!.id);
@@ -195,7 +240,53 @@ export function Effects() {
           ))}
         </nav>
 
-        <div className="equip-studio items-studio effects-studio">
+        {treeView && (
+          <section className="prof-tree-panel" aria-label="Proficiency tree">
+            <div className="row-between wrap">
+              <h2>Proficiency tree</h2>
+              <ViewToggle view={view} setView={setView} />
+            </div>
+            <p className="muted small">
+              Each player picks 2 Proficiencies at Rank 9 and 2 more at each Rank Up. A Proficiency can need others first and minimum Stats.
+              {approveProficiencies ? (isGm ? " Players' new and changed Proficiencies wait for your approval." : " Your GM approves new and changed Proficiencies before anyone can pick them.") : ""}
+            </p>
+            <ProficiencyTree
+              library={library}
+              stateOf={(_, d) => (d.pending ? "pending" : "plain")}
+              selected={current}
+              onSelect={(key) => {
+                setSelected(key);
+                // The editor is under the tree: bring it into view.
+                requestAnimationFrame(() => document.querySelector(".effects-studio .equip-editor")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+              }}
+              empty={
+                isGm ? (
+                  <>
+                    <p>No Proficiencies yet.</p>
+                    <button type="button" className="chip go" onClick={addPlaceholders}>
+                      Add placeholder Proficiencies
+                    </button>
+                  </>
+                ) : (
+                  "No Proficiencies yet. Add the first one."
+                )
+              }
+            />
+            <TreeLegend />
+            <div className="row wrap">
+              <button type="button" className="chip go" onClick={() => create()}>
+                + New Proficiency
+              </button>
+              {isGm && list.length > 0 && (
+                <button type="button" onClick={addPlaceholders}>
+                  Add placeholder Proficiencies
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        <div className={"equip-studio items-studio effects-studio" + (treeView ? " tree-mode" : "")}>
           <div className="equip-editor">
             {current && def && mayEdit(current, def) ? (
               <DefEditor
@@ -206,10 +297,20 @@ export function Effects() {
                 library={library}
                 isGm={isGm}
                 autoApprove={autoApprove}
+                approveProficiencies={approveProficiencies}
                 footer={
                 <>
                   {isGm && def.kind === "status" && <StatusVfxPicker gameId={id} statusId={current} library={vfx} />}
-                  {isGm && def.createdBy && def.rules.length > 0 && (
+                  {isGm && def.pending && (
+                    <button
+                      type="button"
+                      className="chip go"
+                      onClick={() => updateDoc(doc(db, "games", id, "effects", current), { pending: false, approved: true }).catch((e) => setMessage(friendlyError(e)))}
+                    >
+                      Approve {maker(def)}'s change to the tree
+                    </button>
+                  )}
+                  {isGm && def.createdBy && !def.pending && (def.rules.length > 0 || !!def.page) && (
                     <button
                       type="button"
                       className={def.approved ? "" : "chip go"}
@@ -222,7 +323,7 @@ export function Effects() {
                     Make a variant
                   </button>
                   {/* Removing an approved effect is a change too: only the GM can, unless players' effects need no approval. */}
-                  {autoApprove || !def.approved ? (
+                  {isGm || (approveProficiencies && def.kind === "proficiency" ? def.pending : autoApprove || !def.approved) ? (
                     <ConfirmButton
                       className="danger"
                       confirmLabel="Delete?"
@@ -250,6 +351,8 @@ export function Effects() {
                     {def.kind === "passive" ? ` · Cost ${def.cost ?? 0}` : ""}
                   </span>
                   <p>{effectText(def, library)}</p>
+                  {def.kind === "proficiency" && <RequirementList def={def} library={library} />}
+                  {def.page && <p className="small">Adds the Page <strong>{def.page.name || "Unnamed"}</strong> to the Auxiliary Deck.</p>}
                 </div>
                 <p className="muted small">{isPreset(current) ? "Built in. Make a variant to change it." : `Made by ${maker(def)}. Only they and the GM can change it.`}</p>
                 <button type="button" onClick={() => create(def)}>
@@ -263,8 +366,10 @@ export function Effects() {
               </p>
             )}
           </div>
+          {!treeView && (
           <div className="equip-list">
             <div className="row wrap library-filters">
+              {kind === "proficiency" && <ViewToggle view={view} setView={setView} />}
               <input aria-label="Search" placeholder={`Search ${info.plural.toLowerCase()}`} value={search} onChange={(e) => setSearch(e.target.value)} />
               {waitingCount(kind) > 0 && (
                 <button type="button" className={"chip" + (onlyWaiting ? " active" : "")} onClick={() => setOnlyWaiting(!onlyWaiting)}>
@@ -301,6 +406,7 @@ export function Effects() {
             </ul>
             {list.length === 0 && <p className="muted">No {info.plural.toLowerCase()} {search.trim() ? "match" : "yet"}.</p>}
           </div>
+          )}
         </div>
       </main>
     </>

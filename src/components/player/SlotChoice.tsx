@@ -1,16 +1,14 @@
 import type { Dice, Page } from "../../../shared/character.ts";
-import { clashOdds } from "../../../shared/combat.ts";
 import { isMassAttack } from "../../../shared/ruleset.ts";
 import type { TableState } from "../../../shared/types.ts";
 import { DiceIcon, dieRange } from "./DiceIcon.tsx";
 import { Overlay } from "./Overlay.tsx";
 
-const pct = (x: number) => `${Math.round(x * 100)}%`;
 const isOffensive = (d: Dice) => d.kind !== "block" && d.kind !== "evade";
 
 /**
- * Die by die, how your Page would clash with theirs: each pair's Power ranges and your chance to win
- * it, from the dice alone (Stats and Effects can still change the rolls).
+ * Die by die, how your Page would clash with theirs: each pair's Power ranges side by side, with
+ * unpaired dice marked as hitting One-Sided or held as a Counter.
  */
 export function ClashPreview({ mine, theirs, theirName }: { mine: Page; theirs: Page; theirName: string }) {
   const a = mine.dice.filter((d) => !d.counter);
@@ -28,13 +26,11 @@ export function ClashPreview({ mine, theirs, theirName }: { mine: Page; theirs: 
       {Array.from({ length: rows }, (_, i) => {
         const x = a[i];
         const y = b[i];
-        const odds = x && y ? clashOdds(x, y) : undefined;
-        const tone = odds ? (odds.win > odds.lose ? "good" : odds.win < odds.lose ? "bad" : "even") : "";
         return (
           <div className="cp-row" key={i}>
             <span className="cp-die">{x ? <><DiceIcon dice={x} size={20} /> {dieRange(x)}</> : <span className="muted">—</span>}</span>
-            <span className={"cp-odds " + tone}>
-              {odds ? `Win ${pct(odds.win)}` : x ? (isOffensive(x) ? "Hits" : "Counter") : y && isOffensive(y) ? "Hits you" : "—"}
+            <span className="cp-odds">
+              {x && y ? "Clash" : x ? (isOffensive(x) ? "Hits" : "Counter") : y && isOffensive(y) ? "Hits you" : "—"}
             </span>
             <span className="cp-die theirs">{y ? <>{dieRange(y)} <DiceIcon dice={y} size={20} /></> : <span className="muted">—</span>}</span>
           </div>
@@ -117,7 +113,6 @@ export function SlotChoice({
         <strong>Unopposed attack</strong>
         <span className="muted small">Hits One-Sided on your turn without clashing with their Page.</span>
       </button>
-      <p className="muted small">Win chances count the dice alone; Stats and Effects can still change the rolls.</p>
     </Overlay>
   );
 }

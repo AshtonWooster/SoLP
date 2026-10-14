@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { applyAction, type Actor, type EngineContext } from "../shared/engine.ts";
-import { ANY_STAT, MAX_POPUPS, popupsFor } from "../shared/popups.ts";
+import { ANY_STAT, finishedPopups, MAX_POPUPS, popupsFor, popupWaitingOn, upPopups } from "../shared/popups.ts";
 import { tableForGm, tableForPlayers } from "../shared/secrets.ts";
 import type { TableState, Token } from "../shared/types.ts";
 
@@ -106,14 +106,117 @@ test("only the players a popup is for can roll for it, and it must ask for a rol
   assert.throws(() => applyAction(t, { type: "popupRoll", popupId: "p" }, ann, ctx), /token on the table/);
 });
 
-test("the GM takes a popup down from every screen", () => {
+test("the GM takes a popup down from every screen, and keeps its results until they clear it", () => {
   const t = table();
-  applyAction(t, { type: "sendPopup", id: "p", text: "Hi" }, gm);
+  applyAction(t, { type: "sendPopup", id: "p", text: "Spot anything?", roll: { stat: "insight" } }, gm);
+  applyAction(t, { type: "popupRoll", popupId: "p" }, ann, ctx);
   assert.throws(() => applyAction(t, { type: "removePopup", popupId: "p" }, ann), /GM only/);
   assert.ok(applyAction(t, { type: "removePopup", popupId: "p" }, gm));
-  assert.equal(t.popups, undefined);
+  assert.deepEqual(popupsFor(t, "ann"), []);
+  assert.deepEqual(popupsFor(t, "bo"), []);
+  assert.deepEqual(upPopups(t), []);
+  assert.equal(finishedPopups(t)[0].takenDown, true);
+  assert.equal(typeof finishedPopups(t)[0].rolls?.ann, "number");
   assert.equal(applyAction(t, { type: "removePopup", popupId: "p" }, gm), false);
   assert.throws(() => applyAction(t, { type: "closePopup", popupId: "p" }, ann), /taken down/);
+  assert.throws(() => applyAction(t, { type: "popupRoll", popupId: "p" }, bo, ctx), /taken down/);
+  // Clearing the record is the GM's.
+  assert.throws(() => applyAction(t, { type: "clearPopups", popupId: "p" }, ann), /GM only/);
+  assert.ok(applyAction(t, { type: "clearPopups", popupId: "p" }, gm));
+  assert.equal(t.popups, undefined);
+});
+
+/** The game's players, as the host lists them, so a popup to everyone knows who it waits on. */
+const withPlayers = (players: string[]): EngineContext => ({ ...ctx, sheets: { players: () => players, sheet: () => undefined, item: () => undefined, save: () => {} } });
+
+test("a popup takes itself down once every player it's for has closed it", () => {
+  const t = table();
+  const c = withPlayers(["ann", "bo"]);
+  applyAction(t, { type: "sendPopup", id: "p", text: "The door creaks." }, gm, c);
+  applyAction(t, { type: "closePopup", popupId: "p" }, ann, c);
+  assert.equal(upPopups(t).length, 1, "still open for Bo");
+  assert.deepEqual(popupWaitingOn(t.popups![0], ["ann", "bo"]), ["bo"]);
+  applyAction(t, { type: "closePopup", popupId: "p" }, bo, c);
+  assert.deepEqual(upPopups(t), []);
+  const done = finishedPopups(t)[0];
+  assert.equal(done.id, "p");
+  assert.equal(done.takenDown, undefined);
+  assert.equal(typeof done.doneAt, "number");
+  assert.deepEqual(done.closedBy, ["ann", "bo"]);
+  assert.deepEqual(t.log, [], "nothing in the shared log");
+});
+
+test("a popup to picked players comes down when they've closed it, whoever else is in the game", () => {
+  const t = table();
+  applyAction(t, { type: "sendPopup", id: "p", text: "Only Ann", to: ["ann"] }, gm);
+  // No player list needed: the popup names who it's for.
+  applyAction(t, { type: "closePopup", popupId: "p" }, ann, ctx);
+  assert.deepEqual(upPopups(t), []);
+});
+
+test("a player who left the game isn't waited on", () => {
+  const t = table();
+  applyAction(t, { type: "sendPopup", id: "p", text: "Hi", to: ["ann", "gone"] }, gm);
+  applyAction(t, { type: "closePopup", popupId: "p" }, ann, withPlayers(["ann", "bo"]));
+  assert.deepEqual(upPopups(t), []);
+});
+
+test("a popup to every player stays up when the game's players can't be listed", () => {
+  const t = table();
+  applyAction(t, { type: "sendPopup", id: "p", text: "Hi" }, gm);
+  applyAction(t, { type: "closePopup", popupId: "p" }, ann, ctx);
+  applyAction(t, { type: "closePopup", popupId: "p" }, bo, ctx);
+  assert.equal(upPopups(t).length, 1);
+  assert.equal(popupWaitingOn(t.popups![0], undefined), undefined);
+});
+
+test("rolling alone doesn't take a popup down: the player still sees their result until they close it", () => {
+  const t = table();
+  const c = withPlayers(["ann"]);
+  applyAction(t, { type: "sendPopup", id: "p", roll: { stat: "insight" } }, gm, c);
+  applyAction(t, { type: "popupRoll", popupId: "p" }, ann, c);
+  assert.equal(typeof popupsFor(t, "ann")[0].rolled, "number");
+  applyAction(t, { type: "closePopup", popupId: "p" }, ann, c);
+  assert.deepEqual(upPopups(t), []);
+  assert.equal(typeof finishedPopups(t)[0].rolls?.ann, "number");
+});
+
+test("clearing with no popup named clears every finished one and leaves the ones still up", () => {
+  const t = table();
+  applyAction(t, { type: "sendPopup", id: "a", text: "A", to: ["ann"] }, gm);
+  applyAction(t, { type: "sendPopup", id: "b", text: "B" }, gm);
+  applyAction(t, { type: "sendPopup", id: "c", text: "C" }, gm);
+  applyAction(t, { type: "closePopup", popupId: "a" }, ann, ctx);
+  applyAction(t, { type: "removePopup", popupId: "b" }, gm);
+  assert.deepEqual(finishedPopups(t).map((p) => p.id), ["b", "a"]);
+  assert.ok(applyAction(t, { type: "clearPopups" }, gm));
+  assert.deepEqual(t.popups?.map((p) => p.id), ["c"]);
+  assert.equal(applyAction(t, { type: "clearPopups" }, gm), false);
+  // Clearing doesn't take down one that's still up.
+  assert.equal(applyAction(t, { type: "clearPopups", popupId: "c" }, gm), false);
+});
+
+test("finished popups make room first when the GM sends too many", () => {
+  const t = table();
+  applyAction(t, { type: "sendPopup", id: "old", text: "Old, still up" }, gm);
+  applyAction(t, { type: "sendPopup", id: "done", text: "Done" }, gm);
+  applyAction(t, { type: "removePopup", popupId: "done" }, gm);
+  for (let i = 0; i < MAX_POPUPS - 1; i++) applyAction(t, { type: "sendPopup", id: `p${i}`, text: `#${i}` }, gm);
+  assert.equal(t.popups?.length, MAX_POPUPS);
+  assert.equal(t.popups?.[0].id, "old");
+  assert.ok(!t.popups?.some((p) => p.id === "done"));
+});
+
+test("finished popups stay off players' screens and out of the shared table", () => {
+  const t = table();
+  applyAction(t, { type: "sendPopup", id: "p", text: "Hi", to: ["ann"] }, gm);
+  applyAction(t, { type: "closePopup", popupId: "p" }, ann, ctx);
+  assert.equal(tableForPlayers(t).popups, undefined);
+  assert.equal(tableForGm(t).popups?.[0].doneAt !== undefined, true);
+  // A player who joins later doesn't get a finished popup to everyone either.
+  applyAction(t, { type: "sendPopup", id: "q", text: "All" }, gm);
+  applyAction(t, { type: "removePopup", popupId: "q" }, gm);
+  assert.deepEqual(popupsFor(t, "cy"), []);
 });
 
 test("old popups drop off once there are too many", () => {
