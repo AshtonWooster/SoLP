@@ -412,19 +412,23 @@ export function combatShowing(c: CombatState, shown: Set<string>): CombatState {
   for (const s of slots) if (s.clashWith && !slotIds.has(s.clashWith)) delete s.clashWith;
   const decks = keep(c.decks);
   const counters = keep(c.counters);
+  // A Mass Attack only plays on the targets players can see; one with none of them showing isn't sent.
   const fx = c.fx
-    ?.filter((f) => shown.has(f.a) || shown.has(f.b))
+    ?.map((f) => (f.targets ? { ...f, targets: f.targets.filter((id) => shown.has(id)) } : f))
+    .filter((f) => shown.has(f.a) || (f.targets ? f.targets.length > 0 : shown.has(f.b)))
     .map((f) => ({
       ...f,
+      ...(f.targets?.length ? { b: f.targets[0] } : {}),
+      ...(f.pages ? { pages: keep(f.pages) } : {}),
       ...(f.before ? { before: keep(f.before) } : {}),
-      rounds: f.rounds.map((r) => (r.after ? { ...r, after: keep(r.after) } : r)),
+      rounds: f.rounds.map((r) => ({ ...r, ...(r.after ? { after: keep(r.after) } : {}), ...(r.vs ? { vs: keep(r.vs) } : {}) })),
     }));
   // Pages only the hidden fighters hold aren't sent; ones played where players can see stay.
   const seen = new Set<string>([
     ...slots.map((s) => s.pageId),
     ...Object.values(decks).flatMap((d) => [...d.draw, ...d.hand, ...d.discard, ...d.aux, ...d.auxUsed, ...(d.ego ?? []), ...(d.egoUsed ?? [])].map((x) => x.pageId)),
     ...Object.values(counters).flatMap((list) => list.map((x) => x.pageId)),
-    ...(fx ?? []).flatMap((f) => [f.pageA, f.pageB ?? ""]),
+    ...(fx ?? []).flatMap((f) => [f.pageA, f.pageB ?? "", ...Object.values(f.pages ?? {})]),
   ]);
   const theirs = new Set(
     Object.entries(c.decks)

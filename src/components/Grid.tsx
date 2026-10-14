@@ -151,11 +151,11 @@ export function Grid({ state, selectedId, activeId, reachable, onTokenClick, onC
   const arrows = boardArrows(state);
   // While a Page is being aimed, taps go to the lit tokens, not to the arrows over them.
   const arrowsTappable = targetable.size === 0;
+  // A Mass Attack plays above the attacker and every target at once.
   const fxSides = fx
-    ? ([
-        ["a", state.tokens[fx.fx.a]],
-        ["b", state.tokens[fx.fx.b]],
-      ] as const).filter(([, t]) => t)
+    ? ([["a", fx.fx.a], ...(fx.fx.targets ? fx.fx.targets.map((id) => [id, id]) : [["b", fx.fx.b]])] as [string, string][])
+        .map(([side, id]) => [side, state.tokens[id]] as const)
+        .filter(([, t]) => t)
     : [];
   return (
     <div

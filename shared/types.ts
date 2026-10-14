@@ -412,6 +412,20 @@ export interface FxRound {
   result: "a" | "b" | "draw" | "hit";
   /** Both characters' resources and statuses right after this step, so screens can apply the damage when the animation gets here. */
   after?: FxState;
+  /** A Mass Summation check: all of the attacker's dice, rolled together and summed (`a` is then left out). */
+  aDice?: FxDie[];
+  /** A Mass Attack: each target's side of this step at once, by token id. Targets left out sit this step out. */
+  vs?: Record<string, FxMassSide>;
+}
+
+/** One Mass Attack target's side of a step: what they answered with, and how it went. */
+export interface FxMassSide {
+  /** The die they answered with: a die of their Page, or a Counter Die. */
+  die?: FxDie;
+  /** A Summation check: every die of the Page they defend with, rolled together and summed. */
+  dice?: FxDie[];
+  /** "a": the Mass Attack won and lands, "b": the target held, "draw", or "hit": it landed unopposed. */
+  result: FxRound["result"];
 }
 
 /** Resources and statuses of the characters in a resolution, by token id. */
@@ -428,6 +442,10 @@ export interface ClashFx {
   rounds: FxRound[];
   /** Both characters as they were before the first die. */
   before?: FxState;
+  /** A Mass Attack: every target, which all play at once with `a`. `b` is the first of them. */
+  targets?: string[];
+  /** A Mass Attack: the Page each target defends with, by token id. */
+  pages?: Record<string, string>;
 }
 
 /** Everything on the table that every member may see. GM-only data lives under games/{id}/gm. */

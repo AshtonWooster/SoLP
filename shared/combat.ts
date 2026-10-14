@@ -46,6 +46,7 @@ import type {
   CombatState,
   DeckState,
   FxDie,
+  FxMassSide,
   FxRound,
   FxState,
   PageSource,
@@ -667,43 +668,59 @@ function storeCounter(c: CombatState, owner: Token, die: Dice, pageId: string) {
 // ---- Resolving Pages (Act 8, "Resolve Slotted Pages") ----
 
 /**
+ * One die of a One-Sided Attack, already rolled: their oldest Counter Die answers it, if they have one;
+ * otherwise an Offensive die hits and a Defensive one becomes the attacker's Counter Die (nothing to show).
+ * A Counter Die that wins stays first and answers the next die too; one that loses or Draws is spent.
+ * Counter Dice used against a Page are added to `used`, to be lost when the Page finishes.
+ */
+function oneSidedDie(table: TableState, attacker: Token, target: Token, page: Page, die: Dice, fp: number, play: PagePlay, used: Set<string>): Omit<FxRound, "after"> | undefined {
+  const c = table.combat!;
+  const counter = (c.counters[target.id] ?? [])[0];
+  if (counter) {
+    used.add(counter.id);
+    const counterPage = c.pages[counter.pageId];
+    const out = clashDice(
+      table,
+      { die, owner: attacker, pageType: page.type, play },
+      { die: counter.die, owner: target, pageType: counterPage?.type ?? "melee", play: { page: counterPage } },
+      fp,
+    );
+    // "On Clash Win, Counter Dice are Recycled": it answers the next die too. Otherwise it's spent.
+    if (out.winner !== "b") c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => x.id !== counter.id);
+    return { a: fxDie(die, out.fa), b: fxDie(counter.die, out.fb), result: out.winner };
+  }
+  if (!isOffensive(die.kind)) {
+    storeCounter(c, attacker, die, page.id);
+    return undefined;
+  }
+  log(table, ` ${attacker.name}'s ${diceText(die)} (${fp}) hits ${target.name}.`);
+  dealDamage(table, target, fp, die.kind, attacker, die, { ...play, oneSided: true });
+  return { a: fxDie(die, fp), result: "hit" };
+}
+
+/** Counter Dice used against a Page are lost at the end of its resolution. */
+function spendCounters(c: CombatState, target: Token, used: Set<string>) {
+  if (used.size) c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => !used.has(x.id));
+}
+
+/**
  * A One-Sided Attack: each die hits the target top to bottom. The target's Counter Dice answer
  * automatically, in the order they were made; any used are lost when the page finishes.
  */
-function oneSided(table: TableState, attacker: Token, target: Token, page: Page, dice: Dice[], powers?: number[], animate = true, nth?: number) {
+function oneSided(table: TableState, attacker: Token, target: Token, page: Page, dice: Dice[], nth?: number) {
   const c = table.combat!;
   const used = new Set<string>();
   const rounds: FxRound[] = [];
   const before = fxState(attacker, target);
-  dice.forEach((die, i) => {
-    if (knockedOut(target) || down(attacker)) return;
+  for (const die of dice) {
+    if (knockedOut(target) || down(attacker)) break;
     const play: PagePlay = { page, nth };
-    const fp = powers?.[i] ?? rollPower(table, die, attacker, target, play);
-    // The oldest Counter Die answers; one that won stays first and answers the next die too.
-    const counter = (c.counters[target.id] ?? [])[0];
-    if (counter) {
-      used.add(counter.id);
-      const counterPage = c.pages[counter.pageId];
-      const out = clashDice(
-        table,
-        { die, owner: attacker, pageType: page.type, play },
-        { die: counter.die, owner: target, pageType: counterPage?.type ?? "melee", play: { page: counterPage } },
-        fp,
-      );
-      rounds.push({ a: fxDie(die, out.fa), b: fxDie(counter.die, out.fb), result: out.winner, after: fxState(attacker, target) });
-      // "On Clash Win, Counter Dice are Recycled": it answers the next die too. Otherwise it's spent.
-      if (out.winner !== "b") c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => x.id !== counter.id);
-      return;
-    }
-    if (isOffensive(die.kind)) {
-      log(table, ` ${attacker.name}'s ${diceText(die)} (${fp}) hits ${target.name}.`);
-      dealDamage(table, target, fp, die.kind, attacker, die, { ...play, oneSided: true });
-      rounds.push({ a: fxDie(die, fp), result: "hit", after: fxState(attacker, target) });
-    } else storeCounter(c, attacker, die, page.id);
-  });
-  // Counter Dice used against this page are lost at the end of its resolution.
-  if (used.size) c.counters[target.id] = (c.counters[target.id] ?? []).filter((x) => !used.has(x.id));
-  if (animate) recordFx(c, { a: attacker.id, b: target.id, pageA: page.name, rounds, before });
+    const fp = rollPower(table, die, attacker, target, play);
+    const round = oneSidedDie(table, attacker, target, page, die, fp, play, used);
+    if (round) rounds.push({ ...round, after: fxState(attacker, target) });
+  }
+  spendCounters(c, target, used);
+  recordFx(c, { a: attacker.id, b: target.id, pageA: page.name, rounds, before });
 }
 
 /** Two Pages clash: their dice clash top to bottom until one side runs out. */
@@ -774,6 +791,12 @@ function defendingPage(c: CombatState, mass: SlottedPage, targetId: string, die:
   return c.slots.find((s) => s.ownerId === targetId && s.id !== mass.id && (s.clashWith === mass.id || s.die === die) && !isMassAttack(c.pages[s.pageId]?.type));
 }
 
+/**
+ * A Mass Attack. Every die is rolled once, and that Final Power is both its check against each
+ * target's Page and the damage it deals. Summation rolls all its dice together and sums them against
+ * each target's Page summed; the dice then land one by one with the same numbers. Individual rolls
+ * each die in turn and meets each target's next die with it. Every target plays at once in one animation.
+ */
 function resolveMass(table: TableState, slot: SlottedPage) {
   const c = table.combat!;
   const owner = table.tokens[slot.ownerId];
@@ -782,62 +805,125 @@ function resolveMass(table: TableState, slot: SlottedPage) {
   const targets = slot.targets.map((t) => ({ ref: t, token: table.tokens[t.tokenId] })).filter((t) => t.token && !knockedOut(t.token));
   log(table, `${owner.name} unleashes ${page.name} (${page.type === "massSummation" ? "Summation" : "Individual"}) on ${targets.map((t) => t.token.name).join(", ")}.`);
   const play: PagePlay = { page, nth: slot.nth };
-  const powers = dice.map((d) => rollPower(table, d, owner, undefined, play));
+  const tokens = [owner, ...targets.map((t) => t.token)];
+  const before = fxState(...tokens);
+  const rounds: FxRound[] = [];
+  const pages: Record<string, string> = {};
+  const used = new Map(targets.map(({ token }) => [token.id, new Set<string>()]));
+  /** The attacker's side of a step: lands if it hit anyone, otherwise it lost. */
+  const push = (round: Omit<FxRound, "result" | "after">) => {
+    const sides = Object.values(round.vs ?? {});
+    if (!sides.length) return;
+    const landed = sides.some((v) => v.result === "a" || v.result === "hit");
+    const result = landed ? "hit" : sides.every((v) => v.result === "draw") ? "draw" : "b";
+    rounds.push({ ...round, result, after: fxState(...tokens) });
+  };
+  /** One die, already rolled, landing on these targets at once (their Counter Dice may answer). */
+  const land = (die: Dice, fp: number, on: Token[], vs: Record<string, FxMassSide>) => {
+    for (const t of on) {
+      if (knockedOut(t) || down(owner)) continue;
+      const r = oneSidedDie(table, owner, t, page, die, fp, play, used.get(t.id)!);
+      if (r) vs[t.id] = { ...(r.b ? { die: r.b } : {}), result: r.result };
+    }
+  };
 
   if (page.type === "massSummation") {
+    // All the dice at once: the sum is the check, and each die then lands with its own number.
+    const powers = dice.map((d) => rollPower(table, d, owner, undefined, play));
     const total = powers.reduce((x, y) => x + y, 0);
+    const check: Record<string, FxMassSide> = {};
     const hit: Token[] = [];
     for (const { ref, token } of targets) {
       const defence = defendingPage(c, slot, token.id, ref.die);
       if (!defence) {
         hit.push(token);
+        check[token.id] = { result: "hit" };
         continue;
       }
       const dp = c.pages[defence.pageId];
-      const theirs = dp.dice
-        .filter((d) => !d.counter)
-        .map((d) => rollPower(table, d, token, owner, { page: dp, nth: defence.nth }))
-        .reduce((x, y) => x + y, 0);
+      pages[token.id] = dp.name;
+      const theirDice = dp.dice.filter((d) => !d.counter);
+      const theirPowers = theirDice.map((d) => rollPower(table, d, token, owner, { page: dp, nth: defence.nth }));
+      const theirs = theirPowers.reduce((x, y) => x + y, 0);
+      const fx = theirDice.map((d, i) => fxDie(d, theirPowers[i]));
       log(table, ` Summation: ${owner.name} ${total} vs ${token.name}'s ${dp.name} ${theirs}.`);
       if (theirs < total) {
         log(table, `  ${token.name}'s ${dp.name} is Negated.`);
         removeSlot(c, defence);
         hit.push(token);
+        check[token.id] = { dice: fx, result: "a" };
       } else if (theirs > total) {
         log(table, `  ${token.name} is unaffected.`);
         delete defence.clashWith;
+        check[token.id] = { dice: fx, result: "b" };
       } else {
         // A tie: the Mass Attack still lands, but the defender's Page is left alone.
         log(table, `  Tie: ${token.name}'s ${dp.name} is unaffected, but the attack still lands.`);
         delete defence.clashWith;
         hit.push(token);
+        check[token.id] = { dice: fx, result: "draw" };
       }
     }
-    for (const t of hit) oneSided(table, owner, t, page, dice, powers, true, slot.nth);
+    push({ aDice: dice.map((d, i) => fxDie(d, powers[i])), vs: check });
+    dice.forEach((die, i) => {
+      if (down(owner)) return;
+      const vs: Record<string, FxMassSide> = {};
+      // A Defensive die has no one to clash with: it becomes one Counter Die, not one per target.
+      if (!isOffensive(die.kind)) {
+        const answered = hit.filter((t) => !knockedOut(t) && (c.counters[t.id] ?? []).length);
+        land(die, powers[i], answered, vs);
+        if (answered.length < hit.length) storeCounter(c, owner, die, page.id);
+      } else land(die, powers[i], hit, vs);
+      push({ a: fxDie(die, powers[i]), vs });
+    });
   } else {
-    // Individual: each Mass die meets each target's next die; a lower target die is Negated and the Mass die lands.
+    // Individual: each die is rolled in turn and meets each target's next die with that one number;
+    // a lower target die is Negated and the Mass die lands, otherwise it doesn't land on them.
     const queues = new Map(
       targets.map(({ ref, token }) => {
         const defence = defendingPage(c, slot, token.id, ref.die);
+        if (defence) pages[token.id] = c.pages[defence.pageId].name;
         return [token.id, { defence, dice: defence ? c.pages[defence.pageId].dice.filter((d) => !d.counter) : [] }];
       }),
     );
-    dice.forEach((die, i) => {
+    for (const die of dice) {
+      if (down(owner)) break;
+      const fp = rollPower(table, die, owner, undefined, play);
+      const vs: Record<string, FxMassSide> = {};
+      const unopposed: Token[] = [];
       for (const { token } of targets) {
-        if (knockedOut(token) || knockedOut(owner)) continue;
+        if (knockedOut(token)) continue;
         const q = queues.get(token.id)!;
         const theirs = q.dice.shift();
-        if (theirs) {
-          const tf = rollPower(table, theirs, token, owner, { page: q.defence ? c.pages[q.defence.pageId] : undefined, nth: q.defence?.nth });
-          log(table, ` ${owner.name}'s ${diceText(die)} (${powers[i]}) vs ${token.name}'s ${diceText(theirs)} (${tf}).`);
-          if (tf >= powers[i]) continue;
-          log(table, `  ${token.name}'s die is Negated.`);
+        if (!theirs) {
+          unopposed.push(token);
+          continue;
         }
-        oneSided(table, owner, token, page, [die], [powers[i]], false, slot.nth);
+        const tf = rollPower(table, theirs, token, owner, { page: q.defence ? c.pages[q.defence.pageId] : undefined, nth: q.defence?.nth });
+        log(table, ` ${owner.name}'s ${diceText(die)} (${fp}) vs ${token.name}'s ${diceText(theirs)} (${tf}).`);
+        if (tf >= fp) {
+          vs[token.id] = { die: fxDie(theirs, tf), result: tf === fp ? "draw" : "b" };
+          continue;
+        }
+        log(table, `  ${token.name}'s die is Negated.`);
+        vs[token.id] = { die: fxDie(theirs, tf), result: "a" };
+        if (isOffensive(die.kind)) {
+          log(table, ` ${owner.name}'s ${diceText(die)} (${fp}) hits ${token.name}.`);
+          dealDamage(table, token, fp, die.kind, owner, die, { ...play, oneSided: true });
+        }
       }
-    });
+      // Unopposed, it's One-Sided: their Counter Dice may answer. A Defensive die becomes one Counter Die.
+      if (!isOffensive(die.kind)) {
+        const answered = unopposed.filter((t) => (c.counters[t.id] ?? []).length);
+        land(die, fp, answered, vs);
+        if (answered.length < unopposed.length) storeCounter(c, owner, die, page.id);
+      } else land(die, fp, unopposed, vs);
+      push({ a: fxDie(die, fp), vs });
+    }
     for (const q of queues.values()) if (q.defence) removeSlot(c, q.defence);
   }
+  for (const { token } of targets) spendCounters(c, token, used.get(token.id)!);
+  if (targets.length) recordFx(c, { a: owner.id, b: targets[0].token.id, pageA: page.name, targets: targets.map((t) => t.token.id), pages, rounds, before });
 }
 
 /** Resolve one slotted Page: clashing, Mass, or One-Sided. Returns false if it has to wait. */
@@ -854,10 +940,14 @@ function resolveSlot(table: TableState, slot: SlottedPage): boolean {
     removeSlot(c, slot);
     return true;
   }
+  // A Page answering a Mass Attack (clashing with it, or on the Speed Die it's aimed at) waits for the
+  // Mass Attack owner's turn, where the Mass Attack's one roll is checked against it.
+  const mass = c.slots.find(
+    (s) => s.id !== slot.id && isMassAttack(c.pages[s.pageId]?.type) && (s.id === slot.clashWith || s.targets.some((t) => t.tokenId === slot.ownerId && t.die === slot.die)),
+  );
+  if (mass) return false;
   const partner = slot.clashWith ? c.slots.find((s) => s.id === slot.clashWith) : undefined;
   if (partner) {
-    // A clash with a Mass Attack (more than 1 target) waits for the Mass Attack owner's turn.
-    if (isMassAttack(c.pages[partner.pageId]?.type) && partner.targets.length > 1) return false;
     clashPages(table, slot, partner);
     removeSlot(c, partner);
     removeSlot(c, slot);
@@ -868,7 +958,7 @@ function resolveSlot(table: TableState, slot: SlottedPage): boolean {
     log(table, `${owner.name}'s ${page.name} has no target left.`);
   } else {
     log(table, `${owner.name} uses ${page.name} on ${target.name}.`);
-    oneSided(table, owner, target, page, page.dice.filter((d) => !d.counter), undefined, true, slot.nth);
+    oneSided(table, owner, target, page, page.dice.filter((d) => !d.counter), slot.nth);
   }
   removeSlot(c, slot);
   return true;

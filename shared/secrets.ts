@@ -141,7 +141,7 @@ function concealCombat(c: CombatState, tokens: Record<string, Token>): CombatSta
     ...c.slots.map((s) => s.pageId),
     ...Object.values(c.decks).flatMap((d) => [...d.discard, ...(d.auxUsed ?? []), ...(d.egoUsed ?? [])].map((x) => x.pageId)),
     ...Object.values(c.counters).flatMap((list) => list.map((x) => x.pageId)),
-    ...(c.fx ?? []).flatMap((f) => [f.pageA, f.pageB ?? ""]),
+    ...(c.fx ?? []).flatMap((f) => [f.pageA, f.pageB ?? "", ...Object.values(f.pages ?? {})]),
   ]);
   const secretPages = new Set<string>();
   for (const [id, t] of Object.entries(tokens)) {
