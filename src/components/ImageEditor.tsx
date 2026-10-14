@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { clampCrop, coverScale, defaultCrop, frameAspect, type ImageCrop, type ImageKind, MAX_ZOOM } from "../imageSize.ts";
 
 /** Biggest side of the framing box on screen, in CSS pixels. */
@@ -7,6 +8,8 @@ const BOX = 360;
 /**
  * Frame an image before it's uploaded: drag to move it, zoom, turn it a quarter at a time or
  * straighten it a little. The frame has the shape the image is shown in.
+ * It's drawn straight into <body> so the card it's opened from (like a Page in the sticky
+ * equipment editor) can't tuck it behind the cards beside it.
  */
 export function ImageEditor({ file, kind, title = "Adjust image", onDone, onCancel }: { file: File; kind: ImageKind; title?: string; onDone: (crop: ImageCrop) => void; onCancel: () => void }) {
   const [url] = useState(() => URL.createObjectURL(file));
@@ -48,7 +51,7 @@ export function ImageEditor({ file, kind, title = "Adjust image", onDone, onCanc
     if (natural) setView({ zoom: 1, cx: natural.width / 2, cy: natural.height / 2 });
   };
 
-  return (
+  return createPortal(
     <div className="overlay" role="dialog" aria-modal="true" aria-label={title}>
       <div className="overlay-box image-editor">
         <div className="overlay-head">
@@ -135,6 +138,7 @@ export function ImageEditor({ file, kind, title = "Adjust image", onDone, onCanc
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
