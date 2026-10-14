@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Page } from "../../../shared/character.ts";
+import { isMassAttack } from "../../../shared/ruleset.ts";
 import { withheld } from "../../../shared/secrets.ts";
 import type { EffectDef } from "../../../shared/effects.ts";
 import type { SlottedPage, TableState, Token } from "../../../shared/types.ts";
@@ -99,36 +100,37 @@ export function CycleCharacters({
                 Array.from({ length: dice }, (_, i) => {
                   const slot = c.slots.find((s) => s.ownerId === who.id && s.die === i);
                   const page = slot && c.pages[slot.pageId];
+                  // Only a Mass Attack's many targets get a scrolling list.
+                  const mass = !!page && isMassAttack(page.type);
                   return (
                     <section className="speed-die-row" key={i}>
                       <h4>Speed Dice {i + 1}</h4>
                       <div className="sd-body">
-                        <div className="sd-page">{page ? <PageCard page={page} size="small" onClick={() => onOpenPage(page)} /> : <span className="muted small">No Page</span>}</div>
-                        <div className="sd-targets">
-                          <div className="sd-cols">
-                            <span>Targets</span>
-                            <span>Response</span>
-                          </div>
-                          <div className="sd-scroll">
-                            {slot?.targets.map((t) => {
-                              const target = table.tokens[t.tokenId];
-                              const resp = responseTo(table, slot, t.tokenId);
-                              const rp = resp && c.pages[resp.pageId];
-                              return (
-                                <div className="sd-target" key={t.tokenId}>
-                                  <span className="sd-who">
-                                    <Portrait token={target} size={44} />
-                                    <span className="small">{target?.name}</span>
-                                  </span>
-                                  <span>{rp ? <PageCard page={rp} size="small" onClick={() => onOpenPage(rp)} /> : <span className="muted small">One-Sided</span>}</span>
-                                </div>
-                              );
-                            })}
-                            {!slot && <span className="muted small">—</span>}
-                          </div>
-                          {slot && slot.targets.length > 2 && <span className="muted small">Scroll for {slot.targets.length} targets</span>}
+                        <div className="sd-page">
+                          <span className="sd-col">Page</span>
+                          {page ? <PageCard page={page} size="small" onClick={() => onOpenPage(page)} /> : <span className="muted small">No Page</span>}
+                        </div>
+                        <div className={"sd-targets" + (mass ? " mass" : "")}>
+                          <span className="sd-col">Targets</span>
+                          <span className="sd-col">Response</span>
+                          {slot?.targets.map((t) => {
+                            const target = table.tokens[t.tokenId];
+                            const resp = responseTo(table, slot, t.tokenId);
+                            const rp = resp && c.pages[resp.pageId];
+                            return (
+                              <div className="sd-target" key={t.tokenId}>
+                                <span className="sd-who">
+                                  <Portrait token={target} size={44} />
+                                  <span className="small">{target?.name}</span>
+                                </span>
+                                <span className="sd-resp">{rp ? <PageCard page={rp} size="small" onClick={() => onOpenPage(rp)} /> : <span className="muted small">One-Sided</span>}</span>
+                              </div>
+                            );
+                          })}
+                          {!slot && <span className="muted small">—</span>}
                         </div>
                       </div>
+                      {mass && slot.targets.length > 2 && <p className="muted small sd-more">Scroll for all {slot.targets.length} targets</p>}
                     </section>
                   );
                 })}
