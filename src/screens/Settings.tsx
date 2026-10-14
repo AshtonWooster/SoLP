@@ -535,7 +535,7 @@ export function Settings() {
           <h2>Ranged Pages</h2>
           <Toggle
             label="Ranged Pages use Ammo"
-            hint="On: when a player fires a Ranged Page, they pick which Ammo from their inventory to use and one is spent; with none, they can't fire. Mark an Item as Ammo in the item library. Off: Ranged Pages need no Ammo."
+            hint="On: when a player fires a Ranged Page, they pick which Ammo from their inventory to use and one is spent; with none, the Page is used as a Melee Page and every die rolls with disadvantage. Mark an Item as Ammo in the item library. Off: Ranged Pages need no Ammo."
             on={rangedPagesUseAmmo(g)}
             onChange={async (on) => {
               try {

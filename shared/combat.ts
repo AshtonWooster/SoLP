@@ -40,6 +40,7 @@ import {
   PARTIAL_COVER,
   pageRange,
   spendOne,
+  asMeleeWithoutAmmo,
 } from "./ruleset.ts";
 import type {
   Card,
@@ -578,7 +579,8 @@ function rollPower(table: TableState, d: Dice, owner: Token, other?: Token, play
   const mine = trigger(table, "roll", owner, { other, die: d, ...page });
   const theirs = other ? trigger(table, "theyRoll", other, { other: owner, die: d, dieIsMine: false, ...page }) : undefined;
   const fx: RollFx = {
-    advantage: mine.advantage + (theirs?.advantage ?? 0),
+    // A Ranged Page fired without Ammo rolls every die with disadvantage.
+    advantage: mine.advantage + (theirs?.advantage ?? 0) - (play.page?.noAmmo ? 1 : 0),
     min: mine.min + (theirs?.min ?? 0),
     rollMax: mine.rollMax || !!theirs?.rollMax,
     rerollMin: mine.rerollMin || !!theirs?.rerollMin,
@@ -1295,7 +1297,12 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   const token = actingToken(table, actor);
   const a = c.aim;
   if (!a || a.tokenId !== token.id) throw new ActionError("Pick a Page first.");
-  const page = pageForAim(table, token);
+  const aimedPage = pageForAim(table, token);
+  // With "Ranged Pages use Ammo" on, a player's Ranged Page spends Ammo from their inventory; with
+  // none, it's used as a Melee Page and every die rolls with disadvantage.
+  const usesAmmo = aimedPage.type === "ranged" && token.side === "player" && !!ctx?.rangedAmmo?.();
+  const ammo = usesAmmo ? findAmmo(token, opts.ammo, ctx!) : undefined;
+  const page = usesAmmo && !ammo ? withoutAmmo(c, aimedPage) : aimedPage;
   const ids = [...new Set(targetIds?.length ? targetIds : a.targets)];
   const mass = isMassAttack(page.type);
   if (ids.length === 0) throw new ActionError("Pick a target.");
@@ -1316,8 +1323,6 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   if (page.type !== "instant" && free === undefined) {
     throw new ActionError(a.die !== undefined ? `Speed Die ${a.die + 1} isn't free.` : "No free Speed Die to slot it on.");
   }
-  // With "Ranged Pages use Ammo" on, a player's Ranged Page needs Ammo from their inventory.
-  const ammo = page.type === "ranged" && token.side === "player" && ctx?.rangedAmmo?.() ? findAmmo(token, opts.ammo, ctx) : undefined;
 
   // Pay, and take the card out of the hand (or Auxiliary Deck).
   token.resources.light -= cost;
@@ -1353,6 +1358,7 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   };
   const names = ids.map((id) => table.tokens[id].name).join(", ");
   if (ammo) log(table, `${token.name} loads ${ammo.item.name || "Ammo"}${ammo.item.count > 1 ? ` (${ammo.item.count - 1} left)` : " (the last one)"}.`);
+  if (page.noAmmo) log(table, `${token.name} has no Ammo: ${page.name} is used as a Melee Page, every die rolled with disadvantage.`);
 
   if (page.type === "instant") {
     log(table, `${token.name} uses ${page.name} (Instant) on ${names}.`);
@@ -1396,7 +1402,7 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
 
 // ---- Ranged Pages: Ammo and Cover (ruleset, "Cover") ----
 
-/** The Ammo a player fires with: the stack they picked, or their first. Throws if they have none. */
+/** The Ammo a player fires with: the stack they picked, or their first. Undefined if they have none. */
 function findAmmo(token: Token, itemId: string | undefined, ctx: EngineContext) {
   const sheets = ctx.sheets;
   const uid = token.ownerId;
@@ -1405,10 +1411,16 @@ function findAmmo(token: Token, itemId: string | undefined, ctx: EngineContext) 
   // The GM marks Ammo in the item library, so each item is read with the library's details.
   const linked = (i: InventoryItem) => (i.templateId ? linkItem(i, { [i.templateId]: sheets.item(i.templateId)! }) : i);
   const ammo = sheet.inventory.items.filter((i) => isAmmo(linked(i)));
-  if (!ammo.length) throw new ActionError(`${token.name} has no Ammo to fire with.`);
+  if (!ammo.length) return undefined;
   const item = itemId ? ammo.find((i) => i.id === itemId) : ammo[0];
   if (!item) throw new ActionError("That Ammo isn't in the inventory.");
   return { uid, items: sheet.inventory.items, item: linked(item) };
+}
+
+/** A Ranged Page fired without Ammo, kept in play under its own id (the card is unchanged). */
+function withoutAmmo(c: CombatState, page: Page): Page {
+  const id = `${page.id}~noammo`;
+  return (c.pages[id] ??= { ...asMeleeWithoutAmmo(page), id });
 }
 
 /**

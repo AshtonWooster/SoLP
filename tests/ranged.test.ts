@@ -100,6 +100,9 @@ test("each Page gets its Weapon's range for its type; Armor, other types and uns
   // A ranged weapon with Melee Pages too: both ranges.
   const both = withWeaponRanges({ weapons: [{ ...gun, meleeRange: 3 }] }, [bash, shot]);
   assert.deepEqual(both.map((p) => p.range), [3, 10]);
+  // The Ranged Page also carries the Melee range, for when it's fired without Ammo.
+  assert.deepEqual(both.map((p) => p.meleeRange), [undefined, 3]);
+  assert.equal(out[1].meleeRange, undefined, "no Melee range set: the default applies");
 });
 
 test("targets are picked by the Page's own Weapon Range", () => {
@@ -274,12 +277,7 @@ test("with the setting off, Ranged Pages fire with no Ammo and spend none", () =
   assert.equal(slotOf(s, "roland").ammo, undefined);
 });
 
-test("with the setting on, a Ranged Page needs Ammo and spends one of the stack the player picks", () => {
-  const none = setup([page("shot", "ranged", [die("pierce", 3)])], [], { ammo: true, items: [item("rope")] });
-  assert.throws(() => play(none, "shot", ["rat"]), /has no Ammo/);
-  assert.equal(none.c().slots.length, 0);
-  assert.equal(none.table.tokens.roland.resources.light, 5, "nothing was paid");
-
+test("with the setting on, a Ranged Page spends one of the Ammo stack the player picks", () => {
   const s = setup([page("shot", "ranged", [die("pierce", 3)]), page("swing", "melee", [die("slash", 3)])], [], {
     ammo: true,
     items: [item("rope"), item("bullets", { ammo: true, count: 3 }), item("slugs", { ammo: true, count: 1 })],
@@ -315,4 +313,49 @@ test("Ammo helpers and the item library keep the Ammo mark only on Items", () =>
   assert.equal(cleanTemplate({ name: "Bolts", kind: "item", ammo: true })?.ammo, true);
   assert.equal(cleanTemplate({ name: "Charm", kind: "trinket", ammo: true })?.ammo, undefined);
   assert.equal(cleanTemplate({ name: "Rock", kind: "item" })?.ammo, undefined);
+});
+
+// ---- No Ammo ----
+
+const d6 = (kind: DiceKind): Dice => ({ id: `d${n++}`, kind, counter: false, sides: 6, basePower: 0 });
+
+test("with no Ammo, a Ranged Page is used as a Melee Page and every die rolls with disadvantage", () => {
+  const s = setup([page("shot", "ranged", [d6("pierce"), d6("pierce")])], [], { ammo: true, items: [item("rope")] });
+  play(s, "shot", ["rat"]);
+  const slot = slotOf(s, "roland");
+  const used = s.c().pages[slot.pageId];
+  assert.equal(used.type, "melee");
+  assert.equal(used.noAmmo, true);
+  assert.equal(used.range, WEAPON_RANGE.melee);
+  assert.equal(s.c().pages.shot.type, "ranged", "the Page itself is unchanged");
+  assert.equal(slot.ammo, undefined);
+  assert.deepEqual(s.sheet.inventory.items.map((i) => i.id), ["rope"], "nothing is spent");
+  assert.ok(s.table.log.some((l) => l.includes("roland has no Ammo: shot is used as a Melee Page")));
+  endTurn(s, p1);
+  endTurn(s);
+  assert.equal(s.table.log.filter((l) => l.includes("roland rolls with disadvantage")).length, 2, "both dice");
+  assert.ok(s.hp("rat") < 30);
+  assert.equal(s.c().decks.roland.discard.at(-1)?.pageId, "shot", "the card goes to the discard pile as itself");
+});
+
+test("with no Ammo, the Page reaches only its Weapon's Melee range", () => {
+  const s = setup([page("shot", "ranged", [die("pierce", 3)])], [], { ammo: true });
+  s.table.tokens.rat.x = 6; // 4 tiles: in Ranged range, out of Melee range.
+  assert.throws(() => play(s, "shot", ["rat"]), /out of range/);
+  assert.equal(s.table.tokens.roland.resources.light, 5, "nothing was paid");
+  const far = setup([{ ...page("shot", "ranged", [die("pierce", 3)]), meleeRange: 4 }], [], { ammo: true });
+  far.table.tokens.rat.x = 6;
+  play(far, "shot", ["rat"]);
+  assert.equal(far.c().pages[slotOf(far, "roland").pageId].range, 4);
+});
+
+test("with Ammo, or with the setting off, nothing rolls with disadvantage", () => {
+  for (const opts of [{ ammo: true, items: [item("bullets", { ammo: true })] }, { ammo: false }]) {
+    const s = setup([page("shot", "ranged", [d6("pierce")])], [], opts);
+    play(s, "shot", ["rat"]);
+    assert.equal(s.c().pages[slotOf(s, "roland").pageId].type, "ranged");
+    endTurn(s, p1);
+    endTurn(s);
+    assert.ok(!s.table.log.some((l) => l.includes("disadvantage")));
+  }
 });
