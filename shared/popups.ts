@@ -1,7 +1,7 @@
 // Popups the GM sends to players: any mix of text, an image and a Story Roll prompt. Each goes to
 // every player or to the ones the GM picks. A player's phone shows the ones sent to them until they
-// close them; the GM screen lists them all, with who closed each and what they rolled. With the Game
-// setting "Rewards and costs in popups", a popup can also hand out or take items and Ahn (shared/rewards.ts).
+// close them; the GM screen lists them all, with who closed each and what they rolled. A popup can
+// also hand out or take items and Ahn (shared/rewards.ts).
 import { storyRoll, type EngineContext } from "./combat.ts";
 import { ActionError, type Actor } from "./core.ts";
 import { newId } from "./id.ts";
