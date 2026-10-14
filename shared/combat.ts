@@ -22,9 +22,7 @@ import {
 } from "./effects.ts";
 import { newId, rollDie } from "./id.ts";
 import {
-  DASH_LIGHT_COST,
   enemyDeck,
-  DASH_MOVEMENT,
   isMassAttack,
   isOffensive,
   moveCost,
@@ -83,8 +81,6 @@ export interface EngineContext {
   effectDef?(id: string): EffectDef | undefined;
   /** The Game setting "Effects wear off when combat ends" (shared/types.ts). */
   clearEffectsAfterCombat?(): boolean;
-  /** The Game setting "Rewards and costs in popups" (shared/types.ts). */
-  popupRewards?(): boolean;
   /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
   sheets?: SheetAccess;
 }
@@ -334,9 +330,13 @@ function recoverStagger(table: TableState, t: Token, amount: number) {
   const before = r.stagger;
   r.stagger = Math.min(r.maxStagger, r.stagger + amount);
   const wasStaggered = !!t.status?.staggered;
-  if (r.stagger > 0 && wasStaggered) t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
-  if (r.stagger > before) log(table, secret(t, "stagger", `  ${t.name} recovers ${r.stagger - before} Stagger Resist.`));
-  if (wasStaggered && !t.status?.staggered) trigger(table, "recovered", t);
+  if (r.stagger > 0 && wasStaggered) {
+    // Recovering from Stagger always brings Stagger Resist back to full, however little was recovered.
+    t.status = { ...t.status, staggered: false, staggerUpkeeps: 0 };
+    r.stagger = r.maxStagger;
+    log(table, `  ${t.name} recovers from Stagger${secret(t, "stagger", ` (${r.stagger}/${r.maxStagger})`)}; Resistances are back to normal.`);
+    trigger(table, "recovered", t);
+  } else if (r.stagger > before) log(table, secret(t, "stagger", `  ${t.name} recovers ${r.stagger - before} Stagger Resist.`));
 }
 
 /** Clash Win heals 1 Sanity, Clash Lose costs 1. Sanity runs from -max to +max; the minimum means Panic. */
@@ -1103,14 +1103,6 @@ export function storyRoll(table: TableState, actor: Actor, token: Token, stat: s
   return roll + value;
 }
 
-export function dash(table: TableState, actor: Actor) {
-  const token = actingToken(table, actor);
-  if (token.resources.light < DASH_LIGHT_COST) throw new ActionError(`Dashing costs ${DASH_LIGHT_COST} Light.`);
-  token.resources.light -= DASH_LIGHT_COST;
-  table.combat!.movementLeft += DASH_MOVEMENT;
-  log(table, `${token.name} Dashes: ${secret(token, "light", `-${DASH_LIGHT_COST} Light, `)}+${DASH_MOVEMENT} Movement.`);
-}
-
 /** The card being used from the hand, Auxiliary Deck or E.G.O. Pages. */
 function pageFor(table: TableState, token: Token, source: PageSource, cardId?: string): { page: Page; card: Card } {
   const c = table.combat!;
@@ -1265,25 +1257,4 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
     }
   }
   log(table, `${token.name} slots ${page.name} against ${names} (${cost} Light).`);
-}
-
-/**
- * Chance that die `a` beats, draws with, or loses to die `b` in one clash, from their Power ranges
- * alone (before Stats, Effects and Counter Dice). Used for the clash preview on phones.
- */
-export function clashOdds(a: Dice, b: Dice): { win: number; draw: number; lose: number } {
-  let win = 0;
-  let draw = 0;
-  const sa = Math.max(1, a.sides);
-  const sb = Math.max(1, b.sides);
-  for (let i = 1; i <= sa; i++) {
-    for (let j = 1; j <= sb; j++) {
-      const pa = Math.max(0, i + a.basePower);
-      const pb = Math.max(0, j + b.basePower);
-      if (pa > pb) win++;
-      else if (pa === pb) draw++;
-    }
-  }
-  const total = sa * sb;
-  return { win: win / total, draw: draw / total, lose: (total - win - draw) / total };
 }

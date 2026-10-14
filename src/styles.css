@@ -498,15 +498,12 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .car-letter { font-size: 1.85rem; line-height: 1; font-weight: 800; color: var(--accent); }
 .car-label { font-size: 0.85rem; color: var(--muted); }
 .slot-choice-head { margin: 4px 0 0; font-size: 0.95rem; }
-/* Clash preview: your dice on the left, theirs on the right, your chance to win each pair between. */
+/* Clash preview: your dice on the left, theirs on the right, how each pair meets between. */
 .clash-preview { width: 100%; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
 .cp-head, .cp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; }
 .cp-head span:last-child, .cp-die.theirs { text-align: right; justify-content: flex-end; }
 .cp-die { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .cp-odds { font-size: 0.8rem; font-weight: 700; text-align: center; min-width: 72px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); }
-.cp-odds.good { color: var(--ok); border-color: var(--ok); }
-.cp-odds.bad { color: var(--hp); border-color: var(--hp); }
-.cp-odds.even { color: var(--p-light); border-color: var(--p-light); }
 
 .nd-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 0.9rem; }
 .nd-table th { text-align: left; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); padding: 4px 6px; }

@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
-import { blankCharacter, linkInventory, DASH_LIGHT_COST, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
+import { blankCharacter, linkInventory, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import { partsNeedingApproval, proposeEdits, withProposals } from "../../shared/permissions.ts";
 import { type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
@@ -265,9 +265,6 @@ export function Play() {
           ))}
         </div>
         <div className="pt-actions">
-          <button type="button" disabled={!canAct || (r?.light ?? 0) < DASH_LIGHT_COST} onClick={() => void act({ type: "dash" })}>
-            Dash
-          </button>
           <button type="button" disabled={!mine} onClick={() => setOverlay("story")}>
             Story roll
           </button>
