@@ -10,6 +10,7 @@
 import type { Character, Dice, DiceKind, Page, Passive, Proficiency } from "./character.ts";
 import { newId, rollDie } from "./id.ts";
 import { secret } from "./secrets.ts";
+import { cleanIcon } from "./statusIcons.ts";
 import type { Side } from "./types.ts";
 
 // ---- The pieces ----
@@ -541,6 +542,8 @@ export interface EffectDef {
   holds?: string;
   /** Status effects: each character's stacks are kept apart, so rules can ask for "the ones I gave" (Marks). */
   bySource?: boolean;
+  /** Status effects: the picture on its icon (a download URL). Missing: a drawn glyph or its initials (shared/statusIcons.ts). */
+  icon?: string;
   /** Passives and Proficiencies: whoever has it can hold more (or fewer) stacks of this Effect (Triple-R Suit: up to 20 Charge). */
   cap?: { effectId: string; max: number };
   rules: Rule[];
@@ -878,6 +881,8 @@ export function cleanEffect(raw: unknown): EffectDef {
   if (kind === "status" && r.maxStacks != null && r.maxStacks !== ("" as unknown)) def.maxStacks = int(r.maxStacks, 1, MAX_STACKS, MAX_STACKS);
   if (kind === "status" && r.holds) def.holds = id80(r.holds);
   if (kind === "status" && r.bySource === true) def.bySource = true;
+  const icon = kind === "status" ? cleanIcon(r.icon) : undefined;
+  if (icon) def.icon = icon;
   if ((kind === "passive" || kind === "proficiency") && r.cap && typeof r.cap === "object" && r.cap.effectId) {
     def.cap = { effectId: id80(r.cap.effectId), max: int(r.cap.max, 1, MAX_STACKS, 20) };
   }

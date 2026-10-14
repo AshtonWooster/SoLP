@@ -13,7 +13,7 @@ export interface ImagePreset {
   fit: ImageFit;
 }
 
-export type ImageKind = "portrait" | "photo" | "art" | "gameCover" | "mapImage" | "mapBackground" | "popup";
+export type ImageKind = "portrait" | "photo" | "art" | "gameCover" | "mapImage" | "mapBackground" | "popup" | "statusIcon";
 
 export const IMAGE_PRESETS: Record<ImageKind, ImagePreset> = {
   // Enemy and NPC portraits: the 170px license photo, list icons and tokens on the board (which zoom).
@@ -30,6 +30,8 @@ export const IMAGE_PRESETS: Record<ImageKind, ImagePreset> = {
   mapBackground: { width: 4096, height: 4096, fit: "contain" },
   // Images in the GM's popups to players: shown whole, up to a phone's or a laptop's popup width.
   popup: { width: 1280, height: 1280, fit: "contain" },
+  // A status effect's icon: a square shown at most ~56px (the player's effects bar), kept sharp on phones.
+  statusIcon: { width: 160, height: 160, fit: "cover" },
 };
 
 /**
