@@ -141,7 +141,7 @@ function concealCombat(c: CombatState, tokens: Record<string, Token>): CombatSta
     ...c.slots.map((s) => s.pageId),
     ...Object.values(c.decks).flatMap((d) => [...d.discard, ...(d.auxUsed ?? []), ...(d.egoUsed ?? [])].map((x) => x.pageId)),
     ...Object.values(c.counters).flatMap((list) => list.map((x) => x.pageId)),
-    ...(c.fx ?? []).flatMap((f) => [f.pageA, f.pageB ?? ""]),
+    ...(c.fx ?? []).flatMap((f) => [f.pageA, f.pageB ?? "", ...Object.values(f.pages ?? {})]),
   ]);
   const secretPages = new Set<string>();
   for (const [id, t] of Object.entries(tokens)) {
@@ -185,6 +185,13 @@ export function tableForPlayers(full: TableState): TableState {
     log: table.log.map((l) => concealLine(l, hidden)).filter((l): l is string => l !== null),
   };
   if (table.combat) out.combat = concealCombat(table.combat, tokens);
+  // A Story Roll's bonus is the character's Justice: hidden when the log hides it.
+  const story = table.storyRoll;
+  if (story && hidden(story.tokenId, "justice")) {
+    const { bonus: _bonus, ...rest } = story;
+    if (tokens[story.tokenId]) out.storyRoll = rest;
+    else delete out.storyRoll;
+  }
   return out;
 }
 

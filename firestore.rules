@@ -29,6 +29,16 @@ service cloud.firestore {
     function playersMakeEffects(gameId) {
       return game(gameId).get("settings", {}).get("playersCreateEffects", false) == true;
     }
+    function proficienciesNeedApproval(gameId) {
+      return game(gameId).get("settings", {}).get("approveProficiencies", false) == true;
+    }
+    // With "Approve changes to the Proficiency tree" on, a player's Proficiency is pending.
+    function isProficiency(data) {
+      return data.get("kind", "") == "proficiency";
+    }
+    function pendingProficiency(data) {
+      return data.get("pending", false) == true && data.get("approved", false) == false;
+    }
     function unchanged(fields) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
@@ -182,16 +192,23 @@ service cloud.firestore {
       match /effects/{effectId} {
         allow read: if isMember(gameId);
         allow write: if isGm(gameId);
+        // With "Approve changes to the Proficiency tree" on, a player's new or changed Proficiency is
+        // pending (and not approved) until the GM approves it, and they can't delete an approved one.
         allow create: if isMember(gameId)
           && request.resource.data.createdBy == request.auth.uid
-          && (playersMakeEffects(gameId) || request.resource.data.get("approved", false) == false);
+          && (playersMakeEffects(gameId) || request.resource.data.get("approved", false) == false)
+          && (!proficienciesNeedApproval(gameId) || !isProficiency(request.resource.data) || pendingProficiency(request.resource.data));
         allow update: if isMember(gameId)
           && resource.data.get("createdBy", null) == request.auth.uid
           && request.resource.data.createdBy == request.auth.uid
-          && (playersMakeEffects(gameId) || request.resource.data.get("approved", false) == false);
+          && (playersMakeEffects(gameId) || request.resource.data.get("approved", false) == false)
+          && (!proficienciesNeedApproval(gameId)
+            || (!isProficiency(request.resource.data) && !isProficiency(resource.data))
+            || pendingProficiency(request.resource.data));
         allow delete: if isMember(gameId)
           && resource.data.get("createdBy", null) == request.auth.uid
-          && (playersMakeEffects(gameId) || resource.data.get("approved", false) == false);
+          && (playersMakeEffects(gameId) || resource.data.get("approved", false) == false)
+          && (!proficienciesNeedApproval(gameId) || !isProficiency(resource.data) || resource.data.get("pending", false) == true);
       }
 
       // The VFX library (shared/vfx.ts): looks the GM builds and plays on status effects. Everyone in

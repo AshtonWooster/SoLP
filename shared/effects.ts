@@ -551,6 +551,20 @@ export interface EffectDef {
   createdBy?: string;
   /** Set by the GM on a player's effect; until then it does nothing at the table. */
   approved?: boolean;
+  /**
+   * Proficiencies: other Proficiencies (library ids) a character must have before picking this one,
+   * which makes the Proficiency tree (shared/proficiencies.ts).
+   */
+  requires?: string[];
+  /** Proficiencies: the lowest Primary and Secondary Stats (by key) a character needs to pick it. */
+  minStats?: Record<string, number>;
+  /** Proficiencies: a Page it adds to its owner's Auxiliary Deck. */
+  page?: Page;
+  /**
+   * Proficiencies: a player's new or changed one waiting for the GM's approval, when the Game setting
+   * "Approve changes to the Proficiency tree" is on. Nobody can pick it until the GM approves it.
+   */
+  pending?: boolean;
   updatedAt?: number;
 }
 
@@ -629,7 +643,7 @@ export const isPreset = (id: string) => id.startsWith("preset:");
 
 /** Whether an effect does anything at the table: the GM's always do; a player's once approved. */
 export function isLive(def: EffectDef | undefined): def is EffectDef {
-  return !!def && (!def.createdBy || def.approved === true);
+  return !!def && (!def.createdBy || (def.approved === true && def.pending !== true));
 }
 
 /** The built-in effects plus a game's own, by id. */
@@ -717,7 +731,7 @@ export function blankEffect(kind: EffectKind = "status"): EffectDef {
 
 /** A copy of an effect to change, e.g. a variant of a built-in one. */
 export function copyEffect(def: EffectDef, name = def.name): EffectDef {
-  const { createdBy: _c, approved: _a, updatedAt: _u, ...rest } = structuredClone(def);
+  const { createdBy: _c, approved: _a, pending: _p, updatedAt: _u, ...rest } = structuredClone(def);
   return { ...rest, name, rules: rest.rules.map((r) => ({ ...r, id: newId() })) };
 }
 
@@ -868,6 +882,39 @@ function withoutEmotion(rule: unknown): unknown {
   return { ...r, checks: checks.filter((c) => !isEmotion(c)), actions: Array.isArray(r.actions) ? r.actions.filter((a) => !isEmotion(a)) : r.actions };
 }
 
+/** A Proficiency can ask for up to this many other Proficiencies first. */
+export const MAX_REQUIRES = 4;
+const DICE_KINDS: DiceKind[] = ["slash", "pierce", "blunt", "block", "evade"];
+const PAGE_TYPES = ["melee", "ranged", "massSummation", "massIndividual", "instant"] as const;
+
+/** A Page as a Proficiency may carry it: known pieces only, and limits on size. */
+export function cleanPage(raw: unknown): Page | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Partial<Page>;
+  const page: Page = {
+    id: String(r.id || newId()).slice(0, 40),
+    name: String(r.name ?? "").slice(0, 60),
+    kind: r.kind === "special" ? "special" : "basic",
+    cost: int(r.cost, 0, 10, 0),
+    type: PAGE_TYPES.includes(r.type as Page["type"]) ? (r.type as Page["type"]) : "instant",
+    dice: (Array.isArray(r.dice) ? r.dice : []).slice(0, 6).map((d) => {
+      const die: Dice = {
+        id: String(d?.id || newId()).slice(0, 40),
+        kind: DICE_KINDS.includes(d?.kind) ? d.kind : "slash",
+        counter: d?.counter === true,
+        sides: int(d?.sides, 1, 100, 4),
+        basePower: int(d?.basePower, -20, 20, 0),
+      };
+      if (d?.effect) die.effect = String(d.effect).slice(0, 300);
+      if (Array.isArray(d?.effectIds) && d.effectIds.length) die.effectIds = d.effectIds.slice(0, 3).map((x: unknown) => id80(x));
+      return die;
+    }),
+    effect: String(r.effect ?? "").slice(0, 1000),
+  };
+  if (typeof r.image === "string" && r.image.startsWith("https://")) page.image = r.image.slice(0, 2048);
+  return page;
+}
+
 /** An effect as it may be saved: only known pieces, sensible numbers, and limits on size. */
 export function cleanEffect(raw: unknown): EffectDef {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<EffectDef>;
@@ -899,8 +946,21 @@ export function cleanEffect(raw: unknown): EffectDef {
   if ((kind === "passive" || kind === "proficiency") && r.cap && typeof r.cap === "object" && r.cap.effectId) {
     def.cap = { effectId: id80(r.cap.effectId), max: int(r.cap.max, 1, MAX_STACKS, 20) };
   }
+  if (kind === "proficiency") {
+    const requires = [...new Set((Array.isArray(r.requires) ? r.requires : []).map((x) => id80(x)).filter(Boolean))].slice(0, MAX_REQUIRES);
+    if (requires.length) def.requires = requires;
+    const stats = Object.entries(r.minStats && typeof r.minStats === "object" ? r.minStats : {})
+      .filter(([k]) => /^[a-z]{1,30}$/.test(k))
+      .map(([k, v]) => [k, int(v, 0, 99, 0)] as const)
+      .filter(([, v]) => v > 0)
+      .slice(0, 12);
+    if (stats.length) def.minStats = Object.fromEntries(stats);
+    const page = cleanPage(r.page);
+    if (page) def.page = page;
+    if (r.createdBy && r.pending === true) def.pending = true;
+  }
   if (r.createdBy) def.createdBy = String(r.createdBy);
-  if (r.createdBy && r.approved === true) def.approved = true;
+  if (r.createdBy && r.approved === true && !def.pending) def.approved = true;
   if (r.updatedAt) def.updatedAt = Number(r.updatedAt) || 0;
   return def;
 }
