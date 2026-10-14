@@ -1544,7 +1544,21 @@ select.piece.add { color: #6fb4ff; }
 .popup-sent-item .row-between { flex-wrap: nowrap; gap: 8px; }
 .popup-sent-item .row-between button { flex: none; white-space: nowrap; }
 .popup-sent-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deal-kind { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.deal-kind label, .deal-when label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.deal-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.deal-row .field:first-child { flex: 1 1 160px; }
+.deal-num input, .deal-when input[type="number"], .ahn-field { width: 6rem; }
+.deal-when { display: flex; flex-direction: column; gap: 6px; }
+.party-ahn { display: flex; flex-direction: column; gap: 6px; }
+.party-ahn li { flex-wrap: nowrap; gap: 8px; }
+.party-ahn .ahn-field { text-align: right; flex: none; }
 .gm-popup { display: flex; flex-direction: column; gap: 12px; }
+.gm-popup-deal { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.gm-popup-deal.cost { border-color: color-mix(in srgb, var(--hp) 50%, var(--line)); background: color-mix(in srgb, var(--hp) 8%, var(--panel)); }
+.gm-popup-deal > strong { color: var(--accent); }
+.gm-popup-deal.cost > strong { color: var(--hp); }
+.gm-popup-deal p { margin: 0; }
 .gm-popup-image { display: block; max-width: 100%; max-height: 60vh; margin: 0 auto; border-radius: 8px; object-fit: contain; }
 .gm-popup-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 .gm-popup-roll { display: flex; flex-direction: column; gap: 6px; }

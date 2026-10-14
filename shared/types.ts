@@ -90,6 +90,12 @@ export interface GameSettings {
    */
   statusVfx?: boolean;
   /**
+   * The GM's popups can hand out or take away items and Ahn: right away, on a Story Roll, or for a
+   * price in Ahn the player pays (shared/rewards.ts). The Popups menu also lists each player's Ahn
+   * to edit. Off unless the GM turns it on: then popups are text, images and Story Rolls only.
+   */
+  popupRewards?: boolean;
+  /**
    * How Rank and Stats set max Health, Stagger Resist, Sanity and Light (shared/formulas.ts). New
    * games start with the standard formulas; a game from before formulas has none saved and keeps
    * its old numbers until the GM changes them.
@@ -116,6 +122,10 @@ export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {
 
 export function emotionLevelsOn(game: GameDoc | undefined): boolean {
   return game?.settings?.emotionLevels === true;
+}
+
+export function popupRewardsOn(game: GameDoc | undefined): boolean {
+  return game?.settings?.popupRewards === true;
 }
 
 export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: string; fields: string[] }[] = [
@@ -530,7 +540,37 @@ export interface GmPopup {
   closedBy?: string[];
   /** Each player's Story Roll total, by user id. */
   rolls?: Record<string, number>;
+  /** An item and/or Ahn it hands out or takes away (shared/rewards.ts). */
+  deal?: PopupDeal;
+  /** How the deal turned out for each player, by user id. */
+  outcomes?: Record<string, DealOutcome>;
 }
+
+/**
+ * Items and Ahn a GM popup hands out (a reward) or takes away (a cost), and when: right away when
+ * it's sent, on a Story Roll of at least `need`, or when the player pays `price` Ahn (rewards only).
+ * On a roll a reward is gained on a success; a cost is lost on a failure.
+ */
+export interface PopupDeal {
+  kind: "reward" | "cost";
+  /** An item from the GM's item library, with its name as sent (the library item may change later). */
+  itemId?: string;
+  itemName?: string;
+  /** How many of the item. */
+  count?: number;
+  /** Ahn gained (a reward) or lost (a cost). */
+  ahn?: number;
+  when: "now" | "roll" | "buy";
+  need?: number;
+  price?: number;
+}
+
+/**
+ * gained: got the reward (or bought it). missed: failed the roll for a reward. lost: lost the cost.
+ * kept: passed the roll and kept it. full: no free Slot for the item. none: had none of the cost to
+ * lose. nosheet: has no character sheet.
+ */
+export type DealOutcome = "gained" | "missed" | "lost" | "kept" | "full" | "none" | "nosheet";
 
 /** What a player's screen gets of a popup sent to them: nothing about anyone else. */
 export interface PlayerPopup {
@@ -541,6 +581,9 @@ export interface PlayerPopup {
   roll?: { stat: string };
   /** Their own Story Roll total, once they've rolled. */
   rolled?: number;
+  deal?: PopupDeal;
+  /** How the deal turned out for them, once it's settled. */
+  outcome?: DealOutcome;
 }
 
 /** What a placed copy of a GM-made character starts with (worked out by npcSpawnData in shared/ruleset.ts). */
@@ -644,13 +687,17 @@ export type TableAction =
   | { type: "storyRoll"; tokenId: string; stat: string }
   // GM popups (shared/popups.ts).
   /** GM: show players a popup. `to` missing or empty: every player. */
-  | { type: "sendPopup"; id?: string; title?: string; text?: string; image?: string; roll?: { stat: string }; to?: string[] }
+  | { type: "sendPopup"; id?: string; title?: string; text?: string; image?: string; roll?: { stat: string }; to?: string[]; deal?: PopupDeal }
   /** GM: take a popup down from every screen. */
   | { type: "removePopup"; popupId: string }
   /** A player closes a popup sent to them. */
   | { type: "closePopup"; popupId: string }
   /** A player makes the Story Roll a popup asks for. `stat`: their pick, when the popup lets them choose. */
   | { type: "popupRoll"; popupId: string; stat?: string }
+  /** A player pays the Ahn a popup asks for its reward. */
+  | { type: "popupBuy"; popupId: string }
+  /** GM: set a player's Ahn (Game setting "Rewards and costs in popups"). */
+  | { type: "setAhn"; uid: string; ahn: number }
   | { type: "setEffects"; tokenId: string; effects: Effect[] }
   /** Pick a Page to use, so the board can show its valid targets. */
   | { type: "aim"; source: PageSource; cardId?: string; pageId?: string; die?: number }

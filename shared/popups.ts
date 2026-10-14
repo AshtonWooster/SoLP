@@ -1,9 +1,11 @@
 // Popups the GM sends to players: any mix of text, an image and a Story Roll prompt. Each goes to
 // every player or to the ones the GM picks. A player's phone shows the ones sent to them until they
-// close them; the GM screen lists them all, with who closed each and what they rolled.
+// close them; the GM screen lists them all, with who closed each and what they rolled. With the Game
+// setting "Rewards and costs in popups", a popup can also hand out or take items and Ahn (shared/rewards.ts).
 import { storyRoll, type EngineContext } from "./combat.ts";
 import { ActionError, type Actor } from "./core.ts";
 import { newId } from "./id.ts";
+import { buyDeal, cleanDeal, dealRecipients, settleDeal, settleOnSend } from "./rewards.ts";
 import { PRIMARY_STATS, SECONDARY_STATS } from "./ruleset.ts";
 import type { GmPopup, PlayerPopup, TableAction, TableState } from "./types.ts";
 
@@ -37,24 +39,30 @@ export function popupsFor(table: TableState, uid: string): PlayerPopup[] {
       ...(p.image ? { image: p.image } : {}),
       ...(p.roll ? { roll: { stat: p.roll.stat } } : {}),
       ...(p.rolls?.[uid] !== undefined ? { rolled: p.rolls[uid] } : {}),
+      ...(p.deal ? { deal: { ...p.deal } } : {}),
+      ...(p.outcomes?.[uid] ? { outcome: p.outcomes[uid] } : {}),
     }));
 }
 
-/** A popup worth sending: it says or shows something, or asks for a roll. */
-function cleanPopup(action: Extract<TableAction, { type: "sendPopup" }>): GmPopup {
+/** A popup worth sending: it says or shows something, asks for a roll, or hands out or takes something. */
+function cleanPopup(action: Extract<TableAction, { type: "sendPopup" }>, ctx?: EngineContext): GmPopup {
   const title = String(action.title ?? "").trim().slice(0, POPUP_TITLE_MAX);
   const text = String(action.text ?? "").trim().slice(0, POPUP_TEXT_MAX);
   const image = typeof action.image === "string" && /^https?:\/\//.test(action.image) ? action.image.slice(0, 2000) : "";
   const stat = action.roll ? String(action.roll.stat ?? "").toLowerCase() : "";
   if (stat && stat !== ANY_STAT && !POPUP_STATS.some((s) => s.key === stat)) throw new ActionError("Pick a Stat for the Story Roll.");
-  if (!title && !text && !image && !stat) throw new ActionError("Add some text, an image or a Story Roll first.");
-  const to = [...new Set((Array.isArray(action.to) ? action.to : []).map(String).filter(Boolean))].slice(0, 50);
+  const deal = action.deal ? cleanDeal(action.deal, !!stat, ctx) : undefined;
+  if (!title && !text && !image && !stat && !deal) throw new ActionError("Add some text, an image or a Story Roll first.");
+  let to = [...new Set((Array.isArray(action.to) ? action.to : []).map(String).filter(Boolean))].slice(0, 50);
+  // A deal goes to the players there now, so one who joins later doesn't get (or pay for) it.
+  if (deal) to = dealRecipients(to, ctx).slice(0, 50);
   return {
     id: String(action.id || newId()).slice(0, 80),
     ...(title ? { title } : {}),
     ...(text ? { text } : {}),
     ...(image ? { image } : {}),
     ...(stat ? { roll: { stat } } : {}),
+    ...(deal ? { deal } : {}),
     ...(to.length ? { to } : {}),
     sentAt: Date.now(),
   };
@@ -67,8 +75,9 @@ function find(table: TableState, popupId: unknown): GmPopup {
 }
 
 /** The GM shows players a popup. */
-export function sendPopup(table: TableState, action: Extract<TableAction, { type: "sendPopup" }>): GmPopup {
-  const popup = cleanPopup(action);
+export function sendPopup(table: TableState, action: Extract<TableAction, { type: "sendPopup" }>, ctx?: EngineContext): GmPopup {
+  const popup = cleanPopup(action, ctx);
+  settleOnSend(popup, ctx);
   const list = (table.popups ?? []).filter((p) => p.id !== popup.id);
   list.push(popup);
   table.popups = list.slice(-MAX_POPUPS);
@@ -104,5 +113,13 @@ export function popupRoll(table: TableState, actor: Actor, popupId: unknown, cho
   if (!token) throw new ActionError("You need a token on the table to roll.");
   const total = storyRoll(table, actor, token, stat, ctx);
   p.rolls = { ...p.rolls, [actor.uid]: total };
+  if (p.deal?.when === "roll") settleDeal(p, actor.uid, total >= (p.deal.need ?? 0), ctx);
   return total;
+}
+
+/** A player pays a popup's price in Ahn for its reward. */
+export function popupBuy(table: TableState, actor: Actor, popupId: unknown, ctx?: EngineContext): void {
+  const p = find(table, popupId);
+  if (!popupIsFor(p, actor.uid)) throw new ActionError("That popup isn't for you.");
+  buyDeal(p, actor, ctx);
 }

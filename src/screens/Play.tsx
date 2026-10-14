@@ -492,6 +492,8 @@ export function Play() {
           stats={Object.fromEntries(stats.map((s) => [s.key, s.v]))}
           canRoll={!!mine}
           onRoll={(stat) => void act({ type: "popupRoll", popupId: gmPopups[0].id, stat })}
+          onBuy={() => void act({ type: "popupBuy", popupId: gmPopups[0].id })}
+          ahn={characterDoc.data?.ahn ?? 0}
           onClose={() => {
             const popupId = gmPopups[0].id;
             setClosedPopups((x) => [...x, popupId]);

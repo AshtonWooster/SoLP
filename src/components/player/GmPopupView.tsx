@@ -1,12 +1,32 @@
 import { ANY_STAT, POPUP_STATS, statLabel } from "../../../shared/popups.ts";
+import { dealSummary } from "../../../shared/rewards.ts";
 import { STORY_DIE } from "../../../shared/ruleset.ts";
-import type { PlayerPopup } from "../../../shared/types.ts";
+import type { DealOutcome, PlayerPopup, PopupDeal } from "../../../shared/types.ts";
 import { AnyStatIcon } from "../LorIcons.tsx";
 import { Overlay } from "./Overlay.tsx";
 import { StableLabel } from "../StableLabel.tsx";
 
+/** What the player reads about a deal before it's settled. */
+function dealAsk(d: PopupDeal): string {
+  const what = dealSummary(d);
+  if (d.kind === "cost") {
+    return d.when === "roll" ? `Roll ${d.need} or more to keep it, or you lose ${what}.` : `You lose ${what}.`;
+  }
+  return d.when === "roll" ? `Roll ${d.need} or more to get ${what}.` : d.when === "buy" ? `For sale: ${what}.` : `You get ${what}.`;
+}
+
+const OUTCOME_TEXT: Record<DealOutcome, (what: string) => string> = {
+  gained: (w) => `You got ${w}. It's on your character sheet.`,
+  missed: (w) => `Not this time: no ${w}.`,
+  lost: (w) => `You lost ${w}.`,
+  kept: () => "You kept it.",
+  full: (w) => `Your inventory was full, so you got only the Ahn, not all of ${w}.`,
+  none: () => "You had none of it to lose.",
+  nosheet: () => "Make a character to receive items and Ahn.",
+};
+
 /**
- * A popup the GM sent this player: any mix of text, an image and a Story Roll prompt. The roll goes
+ * A popup the GM sent this player: any mix of text, an image, a Story Roll prompt and a reward or cost. The roll goes
  * in the table log like any Story Roll; closing it hides it for good on this player's screens.
  */
 export function GmPopupView({
@@ -15,6 +35,8 @@ export function GmPopupView({
   stats,
   canRoll,
   onRoll,
+  onBuy,
+  ahn,
   onClose,
 }: {
   popup: PlayerPopup;
@@ -25,9 +47,15 @@ export function GmPopupView({
   /** False until the player has a token on the table. */
   canRoll: boolean;
   onRoll: (stat?: string) => void;
+  /** Pays the popup's price for its reward. */
+  onBuy: () => void;
+  /** The player's Ahn, for a popup selling something. */
+  ahn: number;
   onClose: () => void;
 }) {
   const roll = popup.roll;
+  const deal = popup.deal;
+  const buying = deal?.when === "buy" && !popup.outcome;
   const bonus = (key: string) => {
     const v = stats[key] ?? 0;
     return `${v >= 0 ? "+" : ""}${v}`;
@@ -37,6 +65,20 @@ export function GmPopupView({
       <div className="gm-popup">
         {popup.image && <img className="gm-popup-image" src={popup.image} alt="" />}
         {popup.text && <p className="gm-popup-text">{popup.text}</p>}
+        {deal && (
+          <div className={`gm-popup-deal ${deal.kind}`}>
+            <strong>{deal.kind === "cost" ? "Cost" : "Reward"}</strong>
+            <p>{popup.outcome ? OUTCOME_TEXT[popup.outcome](dealSummary(deal)) : dealAsk(deal)}</p>
+            {buying && (
+              <>
+                <button type="button" className="big-button" disabled={ahn < (deal.price ?? 0)} onClick={onBuy}>
+                  Buy for {deal.price} Ahn
+                </button>
+                <p className="muted small">You have {ahn} Ahn.</p>
+              </>
+            )}
+          </div>
+        )}
         {roll && (
           <div className="gm-popup-roll">
             {popup.rolled !== undefined ? (
@@ -68,7 +110,10 @@ export function GmPopupView({
         <div className="row-between">
           <span className="muted small">{more > 0 ? `${more} more from your GM` : ""}</span>
           <button type="button" onClick={onClose}>
-            <StableLabel labels={roll ? ["Close", "Next", "Close without rolling"] : ["Close", "Next"]} show={roll && popup.rolled === undefined ? 2 : more > 0 ? 1 : 0} />
+            <StableLabel
+              labels={roll ? ["Close", "Next", "Close without rolling"] : buying ? ["Close", "Next", "No thanks"] : ["Close", "Next"]}
+              show={(roll && popup.rolled === undefined) || buying ? 2 : more > 0 ? 1 : 0}
+            />
           </button>
         </div>
       </div>

@@ -42,7 +42,8 @@ import {
   updateMapItem,
 } from "./maps.ts";
 import { newId } from "./id.ts";
-import { closePopup, popupRoll, removePopup, sendPopup } from "./popups.ts";
+import { closePopup, popupBuy, popupRoll, removePopup, sendPopup } from "./popups.ts";
+import { setAhn } from "./rewards.ts";
 import { createMapFolder, deleteMapFolder, renameMapFolder, setMapFolder } from "./mapFolders.ts";
 import { moveCost } from "./ruleset.ts";
 import { cleanSecrets } from "./secrets.ts";
@@ -484,7 +485,7 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
     // Nothing in the log: the log is shared, and a popup may be meant for some players only.
     case "sendPopup":
       gmOnly();
-      sendPopup(table, action);
+      sendPopup(table, action, ctx);
       return true;
     case "removePopup":
       gmOnly();
@@ -496,6 +497,15 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       if (isGm) throw new ActionError("Players roll for their own popups.");
       popupRoll(table, actor, action.popupId, action.stat, ctx);
       return true;
+    case "popupBuy":
+      if (isGm) throw new ActionError("Players buy from their own popups.");
+      popupBuy(table, actor, action.popupId, ctx);
+      return true;
+    // Ahn lives on the character sheet, not the table: nothing here changes.
+    case "setAhn":
+      gmOnly();
+      setAhn(action.uid, action.ahn, ctx);
+      return false;
     case "setEffects": {
       gmOnly();
       const token = tokenOf(action.tokenId);

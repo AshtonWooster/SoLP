@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import type { GameDoc, GmMeta, TableAction, TableState, Token } from "../../shared/types.ts";
+import { popupRewardsOn, type GameDoc, type GmMeta, type TableAction, type TableState, type Token } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc, useStatFormulas } from "../api.ts";
 import { activeToken } from "../../shared/engine.ts";
 import { aimTargets, Grid } from "../components/Grid.tsx";
@@ -9,7 +9,7 @@ import { useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
 import type { SpeedStep } from "../components/speedRoll.ts";
 import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { isMassAttack, normalizeNpc, NPC_SIDES, npcSpawnData } from "../../shared/ruleset.ts";
-import type { Character, NpcTemplate } from "../../shared/character.ts";
+import type { Character, ItemTemplate, NpcTemplate } from "../../shared/character.ts";
 import { playerList } from "../../shared/players.ts";
 import { tokenGear } from "../../shared/tokenPreview.ts";
 import { PlayerPreview } from "../components/PlayerPreview.tsx";
@@ -62,6 +62,9 @@ export function Gm() {
   // Player characters (for the player list and their tokens' gear) and the GM's own characters.
   const characters = useCollection<Character>(isGm ? `games/${id}/characters` : null);
   const templates = useCollection<NpcTemplate>(isGm ? `games/${id}/enemies` : null);
+  // The item library, for popups that hand out or take items: read only once the GM turns that on.
+  const rewardsOn = popupRewardsOn(game.data);
+  const itemLibrary = useCollection<ItemTemplate>(isGm && rewardsOn ? `games/${id}/items` : null);
   const formulas = useStatFormulas(id);
   // A GM character picked from the Characters menu, waiting for the GM to click a tile for it.
   const [placing, setPlacing] = useState<{ templateId: string; template: NpcTemplate } | null>(null);
@@ -257,7 +260,17 @@ export function Gm() {
               }
               wide
             >
-              {() => <GmPopups gameId={id} table={table} players={players} act={act} draft={popupDraft} setDraft={setPopupDraft} />}
+              {() => (
+                <GmPopups
+                  gameId={id}
+                  table={table}
+                  players={players}
+                  act={act}
+                  draft={popupDraft}
+                  setDraft={setPopupDraft}
+                  rewards={rewardsOn ? { library: itemLibrary, characters } : undefined}
+                />
+              )}
             </ToolbarMenu>
             {/* Stays put during combat (greyed out), so the fog tools beside it don't jump. */}
             <ToolbarMenu
