@@ -1,4 +1,4 @@
-// Rewards and costs in GM popups (Game setting "Rewards and costs in popups"): a popup can hand out
+// Rewards and costs in GM popups: a popup can hand out
 // or take away an item from the GM's item library and/or Ahn. It settles right away when sent, on
 // the popup's Story Roll (a reward is gained on a roll of at least `need`; a cost is lost below it),
 // or, for a reward, when the player pays its price in Ahn. The host keeps players' sheets, so it
@@ -43,14 +43,14 @@ export function dealSummary(deal: PopupDeal): string {
   return [item, deal.ahn ? `${deal.ahn} Ahn` : ""].filter(Boolean).join(" and ");
 }
 
-function rewardsOn(ctx: EngineContext | undefined): SheetAccess {
-  if (!ctx?.popupRewards?.() || !ctx.sheets) throw new ActionError("Turn on Rewards and costs in popups in Game settings first.");
+function sheetsOf(ctx: EngineContext | undefined): SheetAccess {
+  if (!ctx?.sheets) throw new ActionError("Players' sheets aren't loaded yet.");
   return ctx.sheets;
 }
 
 /** Checks a deal the GM is sending: a real item and/or some Ahn, and a roll or price that makes sense. */
 export function cleanDeal(deal: PopupDeal, hasRoll: boolean, ctx: EngineContext | undefined): PopupDeal {
-  const sheets = rewardsOn(ctx);
+  const sheets = sheetsOf(ctx);
   const kind = deal.kind === "cost" ? "cost" : "reward";
   const itemId = deal.itemId ? String(deal.itemId) : "";
   const item = itemId ? sheets.item(itemId) : undefined;
@@ -100,7 +100,7 @@ function withoutItems(items: InventoryItem[], templateId: string, count: number)
  */
 export function settleDeal(popup: GmPopup, uid: string, success: boolean, ctx: EngineContext | undefined): DealOutcome {
   const deal = popup.deal!;
-  const sheets = rewardsOn(ctx);
+  const sheets = sheetsOf(ctx);
   const outcome = settle(sheets, deal, uid, success);
   popup.outcomes = { ...popup.outcomes, [uid]: outcome };
   return outcome;
@@ -141,7 +141,7 @@ export function settleOnSend(popup: GmPopup, ctx: EngineContext | undefined) {
 
 /** The players a deal goes to: the ones the GM picked, or every player in the game now (not ones who join later). */
 export function dealRecipients(to: string[] | undefined, ctx: EngineContext | undefined): string[] {
-  return to?.length ? to : rewardsOn(ctx).players();
+  return to?.length ? to : sheetsOf(ctx).players();
 }
 
 /** A player pays a popup's price in Ahn and gets its reward. */
@@ -149,7 +149,7 @@ export function buyDeal(popup: GmPopup, actor: Actor, ctx: EngineContext | undef
   const deal = popup.deal;
   if (deal?.when !== "buy") throw new ActionError("That popup isn't selling anything.");
   if (popup.outcomes?.[actor.uid]) throw new ActionError("You've already bought this.");
-  const sheets = rewardsOn(ctx);
+  const sheets = sheetsOf(ctx);
   const sheet = sheets.sheet(actor.uid);
   if (!sheet) throw new ActionError("Make a character first.");
   const price = deal.price ?? 0;
@@ -167,7 +167,7 @@ export function buyDeal(popup: GmPopup, actor: Actor, ctx: EngineContext | undef
 
 /** The GM sets a player's Ahn. */
 export function setAhn(uid: unknown, ahn: unknown, ctx: EngineContext | undefined): boolean {
-  const sheets = rewardsOn(ctx);
+  const sheets = sheetsOf(ctx);
   const id = String(uid ?? "");
   const sheet = sheets.sheet(id);
   if (!sheet) throw new ActionError("That player has no character yet.");

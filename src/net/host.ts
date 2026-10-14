@@ -30,7 +30,7 @@ import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
 import { popupsFor } from "../../shared/popups.ts";
 import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
-import { effectsClearAfterCombat, emotionLevelsOn, popupRewardsOn } from "../../shared/types.ts";
+import { effectsClearAfterCombat, emotionLevelsOn } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
 import { clearLog, logClearedAt, logClearRequested } from "../../shared/clearLog.ts";
 import { autosaveWrites, loadedNotes, type LastSaved } from "../../shared/autosave.ts";
@@ -361,7 +361,6 @@ export class Host {
     effectDef: (id: string) => this.effects[id],
     clearEffectsAfterCombat: () => effectsClearAfterCombat(this.game),
     emotionLevels: () => emotionLevelsOn(this.game),
-    popupRewards: () => popupRewardsOn(this.game),
     // Popups that hand out or take items and Ahn read and save players' sheets here.
     sheets: {
       players: () => Object.entries(this.game.members).filter(([, m]) => m.role === "player").map(([uid]) => uid),

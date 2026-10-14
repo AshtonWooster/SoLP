@@ -87,8 +87,6 @@ export interface EngineContext {
   clearEffectsAfterCombat?(): boolean;
   /** The Game setting "Emotion Levels" (shared/types.ts). */
   emotionLevels?(): boolean;
-  /** The Game setting "Rewards and costs in popups" (shared/types.ts). */
-  popupRewards?(): boolean;
   /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
   sheets?: SheetAccess;
 }
