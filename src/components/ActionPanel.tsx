@@ -1,6 +1,6 @@
 import type { Page } from "../../shared/character.ts";
 import { pinnedBy, validTargets } from "../../shared/engine.ts";
-import { isMassAttack } from "../../shared/ruleset.ts";
+import { isMassAttack, pageRange } from "../../shared/ruleset.ts";
 import type { Card, PageSource, TableAction, TableState, Token } from "../../shared/types.ts";
 import { PageSummary } from "./PageSummary.tsx";
 
@@ -119,7 +119,7 @@ export function ActionPanel({ table, token, canAct, send }: Props) {
           </strong>
           <span className="muted small">Tap one here, or tap a lit token on the board.</span>
           <div className="row wrap">
-            {targets.length === 0 && <span className="muted small">No one in range ({aimedPage.type}).</span>}
+            {targets.length === 0 && <span className="muted small">No one in range ({aimedPage.type}, {pageRange(aimedPage)} tiles).</span>}
             {targets.map((t) => (
               <button
                 key={t.id}
@@ -153,6 +153,8 @@ export function ActionPanel({ table, token, canAct, send }: Props) {
               <li key={s.id}>
                 <strong>{c.pages[s.pageId]?.name}</strong> → {s.targets.map((t) => table.tokens[t.tokenId]?.name).join(", ")}
                 {s.clashWith && <span className="clash-tag">Clash</span>}
+                {s.cover && <span className="clash-tag cover-tag">{s.cover === "full" ? "Full Cover" : "Partial Cover"}</span>}
+                {s.ammo && <span className="muted small"> · {s.ammo}</span>}
               </li>
             ))}
           </ul>

@@ -91,6 +91,11 @@ export interface GameSettings {
    */
   clearEffectsAfterCombat?: boolean;
   /**
+   * Firing a player's Ranged Page spends one Ammo from their inventory, picked when they use it, and
+   * they can't fire without any. Off unless the GM turns it on: then Ranged Pages need no Ammo.
+   */
+  rangedAmmo?: boolean;
+  /**
    * Status Effects play the VFX the GM built for them in the VFX editor (shared/vfx.ts) on the map.
    * Off unless the GM turns it on: then the map looks as it always did and loads no VFX.
    */
@@ -122,6 +127,10 @@ export function proficienciesNeedApproval(game: GameDoc | undefined): boolean {
 
 export function playersCanStoryRoll(game: GameDoc | undefined): boolean {
   return game?.settings?.playerStoryRolls !== false;
+}
+
+export function rangedPagesUseAmmo(game: GameDoc | undefined): boolean {
+  return game?.settings?.rangedAmmo === true;
 }
 
 export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {
@@ -334,7 +343,17 @@ export interface SlottedPage {
   clashWith?: string;
   /** Which of its owner's Pages this round it was (1: the first), for "the first Page I use" effects. */
   nth?: number;
+  /**
+   * Set by the GM on a Ranged Page: its target is in Cover. Partial: its dice get Final Power - 2.
+   * Full: its owner fires it right away or holds fire, which Negates it.
+   */
+  cover?: Cover;
+  /** The Ammo it was fired with, by name, when the Game setting "Ranged Pages use Ammo" is on. */
+  ammo?: string;
 }
+
+/** How much Cover the target of a Ranged Page is in (ruleset, "Cover"). */
+export type Cover = "partial" | "full";
 
 /** A Counter Die waiting on a character, used automatically against One-Sided attacks. */
 export interface CounterDie {
@@ -742,8 +761,13 @@ export type TableAction =
    * Pay the Light and slot the aimed Page against the given targets (or the ones picked while aiming).
    * `targetDie` picks which of a single target's Speed Dice to clash with (the first by default);
    * `unopposed` slots it as a One-Sided attack that doesn't clash with the Page on that die.
+   * `ammo` is the inventory item a player's Ranged Page spends (Game setting "Ranged Pages use Ammo").
    */
-  | { type: "slot"; targets?: string[]; targetDie?: number; unopposed?: boolean };
+  | { type: "slot"; targets?: string[]; targetDie?: number; unopposed?: boolean; ammo?: string }
+  /** The GM marks the target of a slotted Ranged Page as in Partial or Full Cover, or out of it. */
+  | { type: "setCover"; slotId: string; cover: Cover | null }
+  /** A Ranged Page whose target is in Full Cover: fire it now, or hold fire (it's Negated). */
+  | { type: "coverChoice"; slotId: string; fire: boolean };
 
 /** Which screen a connecting device is: a player's phone or the shared board. */
 export type View = "play" | "board";

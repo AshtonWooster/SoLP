@@ -9,6 +9,8 @@ import {
   addCombatant,
   aim,
   aimTarget,
+  coverChoice,
+  setCover,
   dropCombatant,
   endTurn,
   finishCombat,
@@ -536,7 +538,15 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       slot(table, actor, action.targets?.map(String), ctx, {
         targetDie: action.targetDie === undefined ? undefined : clamp(Math.round(Number(action.targetDie) || 0), 0, 20),
         unopposed: !!action.unopposed,
+        ...(action.ammo ? { ammo: String(action.ammo).slice(0, 80) } : {}),
       });
+      return true;
+    case "setCover":
+      inCombat();
+      return setCover(table, actor, String(action.slotId), action.cover === "partial" || action.cover === "full" ? action.cover : null);
+    case "coverChoice":
+      inCombat();
+      coverChoice(table, actor, String(action.slotId), action.fire === true);
       return true;
     default:
       throw new ActionError("Unknown action.");

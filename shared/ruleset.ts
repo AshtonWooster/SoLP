@@ -118,6 +118,38 @@ export const WEAPON_RANGE: Record<PageType, number> = {
   instant: 6,
 };
 
+/** The longest Weapon Range a weapon can be given, in tiles. */
+export const MAX_WEAPON_RANGE = 50;
+
+/** How far a Page reaches: its Weapon's range when it came with one, otherwise the default for its type. */
+export const pageRange = (page: Pick<Page, "type" | "range">): number => page.range ?? WEAPON_RANGE[page.type];
+
+/** A Weapon's range for Melee or Ranged Pages: what the player set, or the default. */
+export function weaponRange(w: Pick<Weapon, "meleeRange" | "rangedRange">, type: "melee" | "ranged"): number {
+  const set = type === "melee" ? w.meleeRange : w.rangedRange;
+  return typeof set === "number" && Number.isFinite(set) ? Math.max(0, Math.min(MAX_WEAPON_RANGE, Math.round(set))) : WEAPON_RANGE[type];
+}
+
+/**
+ * The Pages with each one's Weapon Range written on it, for combat: a Melee Page reaches its
+ * Weapon's Melee range and a Ranged Page its Ranged range. Pages on Weapons with no range set, on
+ * Armor, or of other types are left as they are (the defaults).
+ */
+export function withWeaponRanges(c: Pick<Character, "weapons">, pages: Page[]): Page[] {
+  const ranges = new Map<string, number>();
+  for (const w of c.weapons ?? []) {
+    for (const p of w.pages) {
+      if (p.type !== "melee" && p.type !== "ranged") continue;
+      if ((p.type === "melee" ? w.meleeRange : w.rangedRange) === undefined) continue;
+      ranges.set(p.id, weaponRange(w, p.type));
+    }
+  }
+  return pages.map((p) => (ranges.has(p.id) ? { ...p, range: ranges.get(p.id)! } : p));
+}
+
+/** Partial Cover: Ranged Pages get Final Power - 2 against the character (never below 1 from it). */
+export const PARTIAL_COVER = 2;
+
 export const isMassAttack = (type: PageType) => type === "massSummation" || type === "massIndividual";
 export const isOffensive = (kind: DiceKind) => kind === "slash" || kind === "pierce" || kind === "blunt";
 
@@ -229,6 +261,7 @@ export function cleanTemplate(raw: unknown): ItemTemplate | null {
   if (typeof r.createdBy === "string" && r.createdBy) t.createdBy = r.createdBy;
   if (t.createdBy && r.pending === true) t.pending = true;
   if (r.usable === true) t.usable = true;
+  if (kind === "item" && r.ammo === true) t.ammo = true;
   if (r.consumable === true) {
     t.consumable = true;
     t.maxUses = Math.max(1, num(r.maxUses, 1));
@@ -321,6 +354,14 @@ export function useItem(item: InventoryItem): InventoryItem | null {
   if (left > 0) return { ...item, uses: left };
   if (item.stacking && item.count > 1) return { ...item, count: item.count - 1, uses: max };
   return null;
+}
+
+/** Ammo a Ranged Page can fire: an Item the GM marked as Ammo, with at least one left. */
+export const isAmmo = (i: InventoryItem) => i.kind === "item" && !!i.ammo && i.count > 0;
+
+/** One of the item with this id is spent: a stack loses one, and the last one leaves the Slot. */
+export function spendOne(items: InventoryItem[], itemId: string): InventoryItem[] {
+  return items.flatMap((i) => (i.id !== itemId ? [i] : i.count > 1 ? [{ ...i, count: i.count - 1 }] : []));
 }
 
 /** Applies useItem to the item with this id in an inventory list. */
@@ -463,7 +504,7 @@ export function npcSpawnData(t: NpcTemplate, formulas: StatFormulas): SpawnData 
     justice: t.primary.justice,
     resistances: s.resistances,
     staggerResistances: s.staggerResistances,
-    pages: npcPages(t).map((x) => x.page),
+    pages: withWeaponRanges(t, npcPages(t).map((x) => x.page)),
     deck: t.deck,
   };
   if (t.portrait) data.portrait = t.portrait;

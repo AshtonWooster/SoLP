@@ -431,6 +431,14 @@ select { font: inherit; color: var(--text); background: var(--bg); border: 1px s
 .aim-box button.picked { border-color: var(--hp); color: var(--hp); }
 .slot-list li { padding: 3px 0; }
 .clash-tag { margin-left: 6px; font-size: 0.7rem; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0 6px; }
+.cover-tag { color: var(--p-light, #e0b84a); border-color: currentColor; }
+.cover-controls { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; border-top: 1px dashed var(--line); }
+.cover-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cover-note { margin: 0; }
+.full-cover { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 10px; }
+.full-cover p { margin: 0; }
+.ammo-pick { flex-wrap: wrap; }
+.ammo-pick .ammo-desc { flex-basis: 100%; }
 .combat-log { list-style: none; margin: 0; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; font-size: 0.8rem; display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto; }
 .combat-log li.detail { color: var(--muted); padding-left: 10px; }
 .enemy-pages { display: flex; flex-direction: column; gap: 8px; }
@@ -808,6 +816,8 @@ button.link .stable-label > span { text-decoration: underline; }
 .equip-rank { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
 .equip-rank select { padding: 0.2rem 0.4rem; }
 .equip-rank-note { margin: 0; }
+.equip-ranges { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.equip-ranges .muted { flex-basis: 100%; }
 .equip-card .equip-res h4 { margin: 4px 0; font-size: 0.85rem; }
 .equip-card .passives h4 { margin: 0; }
 .equip-card .passive { background: #0b0f18; }

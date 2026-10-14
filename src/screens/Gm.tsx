@@ -308,6 +308,7 @@ export function Gm() {
                   vfx={vfx}
                   selectedId={selectedId}
                   activeId={table.combat ? activeToken(table)?.id : undefined}
+                  slotControls={{ isGm: true, uid: user?.id, act }}
                   onTokenClick={(t) => {
                     // While a Page is being aimed, clicking a lit token targets it.
                     const aim = table.combat?.aim;
