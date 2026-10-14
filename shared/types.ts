@@ -91,8 +91,9 @@ export interface GameSettings {
    */
   clearEffectsAfterCombat?: boolean;
   /**
-   * Firing a player's Ranged Page spends one Ammo from their inventory, picked when they use it, and
-   * they can't fire without any. Off unless the GM turns it on: then Ranged Pages need no Ammo.
+   * Firing a player's Ranged Page spends one Ammo from their inventory, picked when they use it;
+   * without any, it's used as a Melee Page with every die rolled at disadvantage. Off unless the GM
+   * turns it on: then Ranged Pages need no Ammo.
    */
   rangedAmmo?: boolean;
   /**

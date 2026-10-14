@@ -132,19 +132,32 @@ export function weaponRange(w: Pick<Weapon, "meleeRange" | "rangedRange">, type:
 
 /**
  * The Pages with each one's Weapon Range written on it, for combat: a Melee Page reaches its
- * Weapon's Melee range and a Ranged Page its Ranged range. Pages on Weapons with no range set, on
+ * Weapon's Melee range and a Ranged Page its Ranged range (and carries the Melee range too, for
+ * when it's fired without Ammo). Pages on Weapons with no range set, on
  * Armor, or of other types are left as they are (the defaults).
  */
 export function withWeaponRanges(c: Pick<Character, "weapons">, pages: Page[]): Page[] {
-  const ranges = new Map<string, number>();
+  const ranges = new Map<string, Partial<Pick<Page, "range" | "meleeRange">>>();
   for (const w of c.weapons ?? []) {
     for (const p of w.pages) {
       if (p.type !== "melee" && p.type !== "ranged") continue;
-      if ((p.type === "melee" ? w.meleeRange : w.rangedRange) === undefined) continue;
-      ranges.set(p.id, weaponRange(w, p.type));
+      const r: Partial<Pick<Page, "range" | "meleeRange">> = {};
+      if ((p.type === "melee" ? w.meleeRange : w.rangedRange) !== undefined) r.range = weaponRange(w, p.type);
+      // A Ranged Page fired without Ammo becomes a Melee Page, reaching the Weapon's Melee range.
+      if (p.type === "ranged" && w.meleeRange !== undefined) r.meleeRange = weaponRange(w, "melee");
+      if (Object.keys(r).length) ranges.set(p.id, r);
     }
   }
-  return pages.map((p) => (ranges.has(p.id) ? { ...p, range: ranges.get(p.id)! } : p));
+  return pages.map((p) => (ranges.has(p.id) ? { ...p, ...ranges.get(p.id)! } : p));
+}
+
+/**
+ * A Ranged Page fired without Ammo (Game setting "Ranged Pages use Ammo"): used as a Melee Page,
+ * reaching its Weapon's Melee range, with every die rolled at disadvantage.
+ */
+export function asMeleeWithoutAmmo(page: Page): Page {
+  const { meleeRange, ...rest } = page;
+  return { ...rest, type: "melee", range: meleeRange ?? WEAPON_RANGE.melee, noAmmo: true };
 }
 
 /** Partial Cover: Ranged Pages get Final Power - 2 against the character (never below 1 from it). */

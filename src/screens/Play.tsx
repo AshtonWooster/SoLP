@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
-import { blankCharacter, linkInventory, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, isAmmo, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
+import { blankCharacter, linkInventory, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, asMeleeWithoutAmmo, isAmmo, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import { partsNeedingApproval, proposeEdits, withProposals } from "../../shared/permissions.ts";
 import { playersCanStoryRoll, rangedPagesUseAmmo, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
@@ -51,7 +51,7 @@ type OverlayKey = "cycle" | "info" | "story" | "targets";
 
 /** A single-target Page about to be slotted, waiting on Clash or Unopposed (and which Speed Die). */
 /** How a Page is slotted: on which of the target's Speed Dice, Unopposed, and with which Ammo. */
-type SlotHow = { targetDie?: number; unopposed?: boolean; ammo?: string };
+type SlotHow = { targetDie?: number; unopposed?: boolean; ammo?: string; noAmmo?: boolean };
 
 interface PendingSlot {
   category: Category;
@@ -117,7 +117,9 @@ export function Play() {
   const page = selectedCard && combat ? combat.pages?.[selectedCard.pageId] : undefined;
   const source = sourceOf(category);
   const mass = !!page && isMassAttack(page.type);
-  const inRange = useMemo(() => new Set(page && mine && table ? validTargets(table, mine, page).map((t) => t.id) : []), [page, mine, table]);
+  // A Ranged Page with no Ammo to fire (Game setting "Ranged Pages use Ammo") reaches only as far as a Melee Page.
+  const reach = page && useAmmo && page.type === "ranged" && ammo.length === 0 ? asMeleeWithoutAmmo(page) : page;
+  const inRange = useMemo(() => new Set(reach && mine && table ? validTargets(table, mine, reach).map((t) => t.id) : []), [reach, mine, table]);
   const freeDice = Array.from({ length: myDice }, (_, i) => i).filter((i) => !combat?.slots?.some((s) => s.ownerId === mine?.id && s.die === i));
   // Mass Attack targets live on the host (so the board shows them too); a single target is local.
   const myAim = combat?.aim && combat.aim.tokenId === mine?.id && combat.aim.cardId === selectedCard?.id ? combat.aim : undefined;
@@ -171,9 +173,11 @@ export function Play() {
 
   /** Pay and slot a Page on the first free Speed Die against the chosen target(s). Ranged Pages may ask for Ammo first. */
   const place = async (cat: Category, card: Card, withTargets?: string[], how: SlotHow = {}) => {
-    if (useAmmo && combat?.pages[card.pageId]?.type === "ranged" && !how.ammo) return setLoading({ cat, card, targets: withTargets, how });
+    if (useAmmo && combat?.pages[card.pageId]?.type === "ranged" && !how.ammo && !how.noAmmo) return setLoading({ cat, card, targets: withTargets, how });
     if (!(await act({ type: "aim", source: sourceOf(cat), cardId: card.id }))) return;
-    if (await act({ type: "slot", targets: withTargets, ...how })) clearSelection(cat);
+    // With no Ammo, the host uses it as a Melee Page on its own: nothing extra to send.
+    const { noAmmo: _none, ...send } = how;
+    if (await act({ type: "slot", targets: withTargets, ...send })) clearSelection(cat);
   };
 
   /** Single-target Pages ask first: Clash (on which of the target's Speed Dice) or attack Unopposed. */
@@ -449,30 +453,53 @@ export function Play() {
         />
       )}
       {loading && combat && (
-        <Overlay title="Pick your Ammo" onClose={() => setLoading(null)}>
-          <p className="muted small">Firing {combat.pages[loading.card.pageId]?.name || "this Ranged Page"} spends one.</p>
+        <Overlay title={ammo.length ? "Pick your Ammo" : "No Ammo"} onClose={() => setLoading(null)}>
           {ammo.length === 0 ? (
-            <p className="small">You have no Ammo. Ask your GM for some, or use another Page.</p>
+            <>
+              <p className="small">
+                You have no Ammo, so {combat.pages[loading.card.pageId]?.name || "this Ranged Page"} is used as a <strong>Melee Page</strong> and every die rolls with{" "}
+                <strong>disadvantage</strong>.
+              </p>
+              <div className="row">
+                <button type="button" onClick={() => setLoading(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="big-button"
+                  onClick={() => {
+                    const l = loading;
+                    setLoading(null);
+                    void place(l.cat, l.card, l.targets, { ...l.how, noAmmo: true });
+                  }}
+                >
+                  Use it as a Melee Page
+                </button>
+              </div>
+            </>
           ) : (
-            <ul className="plain target-list">
-              {ammo.map((i) => (
-                <li key={i.id}>
-                  <button
-                    type="button"
-                    className="target-pick ammo-pick"
-                    onClick={() => {
-                      const l = loading;
-                      setLoading(null);
-                      void place(l.cat, l.card, l.targets, { ...l.how, ammo: i.id });
-                    }}
-                  >
-                    <strong>{i.name || "Ammo"}</strong>
-                    <span className="muted small">{i.count} left</span>
-                    {i.description && <span className="muted small ammo-desc">{i.description}</span>}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <>
+              <p className="muted small">Firing {combat.pages[loading.card.pageId]?.name || "this Ranged Page"} spends one.</p>
+              <ul className="plain target-list">
+                {ammo.map((i) => (
+                  <li key={i.id}>
+                    <button
+                      type="button"
+                      className="target-pick ammo-pick"
+                      onClick={() => {
+                        const l = loading;
+                        setLoading(null);
+                        void place(l.cat, l.card, l.targets, { ...l.how, ammo: i.id });
+                      }}
+                    >
+                      <strong>{i.name || "Ammo"}</strong>
+                      <span className="muted small">{i.count} left</span>
+                      {i.description && <span className="muted small ammo-desc">{i.description}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </Overlay>
       )}

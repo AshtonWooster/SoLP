@@ -52,6 +52,10 @@ export interface Page {
    * range, by the Page's type). Missing: the default range for its type (WEAPON_RANGE).
    */
   range?: number;
+  /** On a Ranged Page in combat: its Weapon's Melee range, used when it's fired without Ammo. */
+  meleeRange?: number;
+  /** Set in combat on a Ranged Page fired without Ammo: it's used as a Melee Page and every die rolls with disadvantage. */
+  noAmmo?: boolean;
 }
 
 export interface Equipment {
