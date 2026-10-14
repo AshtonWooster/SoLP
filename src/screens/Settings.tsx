@@ -18,7 +18,6 @@ import {
 import { pendingCount } from "../../shared/permissions.ts";
 import {
   effectsClearAfterCombat,
-  popupRewardsOn,
   type GameDoc,
   type GmMeta,
   PLAYER_EDIT_OPTIONS,
@@ -539,18 +538,6 @@ export function Settings() {
             onChange={async (on) => {
               try {
                 await updateDoc(ref, { "settings.playersCreateItems": on });
-              } catch (err) {
-                setMessage({ at: "items", text: friendlyError(err) });
-              }
-            }}
-          />
-          <Toggle
-            label="Rewards and costs in popups"
-            hint="On: your popups to players can give or take an item from the item library and Ahn: right away, on a Story Roll they must beat, or for a price in Ahn they choose to pay. The Popups menu also lists each player's Ahn to change. Off: popups are text, images and Story Rolls only."
-            on={popupRewardsOn(g)}
-            onChange={async (on) => {
-              try {
-                await updateDoc(ref, { "settings.popupRewards": on });
               } catch (err) {
                 setMessage({ at: "items", text: friendlyError(err) });
               }
