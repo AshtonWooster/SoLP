@@ -18,7 +18,6 @@ import {
 import { pendingCount } from "../../shared/permissions.ts";
 import {
   effectsClearAfterCombat,
-  emotionLevelsOn,
   popupRewardsOn,
   type GameDoc,
   type GmMeta,
@@ -563,18 +562,6 @@ export function Settings() {
             onChange={async (on) => {
               try {
                 await updateDoc(ref, { "settings.clearEffectsAfterCombat": on });
-              } catch (err) {
-                setMessage({ at: "effects", text: friendlyError(err) });
-              }
-            }}
-          />
-          <Toggle
-            label="Emotion Levels"
-            hint="On: characters build Emotion in combat like Library of Ruina (1 point for each die they win, lose, land or are hit by), going up to Emotion Level 5 at the end of a round. Effects can check the level and react when it rises. Off: nobody gains Emotion."
-            on={emotionLevelsOn(g)}
-            onChange={async (on) => {
-              try {
-                await updateDoc(ref, { "settings.emotionLevels": on });
               } catch (err) {
                 setMessage({ at: "effects", text: friendlyError(err) });
               }

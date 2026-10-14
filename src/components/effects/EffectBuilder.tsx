@@ -319,13 +319,11 @@ function CheckPiece({ check, library, onChange, onRemove }: { check: Check; libr
       break;
     case "hand":
     case "used":
-    case "light":
-    case "emotion": {
+    case "light": {
       const [before, after, max] = {
         hand: ["I have", "Pages in my hand", 20],
         used: ["I've used", "Pages this round", 20],
         light: ["I have", "Light", 20],
-        emotion: ["my Emotion Level is", "", 5],
       }[check.kind] as [string, string, number];
       body = (
         <>

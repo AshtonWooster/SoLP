@@ -139,7 +139,7 @@ test("the game's image: only the GM sets or removes it, as a link to an uploaded
   await assertFails(updateDoc(game("gm"), { image: 42 }));
   await assertFails(updateDoc(game("gm"), { image: "https://x.test/" + "a".repeat(2048) }));
   // Renaming and changing settings still work on a game with an image.
-  await assertSucceeds(updateDoc(game("gm"), { name: "With a picture", "settings.emotionLevels": true }));
+  await assertSucceeds(updateDoc(game("gm"), { name: "With a picture", "settings.statusVfx": true }));
   await assertFails(updateDoc(game("p1"), { image: deleteField() }));
   await assertSucceeds(updateDoc(game("gm"), { image: deleteField() }));
   const after = await getDoc(game("gm"));

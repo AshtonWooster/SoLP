@@ -44,8 +44,7 @@ export type When =
   | "recovered"
   | "healed"
   | "lost"
-  | "discard"
-  | "emotionUp";
+  | "discard";
 
 export const WHEN_OPTIONS: { value: When; label: string; hint: string }[] = [
   { value: "turnEnd", label: "At the end of my turn", hint: "After Combat Actions" },
@@ -76,7 +75,6 @@ export const WHEN_OPTIONS: { value: When; label: string; hint: string }[] = [
   { value: "recovered", label: "When I recover from Stagger", hint: "My Stagger Resist comes back" },
   { value: "healed", label: "When I recover Health", hint: "\"That many\" is how much" },
   { value: "discard", label: "When I discard a Page", hint: "A rule makes me discard one from my hand" },
-  { value: "emotionUp", label: "When my Emotion Level rises", hint: "Needs the Game setting \"Emotion Levels\"; \"That many\" is the new level" },
 ];
 
 /** A Dice effect's When, worded for the die it's on. Only these make sense for a die. */
@@ -127,7 +125,6 @@ const HAS_OTHER: Record<When, boolean> = {
   recovered: false,
   healed: false,
   discard: false,
-  emotionUp: false,
 };
 /** Triggers that involve one of the dice, so "the die" checks and amounts make sense. */
 const HAS_DIE: Record<When, boolean> = { ...HAS_OTHER, use: false, takingDamage: false, knockOut: false, gained: false, gave: false, lost: false, someoneDown: false, effectFires: false, effectFiresOnThem: false };
@@ -138,7 +135,7 @@ const ROLLS: When[] = ["roll", "theyRoll", "speed"];
 /** Triggers where incoming damage can be raised or lowered. */
 const DAMAGE_WHENS: When[] = ["takingHit", "takingDamage"];
 /** Triggers that carry a number, for "That many". */
-const HAS_EVENT: When[] = ["takingHit", "takingDamage", "effectFires", "effectFiresOnThem", "gained", "gave", "lost", "healed", "emotionUp"];
+const HAS_EVENT: When[] = ["takingHit", "takingDamage", "effectFires", "effectFiresOnThem", "gained", "gave", "lost", "healed"];
 
 /** How much: picked from a list, never typed as a formula. */
 export type AmountKind =
@@ -234,8 +231,7 @@ export type CheckKind =
   | "lethal"
   | "resist"
   | "side"
-  | "oneSided"
-  | "emotion";
+  | "oneSided";
 
 /** What a "the Page" check asks about the Page being used. */
 export type PageIs = "melee" | "ranged" | "mass" | "first" | "firstDie" | "cost" | "dice" | "kinds" | "named" | "gives";
@@ -274,7 +270,7 @@ export interface Check {
   amount?: Amount;
   /**
    * stacks / effect: how many. health: the percent of max Health. sanity: Sanity. round: the round. count: how many characters.
-   * hand / used / light / emotion: Pages in my hand, Pages I used this round, my Light, my Emotion Level.
+   * hand / used / light / light: Pages in my hand, Pages I used this round, my Light.
    * page: its Cost, dice or kinds of dice. resist: the resistance (RESIST_LEVELS).
    */
   n?: number;
@@ -323,7 +319,6 @@ export const CHECK_OPTIONS: { value: CheckKind; label: string }[] = [
   { value: "resist", label: "Their Resistance to the die" },
   { value: "side", label: "They're an ally or an enemy" },
   { value: "oneSided", label: "One-Sided or Clash" },
-  { value: "emotion", label: "My Emotion Level" },
 ];
 
 export type ActionKind =
@@ -372,8 +367,7 @@ export type ActionKind =
   | "counterDie"
   | "resist"
   | "giveRandom"
-  | "cancelNext"
-  | "emotion";
+  | "cancelNext";
 
 /** One thing a rule does. */
 export interface Action {
@@ -440,7 +434,6 @@ export const ACTION_OPTIONS: { value: ActionKind; label: string; targets: boolea
   { value: "giveRandom", label: "Gain a random Effect from a list", targets: true },
   { value: "cancelNext", label: "Lose next round's stacks of a random Effect", targets: true, noAmount: true },
   { value: "resist", label: "Change a Resistance", targets: true, noAmount: true },
-  { value: "emotion", label: "Gain Emotion Points", targets: true },
   { value: "healthDamage", label: "Deal more Health damage", targets: false, only: ["hit"] },
   { value: "lessHealthDamage", label: "Deal less Health damage", targets: false, only: ["hit"] },
   { value: "staggerHit", label: "Deal more Stagger damage", targets: false, only: ["hit"] },
@@ -698,8 +691,6 @@ export function blankCheck(kind: CheckKind = "roll"): Check {
       return { kind, side: "allies" };
     case "oneSided":
       return { kind };
-    case "emotion":
-      return { kind, cmp: "atLeast", n: 3 };
   }
 }
 
@@ -810,8 +801,6 @@ function cleanCheck(raw: unknown): Check {
     case "used":
     case "light":
       return { kind: c.kind, cmp, n: int(r.n, 0, 99, c.n ?? 0) };
-    case "emotion":
-      return { kind: "emotion", cmp, n: int(r.n, 0, 5, 3) };
     case "page": {
       const pageIs = oneOf(r.pageIs, PAGE_IS_OPTIONS, "melee");
       const out: Check = { kind: "page", pageIs };
@@ -855,6 +844,23 @@ function cleanAction(raw: unknown): Action {
   return a;
 }
 
+/**
+ * Emotion Levels were taken out of the game. Saved rules that used them keep doing what they did with
+ * the old Game setting off (its default), where everyone's Emotion Level was 0 and nobody gained any:
+ * "When my Emotion Level rises" and "my Emotion Level is at least 1+" never fired, so those rules go;
+ * other Emotion checks always passed, so they go; "Gain Emotion Points" did nothing, so it goes.
+ */
+function withoutEmotion(rule: unknown): unknown {
+  if (!rule || typeof rule !== "object") return rule;
+  const r = rule as { when?: unknown; checks?: unknown; actions?: unknown };
+  if (r.when === "emotionUp") return undefined;
+  const isEmotion = (x: unknown) => !!x && typeof x === "object" && (x as { kind?: unknown }).kind === "emotion";
+  const checks = Array.isArray(r.checks) ? r.checks : [];
+  if (checks.some((c) => isEmotion(c) && c.cmp !== "atMost" && !(Number(c.n ?? 3) <= 0))) return undefined;
+  if (!checks.some(isEmotion) && !(Array.isArray(r.actions) && r.actions.some(isEmotion))) return rule;
+  return { ...r, checks: checks.filter((c) => !isEmotion(c)), actions: Array.isArray(r.actions) ? r.actions.filter((a) => !isEmotion(a)) : r.actions };
+}
+
 /** An effect as it may be saved: only known pieces, sensible numbers, and limits on size. */
 export function cleanEffect(raw: unknown): EffectDef {
   const r = (raw && typeof raw === "object" ? raw : {}) as Partial<EffectDef>;
@@ -863,7 +869,7 @@ export function cleanEffect(raw: unknown): EffectDef {
     name: String(r.name ?? "").slice(0, 60),
     kind,
     decay: kind === "status" ? oneOf(r.decay, DECAY_OPTIONS, "none") : "none",
-    rules: (Array.isArray(r.rules) ? r.rules : []).slice(0, 8).map((rule) => {
+    rules: (Array.isArray(r.rules) ? r.rules : []).map(withoutEmotion).filter((rule): rule is Rule => !!rule).slice(0, 8).map((rule) => {
       const when = oneOf(rule?.when, whenOptions(kind), kind === "die" ? "hit" : "turnEnd");
       const out: Rule = { id: String(rule?.id || newId()).slice(0, 40), when, checks: [], actions: [] };
       if (EFFECT_WHENS.includes(when) && rule?.effectId) out.effectId = id80(rule.effectId);
@@ -1024,8 +1030,6 @@ function checkText(c: Check, library: Record<string, EffectDef>): string {
       return c.cmp === "atMost" && c.n === 0 ? "I haven't used a Page this round" : `I've used ${cmp} ${c.n} ${plural(c.n ?? 0, "Page")} this round`;
     case "light":
       return `I have ${cmp} ${c.n} Light`;
-    case "emotion":
-      return `my Emotion Level is ${cmp} ${c.n}`;
     case "page":
       switch (c.pageIs) {
         case "cost":
@@ -1156,8 +1160,6 @@ function actionText(a: Action, library: Record<string, EffectDef>, stats?: Recor
       const which = a.which === "health" ? "" : a.which === "stagger" ? "Stagger " : "and Stagger ";
       return `${possessive(a.target)} ${which === "and Stagger " ? "" : which}Resistance${which === "and Stagger " ? "s" : ""} to ${type} ${which === "and Stagger " ? "become" : "becomes"} ${resistName(a.level)} ${a.until === "combat" ? "for the rest of combat" : a.until === "nextRound" ? "until the end of next round" : "until the end of the round"}`;
     }
-    case "emotion":
-      return `${who} gain ${amount("Emotion Points")}`;
   }
 }
 
@@ -1257,9 +1259,6 @@ export function effectWarnings(def: EffectDef): string[] {
       if ((a.kind === "giveRandom" || a.kind === "cancelNext") && (a.effectIds ?? []).length < (a.kind === "giveRandom" ? 2 : 1)) out.push(`${n}pick the Effects to choose from.`);
       if (a.kind === "resist" && a.dmgType === "die" && !HAS_DIE[r.when]) out.push(`${n}there's no die here; pick a damage type.`);
     }
-    if (r.when === "emotionUp" || r.checks.some((c) => c.kind === "emotion") || r.actions.some((a) => a.kind === "emotion")) {
-      out.push(`${n}Emotion Levels only count when the GM turns on "Emotion Levels" in Game settings.`);
-    }
     if (def.kind === "die" && !DIE_WHEN_OPTIONS.some((o) => o.value === r.when)) out.push(`${n}a Dice effect only runs when its die is rolled, hits or clashes.`);
   }
   if (def.kind === "status" && def.decay === "none" && !def.rules.some((r) => r.actions.some((a) => a.kind === "loseStacks"))) {
@@ -1338,9 +1337,6 @@ export interface EffectOps<T extends EffectHolder> {
   /** Pages in hand, and Pages used (slotted) this round. */
   hand(t: T): number;
   used(t: T): number;
-  /** Emotion Level (0 when the Game setting is off), and Emotion Points to add. */
-  emotion(t: T): number;
-  addEmotion(t: T, n: number): void;
   /** Discards up to n random Pages from the hand; returns how many. */
   discard(t: T, n: number): number;
   /** Adds n copies of one of t's own Pages, picked at random from those whose name matches one of names. */
@@ -1764,8 +1760,6 @@ function passes<T extends EffectHolder>(c: Check, s: Scope<T>): boolean {
       return cmp(s.ops.used(s.holder), c.n ?? 0);
     case "light":
       return cmp(s.ops.resource(s.holder, "light"), c.n ?? 0);
-    case "emotion":
-      return cmp(s.ops.emotion(s.holder), c.n ?? 0);
     case "page":
       return pageIs(c, s);
     case "lethal": {
@@ -2022,8 +2016,6 @@ function act<T extends EffectHolder>(a: Action, s: Scope<T>, result: TriggerResu
         }
         if (kind === "slash" || kind === "pierce" || kind === "blunt") ops.setResist(t, kind, value, which, a.until ?? "round");
       });
-    case "emotion":
-      return each((t) => ops.addEmotion(t, n));
     case "shield": {
       if (!entry) return;
       const left = Math.max(0, (s.event?.amount ?? 0) + result.damage - result.reduce);

@@ -36,7 +36,6 @@ const chance = (pct: 50 | 25 | 10 | 5): Check => ({ kind: "roll", sides: { 50: 2
 const die = (dieKind: DiceKind | "offensive" | "defensive"): Check => ({ kind: "die", dieKind });
 const has = (effectId: string, whose: "me" | "them", k = 1, cmp: "atLeast" | "atMost" = "atLeast"): Check => ({ kind: "effect", effectId, cmp, n: k, ...(whose === "them" ? { whose } : {}) });
 const page = (pageIs: Check["pageIs"], extra: Partial<Check> = {}): Check => ({ kind: "page", pageIs, ...extra });
-const emotion = (k: number): Check => ({ kind: "emotion", cmp: "atLeast", n: k });
 const count = (side: "allies" | "enemies", cmp: "atLeast" | "atMost", k: number, down = false): Check => ({ kind: "count", side, cmp, n: k, ...(down ? { down } : {}) });
 const firstRound: Check = { kind: "round", cmp: "atMost", n: 1 };
 const lethal: Check = { kind: "lethal" };
@@ -103,7 +102,7 @@ const lowHp = (pct: number, effectId: string, max: number): Rule => R("roundStar
 export const PASSIVES: PackPassive[] = [
   passive(10001, "Speed", 4, [R("speed", [], [one("speedDice")])]),
   passive(10004, "Speed Ⅱ", 8, [R("speed", [], [one("speedDice", n(2))])]),
-  passive(10008, "Speed Ⅲ", 6, [R("speed", [], [one("speedDice")]), R("emotionUp", [emotion(3)], [one("speedDice")], limit("combat"))]),
+  passive(10008, "Speed Ⅲ", 6, [R("speed", [], [one("speedDice")])], { approx: "This game has no Emotion Levels, so no extra Speed Die at Emotion Level 3." }),
   passive(10011, "Incomplete Arbiter", 6, [R("roundStart", [], [one("drawTo", n(4))])]),
   passive(10112, "Weariness", 0, [R("combatStart", [], [{ kind: "damage", target: me, amount: { kind: "maxHealth", n: 25 } }])]),
   passive(180005, "An Arbiter", 5, [R("roundStart", [], [one("drawTo", n(5))])]),
@@ -174,9 +173,7 @@ export const PASSIVES: PackPassive[] = [
   passive(240001, "Overbreathing/Exhaustion", 0, [R("use", [page("cost", { cmp: "atLeast", n: 4 })], [light(2)]), R("speed", [], [one("loseSpeedDice")])]),
   passive(240002, "Singular Strike", 3, [
     R("roll", [page("dice", { cmp: "atMost", n: 1 })], [power(n(2))]),
-    R("clashWin", [page("dice", { cmp: "atMost", n: 1 })], [one("emotion", n(1), { target: me })]),
-    R("clashLose", [page("dice", { cmp: "atMost", n: 1 })], [one("emotion", n(1), { target: me })]),
-  ]),
+  ], { approx: "This game has no Emotion Levels, so no Emotion Points from its Clashes." }),
   passive(240003, "Respiration", 2, [R("roundStart", [{ kind: "light", cmp: "atMost", n: 0 }], [light(1)])]),
   passive(240004, "Acceleration", 1, [R("hit", [{ kind: "speed", cmp: "atLeast", amount: n(5) }], [stagger(n(1))])]),
   typeDamage(240005, "Concussion", 2, "blunt", 2, true),
@@ -222,19 +219,10 @@ export const PASSIVES: PackPassive[] = [
   dicePower(243003, "Swordplay of the Homeland", 8, "slash", 2),
   passive(243005, "Carver of Scars", 6, [R("hit", [die("offensive"), page("first")], [give("preset:bleed", n(2), them)])]),
   passive(243101, "Information Assessment", 4, [R("roundEnd", [], [{ kind: "resist", target: random(true, 1), amount: n(1), dmgType: "random", level: 100, which: "health", until: "nextRound" }])]),
-  passive(243105, "Toughness", 6, [
-    R("roundStart", [emotion(1)], [give("protection", n(1)), give("staggerProtection", n(1))]),
-    R("roundStart", [emotion(3)], [give("protection", n(1)), give("staggerProtection", n(1))]),
-    R("roundStart", [emotion(5)], [give("protection", n(1)), give("staggerProtection", n(1))]),
-  ]),
   passive(243201, "Seeing Through Weaknesses", 4, [
     R("hit", [{ kind: "resist", whose: "them", cmp: "atLeast", n: 150 }, has("fragile", "them", 5)], [{ kind: "resist", target: them, amount: n(1), dmgType: "die", level: 200, which: "health", until: "combat" }]),
   ], { approx: "Checked when the hit lands, not at the end of the round." }),
   passive(243205, "Rupture Wound", 4, [R("hit", [has("preset:bleed", "them")], [health(n(3))])]),
-  passive(250001, "Fervor", 4, [R("roll", [die("offensive"), emotion(3)], [power(n(1))])]),
-  passive(250002, "A Fighter that Never Retreats", 2, [R("emotionUp", [], [give("preset:strength", n(1), me, true), give("preset:endurance", n(1), me, true)])]),
-  passive(250003, "Firm as a Great Mountain", 3, [R("emotionUp", [], [heal({ kind: "maxHealth", n: 15, max: 20 })])]),
-  passive(250004, "Remain Vigilant in Peace", 2, [R("emotionUp", [{ kind: "state", state: "staggered", is: false }], [{ kind: "recoverStagger", target: me, amount: { kind: "maxStagger", n: 25 } }])]),
   passive(250005, "Ammo Supply", 9, [R("hit", [page("melee")], [one("addPage", n(1), { text: "Ammunition" })], { every: 3 })], {
     approx: "Write the names of your Ammunition Pages (split with commas); it adds one of them at random.",
   }),
@@ -252,7 +240,6 @@ export const PASSIVES: PackPassive[] = [
   passive(250014, "Internal Combustion Engine", 1, [R("gained", [], [give("smoke", n(1))], { effectId: "smoke" })], { approx: "Counts Smoke from anything, not only Combat Pages." }),
   passive(250015, "Raging Torrent", 2, [R("use", [], [draw(1)], { every: 4 })], { approx: "Counts every Page used, not only different ones." }),
   passive(250016, "Breaking Pressure", 3, [R("theyRoll", [die("defensive")], [lowerPower(n(1))])]),
-  passive(250017, "Easygoing Breather", 3, [R("roundStart", [emotion(2)], [one("costDown")])]),
   passive(250018, "Furious Fire Rending the Skies", 3, [R("roundStart", [], [give("furiousFire", n(2))])], { approx: "Doubles the next two times I give Burn this round, instead of marking two Pages." }),
   passive(250020, "Force of a Wildfire", 3, [R("hit", [page("melee")], [give("preset:burn", n(1), them), give("wildfire", n(2), them)])]),
   passive(250021, "Hugging Fire, Sitting on Brushwood", 3, [R("hit", [page("melee")], [give("huggingFire", n(1), them)])]),
@@ -270,7 +257,6 @@ export const PASSIVES: PackPassive[] = [
     R("roll", [die("offensive"), { kind: "round", cmp: "atMost", n: 3 }], [power(n(1))], { every: 3 }),
     R("roll", [die("offensive"), { kind: "round", cmp: "atLeast", n: 4 }], [power(n(1))]),
   ]),
-  passive(250110, "Charged Shield", 3, [R("gained", [emotion(2)], [give("preset:endurance", n(1), me, true)], { effectId: "charge", limit: "round" })]),
   passive(250113, "The Blue Reverberation", 5, [R("takingHit", [page("ranged")], [one("reduceDamage", n(100), { percent: true })])]),
   passive(250114, "Meat Gear", 2, [R("hit", [page("firstDie")], [health(d(2, 1))])]),
   passive(250115, "Locked Potential", 4, [R("use", [], [give("bladeUnlocked", n(1))], { every: 6, limit: "combat" })], { approx: "Counts every Page used, not only different ones." }),
@@ -278,7 +264,6 @@ export const PASSIVES: PackPassive[] = [
   passive(250151, "The Messenger", 4, [R("roundStart", [], [one("addPage", n(1), { text: "Give Strength, Give Protection and Stagger Protection, Page Draw, Light Restoration" })])], {
     approx: "Make the four special Pages on the character; it adds one at random each round (no pick of two at Emotion Level 3).",
   }),
-  passive(250210, "Energy Discharge", 4, [R("lost", [emotion(2)], [give("preset:strength", n(1), me, true)], { effectId: "charge", limit: "round" })]),
   dicePower(250214, "Thought Gear", 3, "evade", 1),
   passive(250222, "Retaliate", 5, [R("turnEnd", [], [{ kind: "counterDie", target: me, amount: n(5), dieKind: "slash", base: 3 }])], {
     approx: "The Counter Slash die (4-8) comes each turn and waits until my next Upkeep.",
@@ -324,7 +309,7 @@ export const PASSIVES: PackPassive[] = [
   passive(260003, "All for Hana", 4, [R("wasHit", [], [{ kind: "resist", target: me, amount: n(1), dmgType: "die", level: 50, which: "both", until: "nextRound" }])], {
     approx: "Every type that hits me becomes Endured next round, not only the one that hit hardest.",
   }),
-  passive(260004, "The Twelve Fixers", 6, [R("roll", [], [one("raiseMin", n(2))]), R("roll", [emotion(3)], [one("raiseMax", n(1))])]),
+  passive(260004, "The Twelve Fixers", 6, [R("roll", [], [one("raiseMin", n(2))])], { approx: "This game has no Emotion Levels, so no +1 Max at Emotion Level 3." }),
   passive(260005, "Resonance", 4, [
     R("roll", [page("melee"), has("vibration", "them"), { kind: "speed", cmp: "atLeast", amount: stacks("vibration", "them", { plus: -1 }) }, { kind: "speed", cmp: "atMost", amount: stacks("vibration", "them", { plus: 1 }) }], [power(n(2))]),
     R("combatStart", [], [draw(2)]),
@@ -350,6 +335,15 @@ export const PASSIVES: PackPassive[] = [
 
 /** Passives left to the GM: tied to one named character, or to that character's own unique Pages and mechanics. */
 export const EXCLUDED: { id: number; name: string; why: string }[] = [
+  // These only work through Emotion Levels, which this game doesn't have.
+  { id: 243105, name: "Toughness", why: "Needs Emotion Levels." },
+  { id: 250001, name: "Fervor", why: "Needs Emotion Levels." },
+  { id: 250002, name: "A Fighter that Never Retreats", why: "Needs Emotion Levels." },
+  { id: 250003, name: "Firm as a Great Mountain", why: "Needs Emotion Levels." },
+  { id: 250004, name: "Remain Vigilant in Peace", why: "Needs Emotion Levels." },
+  { id: 250017, name: "Easygoing Breather", why: "Needs Emotion Levels." },
+  { id: 250110, name: "Charged Shield", why: "Needs Emotion Levels." },
+  { id: 250210, name: "Energy Discharge", why: "Needs Emotion Levels." },
   { id: 10005, name: "The Red Mist", why: "Gebura (The Red Mist); no description to automate." },
   { id: 10010, name: "Binah", why: "Binah's unique Key Page." },
   { id: 10012, name: "Orlando", why: "Roland's unique Key Page." },
