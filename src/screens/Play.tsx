@@ -285,7 +285,7 @@ export function Play() {
       <div className={"turn-strip" + (myTurn ? " mine" : "")}>
         {combat ? (
           <span>
-            <strong>{myTurn ? "Your turn" : `${active?.name ?? "—"}'s turn`}</strong> · Round {combat.round} · {PHASE_LABELS[combat.phase]}
+            <strong>{myTurn ? "Your turn" : active ? `${active.name}'s turn` : "Someone else's turn"}</strong> · Round {combat.round} · {PHASE_LABELS[combat.phase]}
             {myTurn && ` · ${combat.movementLeft} Movement, move on the board`}
           </span>
         ) : (
