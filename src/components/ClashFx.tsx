@@ -1,23 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClashFx, FxDie, FxMassSide, FxRound, FxState, TableState } from "../../shared/types.ts";
+import { alreadyRolled, nextStep, type FxStep, type Stage } from "./clashSteps.ts";
 
-type Stage = "intro" | "roll" | "reveal" | "result";
-/** What the clash animation is showing right now. */
-export interface FxStep {
-  fx: ClashFx;
-  round: number;
-  stage: Stage;
-}
+export type { FxStep } from "./clashSteps.ts";
 
 /** How long each stage lasts, in ms. */
 const TIMES: Record<Stage, number> = { intro: 700, roll: 750, reveal: 450, result: 850 };
-
-function next(step: FxStep): FxStep | null {
-  if (step.stage === "intro") return { ...step, stage: "roll" };
-  if (step.stage === "roll") return { ...step, stage: "reveal" };
-  if (step.stage === "reveal") return { ...step, stage: "result" };
-  return step.round + 1 < step.fx.rounds.length ? { ...step, round: step.round + 1, stage: "roll" } : null;
-}
 
 /** The characters' state at this point of the animation: before the first die, or after the last one shown. */
 function stateAt(step: FxStep): FxState | undefined {
@@ -78,7 +66,7 @@ export function useClashPlayback<T extends TableState | undefined>(table: T): { 
       return;
     }
     // Catch up faster when several resolutions are waiting.
-    const t = setTimeout(() => setStep(next(step)), TIMES[step.stage] * (queue.length > 1 ? 0.5 : 1));
+    const t = setTimeout(() => setStep(nextStep(step)), TIMES[step.stage] * (queue.length > 1 ? 0.5 : 1));
     return () => clearTimeout(t);
   }, [step, queue]);
 
@@ -116,9 +104,12 @@ function outcomeClass(result: FxRound["result"], mine: "a" | "b") {
   return result === "hit" ? " hit" : result === "draw" ? " draw" : result === mine ? " win" : " lose";
 }
 
-function OneDie({ die, stage, outcome, mini }: { die: FxDie; stage: Stage; outcome: string; mini?: boolean }) {
+/** One die: its number rolling, then its Final Power. One that was `set` already (a Summation die after the check) lands with its number instead of rolling. */
+function OneDie({ die, stage, outcome, mini, set }: { die: FxDie; stage: Stage; outcome: string; mini?: boolean; set?: boolean }) {
+  if (set && stage === "roll") stage = "reveal";
+  const landing = set && stage === "reveal" ? " settled" : "";
   return (
-    <div className={`fx-die ${die.kind}${mini ? " mini" : ""}${stage === "roll" ? " rolling" : ""}${outcome}`}>
+    <div className={`fx-die ${die.kind}${mini ? " mini" : ""}${stage === "roll" ? " rolling" : ""}${landing}${outcome}`}>
       <span className="fx-num">{stage === "roll" ? <RollingNumber die={die} /> : die.power}</span>
       <span className="fx-kind">
         {die.counter ? "Counter " : ""}
@@ -210,7 +201,7 @@ export function FxBubble({ step, side }: { step: FxStep; side: string }) {
   return (
     <div className="fx-stack">
       {label && <div className="fx-page small">{label}</div>}
-      <OneDie die={die} stage={stage} outcome={outcome} />
+      <OneDie die={die} stage={stage} outcome={outcome} set={me === "a" && alreadyRolled(fx, round)} />
       {done && r.result === "draw" && <div className="fx-tag">Draw</div>}
     </div>
   );
