@@ -102,7 +102,7 @@ export const STAGGER_UPKEEPS = 2;
 export const STAGGERED_RESISTANCE = 2;
 export const UPKEEP_LIGHT = 1;
 
-/** Game setting "Panic types": the die rolled on Panicking, and the Upkeeps spent Panicking before recovering. */
+/** Panic types: the die rolled on Panicking, and the Upkeeps spent Panicking before recovering. */
 export const PANIC_DIE = 4;
 export const PANIC_UPKEEPS = 3;
 /** What each Panic type (the d4 rolled) does, for the log and the token popup. */

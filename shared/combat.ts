@@ -94,8 +94,6 @@ export interface EngineContext {
   clearEffectsAfterCombat?(): boolean;
   /** The Game setting "Ranged Pages use Ammo" (shared/types.ts). */
   rangedAmmo?(): boolean;
-  /** The Game setting "Panic types" (shared/types.ts). */
-  panicTypes?(): boolean;
   /** Whether players may make Story Rolls on their own (Game settings). Missing: they may. */
   playersStoryRoll?(): boolean;
   /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
@@ -361,7 +359,7 @@ function recoverStagger(table: TableState, t: Token, amount: number) {
 /** Clash Win heals 1 Sanity, Clash Lose costs 1. Sanity runs from -max to +max; the minimum means Panic. */
 function changeSanity(table: TableState, t: Token, delta: number) {
   const r = t.resources;
-  // Panic types: Sanity stays at its minimum until they recover.
+  // Panicking: Sanity stays at its minimum until they recover.
   if (panicType(t)) {
     r.sanity = -r.maxSanity;
     return;
@@ -375,16 +373,15 @@ function changeSanity(table: TableState, t: Token, delta: number) {
   trigger(table, "panic", t);
 }
 
-// ---- Panic types (Game setting "Panic types") ----
+// ---- Panic types ----
 
-/** How the character is Panicking, when the Game setting is on; undefined otherwise. */
+/** How the character is Panicking; undefined when they aren't. */
 export function panicType(t: Token | undefined): PanicType | undefined {
-  return t?.status?.panic && engineCtx?.panicTypes?.() ? t.status.panicType : undefined;
+  return t?.status?.panic ? t.status.panicType : undefined;
 }
 
-/** On Panicking, with the setting on: a d4 says how. Sanity is held at its minimum until they recover. */
+/** On Panicking, a d4 says how. Sanity is held at its minimum until they recover. */
 function rollPanicType(table: TableState, t: Token) {
-  if (!engineCtx?.panicTypes?.()) return;
   const type = rollDie(PANIC_DIE) as PanicType;
   t.status = { ...t.status, panic: true, panicType: type, panicUpkeeps: 0 };
   t.resources.sanity = -t.resources.maxSanity;
@@ -1106,7 +1103,7 @@ function runPhases(table: TableState) {
 
     // Upkeep: draw, restore Light, then (later) Effects and Passives. Counter Dice expire at its end.
     c.phase = "upkeep";
-    // Panicking (Panic types) can stop the draw or the Light.
+    // Panicking can stop the draw or the Light.
     const noDraw = panicType(token) === 2;
     const drawn = noDraw ? 0 : Array.from({ length: UPKEEP_DRAW }, () => draw(c, token.id)).filter(Boolean).length;
     const r = token.resources;

@@ -1,11 +1,11 @@
-// Panic types (Game setting "Panic types"): Sanity at its minimum rolls a d4 for how a character
+// Panic types: Sanity at its minimum rolls a d4 for how a character
 // Panics, holds Sanity there for 3 Upkeeps, then they recover. Run with `npm run test:engine`.
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 import type { Dice, DiceKind, Page, PageType } from "../shared/character.ts";
 import { applyAction, type Actor, type EngineContext, type Loadout } from "../shared/engine.ts";
 import { PANIC_UPKEEPS } from "../shared/ruleset.ts";
-import { panicTypesOn, type GameDoc, type PanicType, type TableAction, type TableState, type Token } from "../shared/types.ts";
+import { type PanicType, type TableAction, type TableState, type Token } from "../shared/types.ts";
 
 const gm: Actor = { uid: "gm", role: "gm", displayName: "GM" };
 const p1: Actor = { uid: "p1", role: "player", displayName: "P1" };
@@ -23,7 +23,7 @@ function token(id: string, side: Token["side"], x: number, extra: Partial<Token>
 }
 
 /** Roland (player, always first) next to a Rat (enemy). Roland has an Auxiliary Page too. */
-function setup(opts: { panic?: boolean; roland?: Page[]; rat?: Page[] } = {}) {
+function setup(opts: { roland?: Page[]; rat?: Page[] } = {}) {
   const pages = opts.roland ?? [page("jab", "melee", [die("slash", 3)])];
   const tool = page("tool", "melee", [die("blunt", 2)]);
   const table: TableState = {
@@ -39,7 +39,7 @@ function setup(opts: { panic?: boolean; roland?: Page[]; rat?: Page[] } = {}) {
     deck: pages.flatMap((p) => Array(12 / pages.length).fill(p.id)),
     aux: [{ pageId: "tool" }],
   };
-  const ctx: EngineContext = { loadout: (id) => (id === "roland" ? loadout : undefined), panicTypes: () => !!opts.panic };
+  const ctx: EngineContext = { loadout: (id) => (id === "roland" ? loadout : undefined) };
   const act = (a: TableAction, who: Actor = p1) => applyAction(table, a, who, ctx);
   act({ type: "startCombat", tokenIds: ["roland", "rat"] }, gm);
   const roland = () => table.tokens.roland;
@@ -70,36 +70,8 @@ function play(s: S, pageId: string, targets: string[], who: Actor = p1, owner = 
   s.act({ type: "slot", targets }, who);
 }
 
-test("Panic types is off unless the GM turns it on", () => {
-  const game = (settings?: GameDoc["settings"]) => ({ name: "g", gmId: "gm", members: {}, settings }) as unknown as GameDoc;
-  assert.equal(panicTypesOn(undefined), false);
-  assert.equal(panicTypesOn(game()), false);
-  assert.equal(panicTypesOn(game({ panicTypes: false })), false);
-  assert.equal(panicTypesOn(game({ panicTypes: true })), true);
-});
-
-test("with the setting off, Panic is only a flag: no d4, Sanity moves freely and Upkeeps are normal", () => {
-  const s = setup();
-  setSanity(s, -15);
-  assert.equal(s.status().panic, true);
-  assert.equal(s.status().panicType, undefined);
-  assert.ok(!s.logged("Panics!"));
-  const hand = s.c().decks.roland.hand.length;
-  nextUpkeep(s);
-  assert.equal(s.c().decks.roland.hand.length, hand + 1);
-  assert.equal(s.status().panic, true, "still at minimum Sanity");
-  // Winning a clash heals 1 Sanity and ends Panic.
-  play(s, "jab", ["rat"]);
-  s.act({ type: "endTurn" }, p1);
-  play(s, "bite", ["roland"], gm, "rat");
-  s.act({ type: "endTurn" }, gm);
-  s.act({ type: "endTurn" }, p1);
-  assert.equal(s.roland().resources.sanity, -14);
-  assert.equal(s.status().panic, false);
-});
-
-test("with the setting on, losing a clash at -14 Sanity Panics: a d4 picks the type and it's logged", () => {
-  const s = setup({ panic: true, roland: [page("jab", "melee", [die("slash", 1)])], rat: [page("bite", "melee", [die("pierce", 5)])] });
+test("losing a clash at -14 Sanity Panics: a d4 picks the type and it's logged", () => {
+  const s = setup({ roland: [page("jab", "melee", [die("slash", 1)])], rat: [page("bite", "melee", [die("pierce", 5)])] });
   setSanity(s, -14);
   assert.equal(s.status().panic, false);
   play(s, "jab", ["rat"]);
@@ -113,7 +85,7 @@ test("with the setting on, losing a clash at -14 Sanity Panics: a d4 picks the t
 });
 
 test("while Panicking, Sanity is stuck at its minimum; after the third Upkeep they recover at 0 Sanity", () => {
-  const s = setup({ panic: true, roland: [page("jab", "melee", [die("slash", 5)])] });
+  const s = setup({ roland: [page("jab", "melee", [die("slash", 5)])] });
   setSanity(s, -15, 3);
   assert.equal(s.status().panicType, 3);
   assert.equal(s.status().panicUpkeeps, 0);
@@ -139,7 +111,7 @@ test("while Panicking, Sanity is stuck at its minimum; after the third Upkeep th
 });
 
 test("Panic 1: every die rolls its Min, Story Rolls included", () => {
-  const s = setup({ panic: true, roland: [page("jab", "melee", [die("slash", 6, 6)])] });
+  const s = setup({ roland: [page("jab", "melee", [die("slash", 6, 6)])] });
   setSanity(s, -15, 1);
   play(s, "jab", ["rat"]);
   s.act({ type: "endTurn" }, p1);
@@ -151,7 +123,7 @@ test("Panic 1: every die rolls its Min, Story Rolls included", () => {
 });
 
 test("Panic 2: no drawing Pages at Upkeep or from effects", () => {
-  const s = setup({ panic: true });
+  const s = setup();
   setSanity(s, -15, 2);
   const hand = s.c().decks.roland.hand.length;
   nextUpkeep(s);
@@ -165,7 +137,7 @@ test("Panic 2: no drawing Pages at Upkeep or from effects", () => {
 });
 
 test("Panic 3: no gaining Light at Upkeep; spending it still works", () => {
-  const s = setup({ panic: true });
+  const s = setup();
   setSanity(s, -15, 3);
   const light = s.roland().resources.light;
   nextUpkeep(s);
@@ -178,7 +150,7 @@ test("Panic 3: no gaining Light at Upkeep; spending it still works", () => {
 });
 
 test("Panic 4: no Auxiliary Pages, but the hand still works", () => {
-  const s = setup({ panic: true });
+  const s = setup();
   setSanity(s, -15, 4);
   const aux = s.c().decks.roland.aux[0];
   assert.throws(() => s.act({ type: "aim", source: "aux", cardId: aux.id }), /Panicking and can't use Auxiliary Pages/);
@@ -187,7 +159,7 @@ test("Panic 4: no Auxiliary Pages, but the hand still works", () => {
 });
 
 test("other Panic types leave Auxiliary Pages, draws and Light alone", () => {
-  const s = setup({ panic: true });
+  const s = setup();
   setSanity(s, -15, 1);
   const hand = s.c().decks.roland.hand.length;
   const light = s.roland().resources.light;
@@ -199,7 +171,7 @@ test("other Panic types leave Auxiliary Pages, draws and Light alone", () => {
 });
 
 test("the GM raising Sanity above its minimum ends Panic", () => {
-  const s = setup({ panic: true });
+  const s = setup();
   setSanity(s, -15, 2);
   setSanity(s, -3);
   assert.equal(s.status().panic, false);

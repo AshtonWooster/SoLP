@@ -5,7 +5,7 @@ import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
 import { activeToken, validTargets } from "../../shared/engine.ts";
 import { blankCharacter, linkInventory, PANIC_TYPES, PANIC_UPKEEPS, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, asMeleeWithoutAmmo, isAmmo, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import { partsNeedingApproval, proposeEdits, withProposals } from "../../shared/permissions.ts";
-import { panicTypesOn, playersCanStoryRoll, rangedPagesUseAmmo, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
+import { playersCanStoryRoll, rangedPagesUseAmmo, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { PHASE_LABELS } from "../components/ActionPanel.tsx";
 import { ConnectionBadge } from "../components/Status.tsx";
@@ -108,8 +108,8 @@ export function Play() {
   const myStory = story && story.tokenId === mine?.id ? story : null;
   const myDice = (combat && mine && combat.order?.find((x) => x.tokenId === mine.id)?.dice) || 0;
   const useAmmo = rangedPagesUseAmmo(gameDoc.data);
-  // How I'm Panicking, with the Game setting "Panic types" on.
-  const panic = mine?.status?.panic && panicTypesOn(gameDoc.data) ? mine.status.panicType : undefined;
+  // How I'm Panicking, if I am.
+  const panic = mine?.status?.panic ? mine.status.panicType : undefined;
   const ammo = (c?.inventory.items ?? []).filter(isAmmo);
   // My Ranged Pages whose target the GM says is moving into Full Cover: fire now or hold fire.
   const coverAsk = (combat?.slots ?? []).find((s) => s.ownerId === mine?.id && s.cover === "full" && !later.includes(s.id));
