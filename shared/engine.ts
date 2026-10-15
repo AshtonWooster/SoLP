@@ -14,6 +14,7 @@ import {
   dropCombatant,
   endTurn,
   finishCombat,
+  panicByOverride,
   pinnedBy,
   rollSpeed,
   slot,
@@ -259,8 +260,9 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       const r = token.resources;
       const nowStaggered = r.stagger <= 0;
       const upkeeps = nowStaggered && token.status?.staggered ? (token.status.staggerUpkeeps ?? 0) : 0;
-      token.status = { ...token.status, knockedOut: r.hp <= 0, staggered: nowStaggered, staggerUpkeeps: upkeeps, panic: r.sanity <= -r.maxSanity };
+      token.status = { ...token.status, knockedOut: r.hp <= 0, staggered: nowStaggered, staggerUpkeeps: upkeeps };
       if (applied.length) say(`GM override: ${token.name} ${applied.join(", ")}`);
+      panicByOverride(table, token);
       return applied.length > 0;
     }
     case "setNote": {
