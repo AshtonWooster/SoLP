@@ -19,7 +19,6 @@ import { pendingCount } from "../../shared/permissions.ts";
 import {
   effectsClearAfterCombat,
   rangedPagesUseAmmo,
-  panicTypesOn,
   type GameDoc,
   type GmMeta,
   PLAYER_EDIT_OPTIONS,
@@ -397,7 +396,7 @@ function DeleteGameSection({ gameId, name }: { gameId: string; name: string }) {
   );
 }
 
-type Area = "invite" | "players" | "permissions" | "story" | "ranged" | "panic" | "items" | "effects" | "formulas";
+type Area = "invite" | "players" | "permissions" | "story" | "ranged" | "items" | "effects" | "formulas";
 
 /** The GM's game settings: the game's name and image, inviting players, the players (open their sheets, kick them) and what players may edit. */
 export function Settings() {
@@ -549,22 +548,6 @@ export function Settings() {
           {message?.at === "ranged" && <p className="muted settings-note" role="status">{message.text}</p>}
         </section>
 
-        <section className="panel settings-section" aria-label="Panic">
-          <h2>Panic</h2>
-          <Toggle
-            label="Panic types"
-            hint="On: when a character's Sanity hits its minimum (-15 with 15 max Sanity), they Panic and a d4 says how: 1, every die rolls its Min; 2, no drawing Pages; 3, no gaining Light; 4, no Auxiliary Pages. Their Sanity is stuck at its minimum until they recover after their third Upkeep, back at 0 Sanity. Off: Panic changes nothing on its own; effects can still check it."
-            on={panicTypesOn(g)}
-            onChange={async (on) => {
-              try {
-                await updateDoc(ref, { "settings.panicTypes": on });
-              } catch (err) {
-                setMessage({ at: "panic", text: friendlyError(err) });
-              }
-            }}
-          />
-          {message?.at === "panic" && <p className="muted settings-note" role="status">{message.text}</p>}
-        </section>
 
         <section className="panel settings-section" aria-label="Item library">
           <h2>Item library</h2>
