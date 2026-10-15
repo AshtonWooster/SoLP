@@ -53,15 +53,25 @@ function setup(playerPages: Page[], enemyPages: Page[] = [], opts: { ammo?: bool
 }
 type S = ReturnType<typeof setup>;
 
+/** The hand is drawn at random: if no copy of the Page was drawn, take one from the draw pile so tests don't depend on the shuffle. */
+function inHand(s: S, tokenId: string, pageId: string) {
+  const deck = s.c().decks[tokenId];
+  if (!deck.hand.some((x) => x.pageId === pageId)) {
+    const i = deck.draw.findIndex((x) => x.pageId === pageId);
+    if (i >= 0) deck.hand.push(...deck.draw.splice(i, 1));
+  }
+  return deck.hand.find((x) => x.pageId === pageId);
+}
+
 function play(s: S, pageId: string, targets: string[], extra: Partial<Extract<TableAction, { type: "slot" }>> = {}) {
-  const card = s.c().decks.roland.hand.find((x) => x.pageId === pageId);
+  const card = inHand(s, "roland", pageId);
   assert.ok(card, `${pageId} in hand`);
   s.act({ type: "aim", source: "hand", cardId: card.id });
   s.act({ type: "slot", targets, ...extra });
 }
 
 function enemyPlay(s: S, pageId: string, targets: string[], extra: Partial<Extract<TableAction, { type: "slot" }>> = {}) {
-  const card = s.c().decks.rat.hand.find((x) => x.pageId === pageId);
+  const card = inHand(s, "rat", pageId);
   assert.ok(card, `${pageId} in the Rat's hand`);
   s.act({ type: "aim", source: "hand", cardId: card.id }, gm);
   s.act({ type: "slot", targets, ...extra }, gm);
