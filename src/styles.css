@@ -630,6 +630,7 @@ button.pv-card:hover { filter: brightness(1.12); }
 .char-dropdown-list button[aria-selected="true"] { background: #2a2214; }
 .cycle-char { display: flex; flex-direction: column; gap: 10px; }
 .cycle-head { display: flex; gap: 12px; align-items: center; }
+.panic-recovery { display: flex; flex-direction: column; gap: 6px; }
 .mini-res { display: flex; flex-wrap: wrap; gap: 4px; }
 .mini-res span { font-size: 0.75rem; font-weight: 700; padding: 1px 6px; border-radius: 6px; color: #120e0a; }
 .mini-res .res-hp { background: var(--hp); color: #fff; }

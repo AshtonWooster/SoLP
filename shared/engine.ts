@@ -15,6 +15,8 @@ import {
   endTurn,
   finishCombat,
   panicByOverride,
+  panicRecovery,
+  canRecoverFromPanic,
   pinnedBy,
   rollSpeed,
   slot,
@@ -51,7 +53,7 @@ import { moveCost } from "./ruleset.ts";
 import { cleanSecrets } from "./secrets.ts";
 import type { Resources, Side, TableAction, TableState, Token, TokenGearInfo } from "./types.ts";
 
-export { activeToken, ActionError, newId, type Actor, type EngineContext };
+export { activeToken, canRecoverFromPanic, ActionError, newId, type Actor, type EngineContext };
 export { pinnedBy, validTargets } from "./combat.ts";
 export type { Loadout } from "./combat.ts";
 
@@ -478,6 +480,9 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
     }
     case "aim":
       aim(table, actor, action.source, action.cardId, action.die === undefined ? undefined : clamp(action.die, 0, 20));
+      return true;
+    case "panicRecovery":
+      panicRecovery(table, actor, String(action.tokenId), ctx);
       return true;
     case "storyRoll":
       // A popup's roll (popupRoll) is the GM asking, so it works either way.

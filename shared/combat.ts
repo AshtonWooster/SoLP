@@ -44,6 +44,7 @@ import {
   PANIC_DIE,
   PANIC_TYPES,
   PANIC_UPKEEPS,
+  PANIC_RECOVERY_ROLL,
 } from "./ruleset.ts";
 import type {
   Card,
@@ -393,6 +394,7 @@ function clearPanic(t: Token) {
   const status = { ...t.status, panic: false };
   delete status.panicType;
   delete status.panicUpkeeps;
+  delete status.panicRecoveryFails;
   t.status = status;
 }
 
@@ -401,20 +403,51 @@ function panicUpkeep(table: TableState, t: Token) {
   const type = panicType(t);
   if (!type) return;
   const passed = (t.status?.panicUpkeeps ?? 0) + 1;
-  if (passed >= PANIC_UPKEEPS) {
-    clearPanic(t);
-    t.resources.sanity = 0;
-    log(table, `  ${t.name} recovers from Panic${secret(t, "sanity", " (Sanity 0)")}.`);
-  } else {
+  if (passed >= PANIC_UPKEEPS) recoverFromPanic(table, t);
+  else {
     t.status = { ...t.status, panicUpkeeps: passed };
     const left = PANIC_UPKEEPS - passed;
     log(table, `  ${t.name} is Panicking: ${PANIC_TYPES[type].effect} (recovers in ${left} more Upkeep${left === 1 ? "" : "s"}).`);
   }
 }
 
+/** Out of Panic, with Sanity back at 0. */
+function recoverFromPanic(table: TableState, t: Token) {
+  clearPanic(t);
+  t.resources.sanity = 0;
+  log(table, `  ${t.name} recovers from Panic${secret(t, "sanity", " (Sanity 0)")}.`);
+}
+
+/** Allies a character can help out of Panic: Panicking, on their side, and not themselves. */
+export function canRecoverFromPanic(helper: Token | undefined, t: Token | undefined): boolean {
+  return !!helper && !!t && helper.id !== t.id && !!t.status?.panic && !opposed(helper.side, t.side) && helper.side !== "neutral";
+}
+
 /**
- * The GM set a character's Sanity by hand: at its minimum they Panic (rolling a Panic type when the
- * setting is on, but no "When I Panic" effects); above it, they're out of Panic.
+ * Panic recovery: on their turn, during Combat Actions, a character helps a Panicking ally with a
+ * Prudence Story Roll; at PANIC_RECOVERY_ROLL or more the ally recovers right away. Once a turn.
+ * Each failed attempt on the ally adds +1 to the next one, whoever makes it, until they recover.
+ */
+export function panicRecovery(table: TableState, actor: Actor, tokenId: string, ctx?: EngineContext) {
+  const c = table.combat!;
+  const helper = actingToken(table, actor);
+  const ally = table.tokens[tokenId];
+  if (!ally) throw new ActionError("Token not found.");
+  if (!ally.status?.panic) throw new ActionError(`${ally.name} isn't Panicking.`);
+  if (!canRecoverFromPanic(helper, ally)) throw new ActionError(`${helper.name} can only help an ally out of Panic.`);
+  if (c.panicRecoveryUsed) throw new ActionError(`${helper.name} already tried Panic recovery this turn.`);
+  c.panicRecoveryUsed = true;
+  const fails = ally.status.panicRecoveryFails ?? 0;
+  log(table, `${helper.name} tries to bring ${ally.name} out of Panic${fails ? ` (+${fails} from ${fails} failed attempt${fails === 1 ? "" : "s"})` : ""}.`);
+  const total = storyRoll(table, actor, helper, "prudence", ctx, fails);
+  if (total >= PANIC_RECOVERY_ROLL) return recoverFromPanic(table, ally);
+  ally.status = { ...ally.status, panicRecoveryFails: fails + 1 };
+  log(table, `  Not enough (needs ${PANIC_RECOVERY_ROLL}): ${ally.name} is still Panicking. The next attempt gets +${fails + 1}.`);
+}
+
+/**
+ * The GM set a character's Sanity by hand: at its minimum they Panic (rolling a Panic type, but no
+ * "When I Panic" effects); above it, they're out of Panic.
  */
 export function panicByOverride(table: TableState, t: Token) {
   if (t.resources.sanity > -t.resources.maxSanity) return clearPanic(t);
@@ -1129,6 +1162,7 @@ function runPhases(table: TableState) {
     // Combat Actions: wait for the player.
     c.phase = "actions";
     delete c.aim;
+    delete c.panicRecoveryUsed;
     return;
   }
   log(table, "No one in the turn order can act.");
@@ -1294,11 +1328,12 @@ export function pinnedBy(table: TableState, token: Token): Token | undefined {
 }
 
 /** A Story Roll (Act 7): 1d20 (placeholder) + the chosen Stat. Allowed any time, in or out of combat. */
-export function storyRoll(table: TableState, actor: Actor, token: Token, stat: string, ctx?: EngineContext) {
+/** `extra` is added to the Stat (e.g. Panic recovery's bonus from failed attempts). */
+export function storyRoll(table: TableState, actor: Actor, token: Token, stat: string, ctx?: EngineContext, extra = 0) {
   if (actor.role !== "gm" && token.ownerId !== actor.uid) throw new ActionError("You can only roll for your own character.");
   const stats = token.side !== "player" ? { justice: token.justice ?? 0 } : (ctx?.loadout(token.id)?.stats ?? {});
   const key = String(stat).toLowerCase();
-  const value = Math.round(Number(stats[key] ?? 0));
+  const value = Math.round(Number(stats[key] ?? 0)) + extra;
   const roll = panicType(token) === 1 ? 1 : rollDie(STORY_DIE);
   const label = key.charAt(0).toUpperCase() + key.slice(1);
   log(table, `${token.name} makes a ${label} Story Roll: ${roll}${secret(token, "justice", `${value >= 0 ? "+" : ""}${value} = ${roll + value}`)}.`);
