@@ -403,6 +403,8 @@ export interface CombatState {
   /** Counter Dice waiting on each character, by token id, in the order they were made. */
   counters: Record<string, CounterDie[]>;
   aim?: Aim;
+  /** The active character already used Panic recovery this turn (cleared when the next turn's Combat Actions start). */
+  panicRecoveryUsed?: boolean;
   /** The latest Page resolutions, die by die, so screens can animate them. Newest last. */
   fx?: ClashFx[];
   /** Id of the newest entry in fx. */
@@ -744,6 +746,8 @@ export type TableAction =
   | { type: "turnMove"; x: number; y: number }
   /** Roll a Story Roll with one of the character's Stats; the result goes in the log. */
   | { type: "storyRoll"; tokenId: string; stat: string }
+  /** On your turn, help a Panicking ally: a Prudence Story Roll, and on PANIC_RECOVERY_ROLL or more they recover. */
+  | { type: "panicRecovery"; tokenId: string }
   // GM popups (shared/popups.ts).
   /** GM: show players a popup. `to` missing or empty: every player. */
   | { type: "sendPopup"; id?: string; title?: string; text?: string; image?: string; roll?: { stat: string }; to?: string[]; deal?: PopupDeal }

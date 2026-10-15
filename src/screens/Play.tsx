@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
-import { activeToken, validTargets } from "../../shared/engine.ts";
+import { activeToken, canRecoverFromPanic, validTargets } from "../../shared/engine.ts";
 import { blankCharacter, linkInventory, PANIC_TYPES, PANIC_UPKEEPS, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, asMeleeWithoutAmmo, isAmmo, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import { partsNeedingApproval, proposeEdits, withProposals } from "../../shared/permissions.ts";
 import { playersCanStoryRoll, rangedPagesUseAmmo, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
@@ -416,7 +416,20 @@ export function Play() {
       </section>
 
       {/* ---- Popups ---- */}
-      {overlay === "cycle" && <CycleCharacters table={table} meId={mine?.id} library={effectLibrary} onClose={() => setOverlay(null)} onOpenPage={(p) => setViewing({ page: p })} />}
+      {overlay === "cycle" && (
+        <CycleCharacters
+          table={table}
+          meId={mine?.id}
+          library={effectLibrary}
+          onClose={() => setOverlay(null)}
+          onOpenPage={(p) => setViewing({ page: p })}
+          recovery={{
+            shows: (t) => !!combat && canRecoverFromPanic(mine, t),
+            blocked: !canAct ? "You can use it on your turn, during Combat Actions." : combat?.panicRecoveryUsed ? "You already tried Panic recovery this turn." : "",
+            onUse: (t) => void act({ type: "panicRecovery", tokenId: t.id }).then((ok) => ok && setOverlay(null)),
+          }}
+        />
+      )}
       {overlay === "info" && (
         <Overlay title="Character information" onClose={() => setOverlay(null)}>
           {c ? (

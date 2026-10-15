@@ -105,6 +105,8 @@ export const UPKEEP_LIGHT = 1;
 /** Panic types: the die rolled on Panicking, and the Upkeeps spent Panicking before recovering. */
 export const PANIC_DIE = 4;
 export const PANIC_UPKEEPS = 3;
+/** Panic recovery: an ally's Prudence Story Roll of at least this brings a Panicking character out of Panic. */
+export const PANIC_RECOVERY_ROLL = 10;
 /** What each Panic type (the d4 rolled) does, for the log and the token popup. */
 export const PANIC_TYPES: Record<PanicType, { label: string; effect: string }> = {
   1: { label: "Despair", effect: "every die rolls its Min" },

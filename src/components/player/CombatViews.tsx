@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Page } from "../../../shared/character.ts";
 import { withheld } from "../../../shared/secrets.ts";
+import { PANIC_RECOVERY_ROLL } from "../../../shared/ruleset.ts";
 import type { EffectDef } from "../../../shared/effects.ts";
 import type { TableState, Token } from "../../../shared/types.ts";
 import { EffectsBar } from "../effects/StatusIcons.tsx";
@@ -27,12 +28,15 @@ export function CycleCharacters({
   library,
   onClose,
   onOpenPage,
+  recovery,
 }: {
   table: TableState;
   meId?: string;
   library: Record<string, EffectDef>;
   onClose: () => void;
   onOpenPage: (p: Page) => void;
+  /** Panic recovery on a Panicking ally: which characters get the button, and why it can't be used now ("" when it can). */
+  recovery?: { shows: (t: Token) => boolean; blocked: string; onUse: (t: Token) => void };
 }) {
   const c = table.combat;
   const ids = c ? c.order.map((x) => x.tokenId) : Object.keys(table.tokens);
@@ -89,6 +93,14 @@ export function CycleCharacters({
                   <EffectsBar key={who.id} className="cycle-effects" effects={who.effects ?? []} library={library} size={40} />
                 </div>
               </div>
+              {recovery?.shows(who) && (
+                <div className="panic-recovery">
+                  <button type="button" className="big-button" disabled={!!recovery.blocked} onClick={() => recovery.onUse(who)}>
+                    Panic recovery
+                  </button>
+                  <span className="muted small">{recovery.blocked || `Use your action: a Prudence Story Roll. ${PANIC_RECOVERY_ROLL} or more and ${who.name} recovers from Panic.`}</span>
+                </div>
+              )}
               {!c && <p className="muted">Not in combat.</p>}
               {c && dice === 0 && <p className="muted">Not in the turn order.</p>}
               {c && <SpeedDiceRows table={table} tokenId={who.id} onOpenPage={onOpenPage} />}
