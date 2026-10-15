@@ -25,7 +25,7 @@ import type {
   Weapon,
 } from "./character.ts";
 import { cleanSecrets } from "./secrets.ts";
-import type { Resources, SpawnData, TokenGearInfo } from "./types.ts";
+import type { PanicType, Resources, SpawnData, TokenGearInfo } from "./types.ts";
 import { computeMaxResources, type StatFormulas } from "./formulas.ts";
 
 /** Act 5, Step 1: "For most campaigns, it is encouraged to start at Rank 9." */
@@ -101,6 +101,17 @@ export const STAGGER_UPKEEPS = 2;
 /** While Staggered, every Resistance (damage and Stagger) is this. */
 export const STAGGERED_RESISTANCE = 2;
 export const UPKEEP_LIGHT = 1;
+
+/** Game setting "Panic types": the die rolled on Panicking, and the Upkeeps spent Panicking before recovering. */
+export const PANIC_DIE = 4;
+export const PANIC_UPKEEPS = 3;
+/** What each Panic type (the d4 rolled) does, for the log and the token popup. */
+export const PANIC_TYPES: Record<PanicType, { label: string; effect: string }> = {
+  1: { label: "Despair", effect: "every die rolls its Min" },
+  2: { label: "Paralysis", effect: "no drawing Pages" },
+  3: { label: "Darkness", effect: "no gaining Light" },
+  4: { label: "Confusion", effect: "no Auxiliary Pages" },
+};
 
 /** You asked for players to start combat with 3 Pages in hand. */
 export const STARTING_HAND = 3;

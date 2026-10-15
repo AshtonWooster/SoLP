@@ -30,7 +30,7 @@ import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
 import { popupsFor } from "../../shared/popups.ts";
 import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
-import { effectsClearAfterCombat, playersCanStoryRoll, rangedPagesUseAmmo } from "../../shared/types.ts";
+import { effectsClearAfterCombat, panicTypesOn, playersCanStoryRoll, rangedPagesUseAmmo } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
 import { clearLog, logClearedAt, logClearRequested } from "../../shared/clearLog.ts";
 import { autosaveWrites, loadedNotes, type LastSaved } from "../../shared/autosave.ts";
@@ -367,6 +367,7 @@ export class Host {
     effectDef: (id: string) => this.effects[id],
     clearEffectsAfterCombat: () => effectsClearAfterCombat(this.game),
     rangedAmmo: () => rangedPagesUseAmmo(this.game),
+    panicTypes: () => panicTypesOn(this.game),
     playersStoryRoll: () => playersCanStoryRoll(this.game),
     // Popups that hand out or take items and Ahn read and save players' sheets here.
     sheets: {
