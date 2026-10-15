@@ -394,6 +394,7 @@ function clearPanic(t: Token) {
   const status = { ...t.status, panic: false };
   delete status.panicType;
   delete status.panicUpkeeps;
+  delete status.panicRecoveryFails;
   t.status = status;
 }
 
@@ -425,6 +426,7 @@ export function canRecoverFromPanic(helper: Token | undefined, t: Token | undefi
 /**
  * Panic recovery: on their turn, during Combat Actions, a character helps a Panicking ally with a
  * Prudence Story Roll; at PANIC_RECOVERY_ROLL or more the ally recovers right away. Once a turn.
+ * Each failed attempt on the ally adds +1 to the next one, whoever makes it, until they recover.
  */
 export function panicRecovery(table: TableState, actor: Actor, tokenId: string, ctx?: EngineContext) {
   const c = table.combat!;
@@ -435,10 +437,12 @@ export function panicRecovery(table: TableState, actor: Actor, tokenId: string, 
   if (!canRecoverFromPanic(helper, ally)) throw new ActionError(`${helper.name} can only help an ally out of Panic.`);
   if (c.panicRecoveryUsed) throw new ActionError(`${helper.name} already tried Panic recovery this turn.`);
   c.panicRecoveryUsed = true;
-  log(table, `${helper.name} tries to bring ${ally.name} out of Panic.`);
-  const total = storyRoll(table, actor, helper, "prudence", ctx);
-  if (total >= PANIC_RECOVERY_ROLL) recoverFromPanic(table, ally);
-  else log(table, `  Not enough (needs ${PANIC_RECOVERY_ROLL}): ${ally.name} is still Panicking.`);
+  const fails = ally.status.panicRecoveryFails ?? 0;
+  log(table, `${helper.name} tries to bring ${ally.name} out of Panic${fails ? ` (+${fails} from ${fails} failed attempt${fails === 1 ? "" : "s"})` : ""}.`);
+  const total = storyRoll(table, actor, helper, "prudence", ctx, fails);
+  if (total >= PANIC_RECOVERY_ROLL) return recoverFromPanic(table, ally);
+  ally.status = { ...ally.status, panicRecoveryFails: fails + 1 };
+  log(table, `  Not enough (needs ${PANIC_RECOVERY_ROLL}): ${ally.name} is still Panicking. The next attempt gets +${fails + 1}.`);
 }
 
 /**
@@ -1324,11 +1328,12 @@ export function pinnedBy(table: TableState, token: Token): Token | undefined {
 }
 
 /** A Story Roll (Act 7): 1d20 (placeholder) + the chosen Stat. Allowed any time, in or out of combat. */
-export function storyRoll(table: TableState, actor: Actor, token: Token, stat: string, ctx?: EngineContext) {
+/** `extra` is added to the Stat (e.g. Panic recovery's bonus from failed attempts). */
+export function storyRoll(table: TableState, actor: Actor, token: Token, stat: string, ctx?: EngineContext, extra = 0) {
   if (actor.role !== "gm" && token.ownerId !== actor.uid) throw new ActionError("You can only roll for your own character.");
   const stats = token.side !== "player" ? { justice: token.justice ?? 0 } : (ctx?.loadout(token.id)?.stats ?? {});
   const key = String(stat).toLowerCase();
-  const value = Math.round(Number(stats[key] ?? 0));
+  const value = Math.round(Number(stats[key] ?? 0)) + extra;
   const roll = panicType(token) === 1 ? 1 : rollDie(STORY_DIE);
   const label = key.charAt(0).toUpperCase() + key.slice(1);
   log(table, `${token.name} makes a ${label} Story Roll: ${roll}${secret(token, "justice", `${value >= 0 ? "+" : ""}${value} = ${roll + value}`)}.`);

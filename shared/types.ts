@@ -284,6 +284,8 @@ export interface TokenStatus {
   panicType?: PanicType;
   /** Upkeeps the character has passed while Panicking with a type; they recover at PANIC_UPKEEPS. */
   panicUpkeeps?: number;
+  /** Failed Panic recovery attempts on the character this Panic: each adds +1 to the next attempt. */
+  panicRecoveryFails?: number;
 }
 
 /** One character in the turn order. */

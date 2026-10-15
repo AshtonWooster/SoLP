@@ -257,3 +257,24 @@ test("Panic recovery: only on your own turn, on a Panicking ally, never yourself
   assert.equal(s.roland().status?.panic, true);
   assert.equal(s.c().panicRecoveryUsed, undefined, "failed attempts don't use the action");
 });
+
+test("Panic recovery: each failed attempt adds +1 to the next, whoever makes it, until they recover", () => {
+  const s = recoverySetup(3);
+  recover(s, 1); // 1 + 3 = 4: fails.
+  assert.equal(s.roland().status?.panicRecoveryFails, 1);
+  assert.ok(s.logged("The next attempt gets +1."));
+  s.act({ type: "endTurn" }, p2);
+  s.act({ type: "endTurn" }, p1);
+  s.act({ type: "endTurn" }, gm);
+  recover(s, 5); // 5 + 3 + 1 = 9: fails.
+  assert.ok(s.logged("angela tries to bring roland out of Panic (+1 from 1 failed attempt)."));
+  assert.equal(s.table.storyRoll?.bonus, 4, "the bonus shows in the roll");
+  assert.equal(s.roland().status?.panicRecoveryFails, 2);
+  s.act({ type: "endTurn" }, p2);
+  s.act({ type: "endTurn" }, p1);
+  s.act({ type: "endTurn" }, gm);
+  recover(s, 5); // 5 + 3 + 2 = 10: recovers.
+  assert.ok(s.logged("(+2 from 2 failed attempts)"));
+  assert.equal(s.roland().status?.panic, false);
+  assert.equal(s.roland().status?.panicRecoveryFails, undefined, "a later Panic starts from +0");
+});

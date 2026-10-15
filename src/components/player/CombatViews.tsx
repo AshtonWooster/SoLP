@@ -98,7 +98,8 @@ export function CycleCharacters({
                   <button type="button" className="big-button" disabled={!!recovery.blocked} onClick={() => recovery.onUse(who)}>
                     Panic recovery
                   </button>
-                  <span className="muted small">{recovery.blocked || `Use your action: a Prudence Story Roll. ${PANIC_RECOVERY_ROLL} or more and ${who.name} recovers from Panic.`}</span>
+                  <span className="muted small">{recovery.blocked ||
+                      `Use your action: a Prudence Story Roll${who.status?.panicRecoveryFails ? ` +${who.status.panicRecoveryFails} from failed attempts` : ""}. ${PANIC_RECOVERY_ROLL} or more and ${who.name} recovers from Panic.`}</span>
                 </div>
               )}
               {!c && <p className="muted">Not in combat.</p>}
