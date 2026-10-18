@@ -369,3 +369,30 @@ test("with Ammo, or with the setting off, nothing rolls with disadvantage", () =
     assert.ok(!s.table.log.some((l) => l.includes("disadvantage")));
   }
 });
+
+test("Ranged escape: a Ranged Page with only Defensive Dice left, out of the Melee range, turns the Melee Page's Offensive Dice into Counter Dice", () => {
+  const s = setup([page("combo", "melee", [die("slash", 9), die("blunt", 9), die("block", 2)])], [page("shot", "ranged", [die("pierce", 1), die("evade", 20)])]);
+  endTurn(s, p1);
+  enemyPlay(s, "shot", ["roland"]);
+  endTurn(s);
+  play(s, "combo", ["rat"]); // Clash with the Shot.
+  s.table.tokens.rat.x = 6; // Out of melee range before it resolves.
+  endTurn(s, p1);
+  // Slash 9 beats Pierce 1 and goes to the bottom; the Shot has only its Evade left, so Roland's Offensive Dice become Counter Dice.
+  assert.ok(s.table.log.some((l) => l.includes("rat is out of melee range: roland's Offensive Dice become Counter Dice.")));
+  assert.equal(s.hp("rat"), 30);
+  assert.deepEqual(s.c().counters.roland.map((x) => x.die.kind).sort(), ["blunt", "slash"]);
+});
+
+test("Counter Dice aren't rolled against a Mass Attack, and they're kept", () => {
+  const s = setup([page("brace", "melee", [die("evade", 9, true)])], [page("sweep", "massIndividual", [die("slash", 4)])]);
+  endTurn(s, p1);
+  enemyPlay(s, "sweep", ["roland"]);
+  endTurn(s);
+  play(s, "brace", ["rat"], { unopposed: true }); // Stores a Counter Evade 9 on Roland.
+  assert.equal(s.c().counters.roland.length, 1);
+  endTurn(s, p1);
+  // The Sweep resolves: the Counter Evade doesn't answer it, so the Slash 4 lands.
+  assert.equal(s.hp("roland"), 26);
+  assert.equal(s.c().counters.roland.length, 1, "the Counter Die is kept");
+});

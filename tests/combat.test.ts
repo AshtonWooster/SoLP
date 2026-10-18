@@ -151,7 +151,7 @@ test("a Draw Negates both dice", () => {
 });
 
 test("Block: losing reduces damage before Resistance; winning deals the difference as Stagger; vs Defensive deals its full power", () => {
-  // Rat's Block 4 loses to Slash 7: 3 damage, halved by Resistance 0.5 -> 1.
+  // Rat's Block 4 loses to Slash 7: 3 damage, halved by Resistance 0.5 -> 1.5, rounded up to 2.
   let s = setup([page("slash", "melee", [die("slash", 7)])], [page("guard", "melee", [die("block", 4)])]);
   s.table.tokens.rat.resistances = { slash: 0.5, pierce: 1, blunt: 1 };
   endTurn(s, p1);
@@ -159,7 +159,7 @@ test("Block: losing reduces damage before Resistance; winning deals the differen
   endTurn(s);
   play(s, "slash", ["rat"]);
   endTurn(s, p1);
-  assert.equal(s.hp("rat"), 29);
+  assert.equal(s.hp("rat"), 28);
   // Rat's Block 9 beats Slash 3: Roland takes 6 Stagger.
   s = setup([page("slash", "melee", [die("slash", 3)])], [page("guard", "melee", [die("block", 9)])]);
   endTurn(s, p1);
@@ -460,7 +460,7 @@ test("Offensive dice also deal Stagger damage, scaled by Stagger Resistance; a l
   assert.equal(t.table.tokens.rat.resources.stagger, 17);
 });
 
-test("Mass Attack (Summation) tie: the attack still lands, but the defender's Page is unaffected", () => {
+test("Mass Attack (Summation) tie: the target is unaffected, like a higher sum", () => {
   const s = setup([page("sweep", "massSummation", [die("slash", 3), die("slash", 3)])], [page("guard", "melee", [die("block", 6)])]);
   s.table.tokens.wolf = token("wolf", "enemy", 2, 3, { justice: -200, pages: [page("howl", "melee", [die("blunt", 1)])] });
   s.act({ type: "addCombatant", tokenId: "wolf" }, gm);
@@ -469,8 +469,9 @@ test("Mass Attack (Summation) tie: the attack still lands, but the defender's Pa
   enemyPlay(s, "guard", ["roland"]); // clashes with the Sweep, which waits
   endTurn(s);
   endTurn(s); // Wolf passes
-  // Roland's turn: Sweep 6 vs Guard 6, a tie. Both 3s still land on the Rat; its Guard stays slotted.
-  assert.equal(s.hp("rat"), 24);
+  // Roland's turn: Sweep 6 vs Guard 6, a tie. The Rat isn't affected; its Guard stays slotted.
+  assert.equal(s.hp("rat"), 30);
+  assert.ok(s.table.log.some((l) => l.includes("Tie: rat is unaffected.")));
   const guard = s.c().slots.find((x) => x.ownerId === "rat");
   assert.ok(guard && !guard.clashWith);
 });

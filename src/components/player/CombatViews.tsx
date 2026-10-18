@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Page } from "../../../shared/character.ts";
 import { withheld } from "../../../shared/secrets.ts";
-import { PANIC_RECOVERY_ROLL } from "../../../shared/ruleset.ts";
+import { KO_RECOVERY_ROLL, KO_UPKEEPS, PANIC_RECOVERY_ROLL } from "../../../shared/ruleset.ts";
 import type { EffectDef } from "../../../shared/effects.ts";
 import type { TableState, Token } from "../../../shared/types.ts";
 import { EffectsBar } from "../effects/StatusIcons.tsx";
@@ -29,6 +29,7 @@ export function CycleCharacters({
   onClose,
   onOpenPage,
   recovery,
+  revive,
 }: {
   table: TableState;
   meId?: string;
@@ -37,6 +38,8 @@ export function CycleCharacters({
   onOpenPage: (p: Page) => void;
   /** Panic recovery on a Panicking ally: which characters get the button, and why it can't be used now ("" when it can). */
   recovery?: { shows: (t: Token) => boolean; blocked: string; onUse: (t: Token) => void };
+  /** Reviving a Knocked Out ally (Game setting "Knocked Out rules"), the same way. */
+  revive?: { shows: (t: Token) => boolean; blocked: string; onUse: (t: Token) => void };
 }) {
   const c = table.combat;
   const ids = c ? c.order.map((x) => x.tokenId) : Object.keys(table.tokens);
@@ -100,6 +103,26 @@ export function CycleCharacters({
                   </button>
                   <span className="muted small">{recovery.blocked ||
                       `Use your action: a Prudence Story Roll${who.status?.panicRecoveryFails ? ` +${who.status.panicRecoveryFails} from failed attempts` : ""}. ${PANIC_RECOVERY_ROLL} or more and ${who.name} recovers from Panic.`}</span>
+                </div>
+              )}
+              {who.status?.dead ? (
+                <p className="ko-note">Dead.</p>
+              ) : (
+                who.status?.knockedOut &&
+                c?.knockOutRules &&
+                who.side === "player" && (
+                  <p className="ko-note">
+                    Knocked Out: Dead in {KO_UPKEEPS - (who.status.koUpkeeps ?? 0)} more Upkeep{KO_UPKEEPS - (who.status.koUpkeeps ?? 0) === 1 ? "" : "s"} unless revived.
+                  </p>
+                )
+              )}
+              {revive?.shows(who) && (
+                <div className="panic-recovery">
+                  <button type="button" className="big-button" disabled={!!revive.blocked} onClick={() => revive.onUse(who)}>
+                    Revive
+                  </button>
+                  <span className="muted small">{revive.blocked ||
+                      `Use your action: a Temperance Story Roll${who.status?.koRecoveryFails ? ` +${who.status.koRecoveryFails} from failed attempts` : ""}. ${KO_RECOVERY_ROLL} or more and ${who.name} is back up with a quarter of their Health.`}</span>
                 </div>
               )}
               {!c && <p className="muted">Not in combat.</p>}

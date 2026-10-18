@@ -59,7 +59,7 @@ test("a Story Roll records its roll and Stat for screens to play, each with a ne
   assert.equal(first.stat, "insight");
   assert.equal(first.bonus, 3);
   assert.ok(first.roll >= 1 && first.roll <= 20);
-  assert.match(t.log.at(-1)!, new RegExp(`^annie makes a Insight Story Roll: ${first.roll}\\+3 = ${first.roll + 3}\\.$`));
+  assert.match(t.log.at(-1)!, new RegExp(`^annie makes a Insight Story Roll: ${first.roll}\\+3 = ${first.roll + 3} \\((success|failure|between a failure and a success)\\)\\.$`));
 
   applyAction(t, { type: "storyRoll", tokenId: "annie", stat: "insight" }, ann, ctx);
   assert.notEqual(t.storyRoll!.id, first.id);

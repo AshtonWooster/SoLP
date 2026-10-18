@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { deleteField, doc, updateDoc } from "firebase/firestore";
 import type { Character, ItemTemplate, Page } from "../../shared/character.ts";
-import { activeToken, canRecoverFromPanic, validTargets } from "../../shared/engine.ts";
-import { blankCharacter, linkInventory, PANIC_TYPES, PANIC_UPKEEPS, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, asMeleeWithoutAmmo, isAmmo, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
+import { activeToken, canRecoverFromPanic, canRevive, revivable, validTargets } from "../../shared/engine.ts";
+import { blankCharacter, linkInventory, moveCost, pageRange, PANIC_TYPES, PANIC_UPKEEPS, STAGGER_UPKEEPS, STAGGERED_RESISTANCE, asMeleeWithoutAmmo, isAmmo, isMassAttack, PRIMARY_STATS, SECONDARY_STATS, STORY_DIE, useItemIn } from "../../shared/ruleset.ts";
 import { partsNeedingApproval, proposeEdits, withProposals } from "../../shared/permissions.ts";
 import { playersCanStoryRoll, rangedPagesUseAmmo, type Card, type GameDoc, type PageSource, type PlayerEditKey, type TableAction } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
@@ -51,7 +51,7 @@ type OverlayKey = "cycle" | "info" | "story" | "targets";
 
 /** A single-target Page about to be slotted, waiting on Clash or Unopposed (and which Speed Die). */
 /** How a Page is slotted: on which of the target's Speed Dice, Unopposed, and with which Ammo. */
-type SlotHow = { targetDie?: number; unopposed?: boolean; ammo?: string; noAmmo?: boolean };
+type SlotHow = { targetDie?: number; unopposed?: boolean; ammo?: string; noAmmo?: boolean; resolveNow?: boolean };
 
 interface PendingSlot {
   category: Category;
@@ -250,7 +250,7 @@ export function Play() {
     { cls: "res-sanity", label: "Sanity", v: r?.sanity, max: r?.maxSanity },
     { cls: "res-light", label: "Light", v: r?.light, max: r?.maxLight },
   ];
-  const others = Object.values(table.tokens).filter((t) => t.id !== mine?.id && !t.status?.knockedOut);
+  const others = Object.values(table.tokens).filter((t) => t.id !== mine?.id && (!t.status?.knockedOut || revivable(table, t)));
   const stats = [
     ...PRIMARY_STATS.map((s) => ({ key: s.key as string, label: s.label, v: c?.primary[s.key] ?? 0 })),
     ...SECONDARY_STATS.map((s) => ({ key: s.key, label: s.label, v: c?.secondary[s.key] ?? 0 })),
@@ -428,6 +428,11 @@ export function Play() {
             blocked: !canAct ? "You can use it on your turn, during Combat Actions." : combat?.panicRecoveryUsed ? "You already tried Panic recovery this turn." : "",
             onUse: (t) => void act({ type: "panicRecovery", tokenId: t.id }).then((ok) => ok && setOverlay(null)),
           }}
+          revive={{
+            shows: (t) => !!combat && canRevive(table, mine, t),
+            blocked: !canAct ? "You can use it on your turn, during Combat Actions." : combat?.koRecoveryUsed ? "You already tried to revive someone this turn." : "",
+            onUse: (t) => void act({ type: "koRecovery", tokenId: t.id }).then((ok) => ok && setOverlay(null)),
+          }}
         />
       )}
       {overlay === "info" && (
@@ -552,7 +557,9 @@ export function Play() {
                 >
                   <Portrait token={t} size={36} />
                   <span>{t.name}</span>
-                  <span className="muted small">{page ? (inRange.has(t.id) ? "in range" : "out of range") : t.side}</span>
+                  <span className="muted small">
+                    {page ? (!inRange.has(t.id) ? "out of range" : reach && mine && moveCost(mine, t) > pageRange(reach) ? "attacking an ally: Clash to guard" : "in range") : t.side}
+                  </span>
                 </button>
               </li>
             ))}

@@ -18,7 +18,10 @@ import {
 import { pendingCount } from "../../shared/permissions.ts";
 import {
   effectsClearAfterCombat,
+  endOfCombatRecoveryOn,
+  knockOutRulesOn,
   rangedPagesUseAmmo,
+  weaponPropertiesOn,
   type GameDoc,
   type GmMeta,
   PLAYER_EDIT_OPTIONS,
@@ -38,9 +41,9 @@ import { db, deleteGameFn, friendlyError, newInviteCodeFn, removePlayerFn } from
 import { StableLabel } from "../components/StableLabel.tsx";
 
 /** One player: their character at a glance, a link to the sheet, and Kick. */
-function PlayerCard({ gameId, uid, displayName, character, formulas, onKick }: { gameId: string; uid: string; displayName: string; character?: Character; formulas: StatFormulas; onKick: () => void }) {
+function PlayerCard({ gameId, uid, displayName, character, formulas, weaponProperties, onKick }: { gameId: string; uid: string; displayName: string; character?: Character; formulas: StatFormulas; weaponProperties: boolean; onKick: () => void }) {
   const c = character ? { ...blankCharacter(uid, displayName), ...character } : undefined;
-  const todo = c ? characterChecks(c).filter((ch) => !ch.ok).length : 0;
+  const todo = c ? characterChecks(c, { weaponProperties }).filter((ch) => !ch.ok).length : 0;
   const waiting = pendingCount(c);
   return (
     <li className="settings-player">
@@ -396,7 +399,7 @@ function DeleteGameSection({ gameId, name }: { gameId: string; name: string }) {
   );
 }
 
-type Area = "invite" | "players" | "permissions" | "story" | "ranged" | "items" | "effects" | "formulas";
+type Area = "combat" | "invite" | "players" | "permissions" | "story" | "ranged" | "items" | "effects" | "formulas";
 
 /** The GM's game settings: the game's name and image, inviting players, the players (open their sheets, kick them) and what players may edit. */
 export function Settings() {
@@ -493,7 +496,7 @@ export function Settings() {
           ) : (
             <ul className="plain settings-players">
               {players.map(([uid, m]) => (
-                <PlayerCard key={uid} gameId={id} uid={uid} displayName={m.displayName} character={characters?.[uid]} formulas={gameStatFormulas(g)} onKick={() => kick(uid, m.displayName)} />
+                <PlayerCard key={uid} gameId={id} uid={uid} displayName={m.displayName} character={characters?.[uid]} formulas={gameStatFormulas(g)} weaponProperties={weaponPropertiesOn(g)} onKick={() => kick(uid, m.displayName)} />
               ))}
             </ul>
           )}
@@ -548,6 +551,48 @@ export function Settings() {
           {message?.at === "ranged" && <p className="muted settings-note" role="status">{message.text}</p>}
         </section>
 
+
+        <section className="panel settings-section" aria-label="Combat rules">
+          <h2>Combat rules</h2>
+          <p className="muted small">Rules from the latest ruleset that change how combat plays. Each is off until you turn it on.</p>
+          <Toggle
+            label="Knocked Out rules"
+            hint="On: a player's character at 0 Health can be revived by an ally's Temperance Story Roll of 12 or more (+1 for each failed attempt), coming back with a quarter of their Health, 3 + Prudence Sanity and full Stagger Resist; the ally gains 3 + Prudence Sanity too. After 3 of their Upkeeps without a revive they're Dead. Pages can still target them: they do nothing, but one with an Offensive Die brings Death an Upkeep closer. Takes effect from the next combat. Off: a Knocked Out character stays down until you set their Health."
+            on={knockOutRulesOn(g)}
+            onChange={async (on) => {
+              try {
+                await updateDoc(ref, { "settings.knockOutRules": on });
+              } catch (err) {
+                setMessage({ at: "combat", text: friendlyError(err) });
+              }
+            }}
+          />
+          <Toggle
+            label="Recover when combat ends"
+            hint="On: when you end combat, everyone who fought gets full Light and Stagger Resist and 3 + Prudence Sanity, and Panic, Stagger and Knock Out end (a Knocked Out character comes back with a quarter of their Health). The Dead stay Dead. Off: resources stay as they were."
+            on={endOfCombatRecoveryOn(g)}
+            onChange={async (on) => {
+              try {
+                await updateDoc(ref, { "settings.endOfCombatRecovery": on });
+              } catch (err) {
+                setMessage({ at: "combat", text: friendlyError(err) });
+              }
+            }}
+          />
+          <Toggle
+            label="Weapon properties"
+            hint="On: each Weapon is Melee (Small, Medium or Heavy) or Ranged (Low Caliber, 6 range; High Caliber, 10 range), which sets its hands and range, and Offensive (a Clash it starts can resolve right away) or Defensive (it can Clash with an attack aimed at an ally within its range). Melee Weapons can't carry Ranged Pages. Takes effect from the next combat. Off: Weapons are just hands and ranges."
+            on={weaponPropertiesOn(g)}
+            onChange={async (on) => {
+              try {
+                await updateDoc(ref, { "settings.weaponProperties": on });
+              } catch (err) {
+                setMessage({ at: "combat", text: friendlyError(err) });
+              }
+            }}
+          />
+          {message?.at === "combat" && <p className="muted settings-note" role="status">{message.text}</p>}
+        </section>
 
         <section className="panel settings-section" aria-label="Item library">
           <h2>Item library</h2>

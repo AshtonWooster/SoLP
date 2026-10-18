@@ -474,3 +474,17 @@ test("warnings catch pieces that don't fit their When", () => {
   assert.ok(w.some((x) => x.includes('"The kind of damage" only works with')));
   assert.ok(w.some((x) => x.includes('there\'s no "they" to check')));
 });
+
+test("Advantage rolls its count + 1 dice and keeps the highest; Disadvantage cancels it one for one", () => {
+  const twice = def("Keen", "passive", [
+    { when: "roll", checks: [], actions: [{ kind: "advantage", amount: num(0) }] },
+    { when: "roll", checks: [], actions: [{ kind: "advantage", amount: num(0) }] },
+  ]);
+  const s = setup({ library: { twice }, passives: ["twice"] });
+  s.hit();
+  assert.ok(s.table.log.some((l) => l.includes("roland rolls with advantage: 1, 1 and 1, keeps 1.")), "2 Advantage: 3 dice");
+  const dull = def("Dull", "passive", [{ when: "roll", checks: [], actions: [{ kind: "disadvantage", amount: num(0) }] }]);
+  const s2 = setup({ library: { twice, dull }, passives: ["twice", "dull"] });
+  s2.hit();
+  assert.ok(s2.table.log.some((l) => l.includes("roland rolls with advantage: 1 and 1, keeps 1.")), "2 Advantage - 1 Disadvantage: 2 dice");
+});

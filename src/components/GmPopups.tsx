@@ -3,6 +3,7 @@ import type { Character, ItemTemplate } from "../../shared/character.ts";
 import { ANY_STAT, finishedPopups, POPUP_STATS, POPUP_TEXT_MAX, POPUP_TITLE_MAX, popupIsUp, popupWaitingOn, statLabel, upPopups } from "../../shared/popups.ts";
 import type { PlayerListEntry } from "../../shared/players.ts";
 import { dealSummary, MAX_AHN, MAX_DEAL_COUNT, OUTCOME_LABELS } from "../../shared/rewards.ts";
+import { STORY_SUCCESS_AT_LEAST } from "../../shared/ruleset.ts";
 import type { GmPopup, PopupDeal, TableAction, TableState } from "../../shared/types.ts";
 import { useCollection } from "../api.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
@@ -29,7 +30,7 @@ export interface PopupDraft {
   price: number;
 }
 
-export const BLANK_DRAFT: PopupDraft = { title: "", text: "", stat: "", everyone: true, picked: [], dealKind: "", itemId: "", count: 1, ahn: 0, when: "now", need: 10, price: 10 };
+export const BLANK_DRAFT: PopupDraft = { title: "", text: "", stat: "", everyone: true, picked: [], dealKind: "", itemId: "", count: 1, ahn: 0, when: "now", need: STORY_SUCCESS_AT_LEAST, price: 10 };
 
 function draftDeal(d: PopupDraft): PopupDeal | undefined {
   if (!d.dealKind) return undefined;

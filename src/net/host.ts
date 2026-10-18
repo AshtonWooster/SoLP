@@ -30,7 +30,7 @@ import { cleanEffect, type EffectDef } from "../../shared/effects.ts";
 import { currentMapId, playerView } from "../../shared/maps.ts";
 import { popupsFor } from "../../shared/popups.ts";
 import { tableForGm, tableForPlayers } from "../../shared/secrets.ts";
-import { effectsClearAfterCombat, playersCanStoryRoll, rangedPagesUseAmmo } from "../../shared/types.ts";
+import { effectsClearAfterCombat, endOfCombatRecoveryOn, knockOutRulesOn, playersCanStoryRoll, rangedPagesUseAmmo, weaponPropertiesOn } from "../../shared/types.ts";
 import { gameStatFormulas } from "../../shared/formulas.ts";
 import { clearLog, logClearedAt, logClearRequested } from "../../shared/clearLog.ts";
 import { autosaveWrites, loadedNotes, type LastSaved } from "../../shared/autosave.ts";
@@ -350,10 +350,11 @@ export class Host {
       const profPages = proficiencyPages(c, this.effects);
       return {
         pages: Object.fromEntries(
-          [...withWeaponRanges(c, equipmentPages(c).map((x) => x.page)), ...aux.map((x) => x.page), ...profPages.map((x) => x.page), ...(c.ego ?? [])].map((p) => [p.id, p]),
+          [...withWeaponRanges(c, equipmentPages(c).map((x) => x.page), { weaponProperties: weaponPropertiesOn(this.game) }), ...aux.map((x) => x.page), ...profPages.map((x) => x.page), ...(c.ego ?? [])].map((p) => [p.id, p]),
         ),
         ego: (c.ego ?? []).map((p) => p.id),
         stats: { ...c.primary, ...c.secondary },
+        rank: c.rank,
         deck: cleanDeck(c).flatMap((e) => Array(e.copies).fill(e.pageId)),
         aux: [
           ...aux.flatMap((x) => Array.from({ length: x.copies }, () => ({ pageId: x.page.id, itemId: x.item.id }))),
@@ -367,6 +368,8 @@ export class Host {
     effectDef: (id: string) => this.effects[id],
     clearEffectsAfterCombat: () => effectsClearAfterCombat(this.game),
     rangedAmmo: () => rangedPagesUseAmmo(this.game),
+    knockOutRules: () => knockOutRulesOn(this.game),
+    endOfCombatRecovery: () => endOfCombatRecoveryOn(this.game),
     playersStoryRoll: () => playersCanStoryRoll(this.game),
     // Popups that hand out or take items and Ahn read and save players' sheets here.
     sheets: {

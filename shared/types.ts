@@ -102,6 +102,26 @@ export interface GameSettings {
    */
   statusVfx?: boolean;
   /**
+   * The ruleset's Knocked Out rules for players' characters: an ally's Temperance Story Roll of 12+
+   * revives them, three Upkeeps without one and they're Dead, and Pages can still be slotted against
+   * them (doing nothing but bringing Death a turn closer). Off unless the GM turns it on: then a
+   * Knocked Out character stays down until the GM sets their Health, and can't be targeted.
+   */
+  knockOutRules?: boolean;
+  /**
+   * The ruleset's End of Combat: when the GM ends combat, everyone who fought gets full Light and
+   * Stagger Resist and 3 + Prudence Sanity, and Panic, Stagger and Knock Out end. Off unless the GM
+   * turns it on: then ending combat leaves resources as they are.
+   */
+  endOfCombatRecovery?: boolean;
+  /**
+   * The ruleset's Weapon creation: each Weapon is Melee (Small, Medium, Heavy) or Ranged (Low or High
+   * Caliber), which sets its hands and range, and Offensive (can resolve a Clash it starts right away)
+   * or Defensive (can Clash with an attack on an ally within its range). Off unless the GM turns it on:
+   * then Weapons are just hands and ranges, as they always were.
+   */
+  weaponProperties?: boolean;
+  /**
    * How Rank and Stats set max Health, Stagger Resist, Sanity and Light (shared/formulas.ts). New
    * games start with the standard formulas; a game from before formulas has none saved and keeps
    * its old numbers until the GM changes them.
@@ -136,6 +156,18 @@ export function rangedPagesUseAmmo(game: GameDoc | undefined): boolean {
 
 export function effectsClearAfterCombat(game: GameDoc | undefined): boolean {
   return game?.settings?.clearEffectsAfterCombat === true;
+}
+
+export function knockOutRulesOn(game: GameDoc | undefined): boolean {
+  return game?.settings?.knockOutRules === true;
+}
+
+export function endOfCombatRecoveryOn(game: GameDoc | undefined): boolean {
+  return game?.settings?.endOfCombatRecovery === true;
+}
+
+export function weaponPropertiesOn(game: GameDoc | undefined): boolean {
+  return game?.settings?.weaponProperties === true;
 }
 
 export const PLAYER_EDIT_OPTIONS: { key: PlayerEditKey; label: string; hint: string; fields: string[] }[] = [
@@ -286,6 +318,12 @@ export interface TokenStatus {
   panicUpkeeps?: number;
   /** Failed Panic recovery attempts on the character this Panic: each adds +1 to the next attempt. */
   panicRecoveryFails?: number;
+  /** Knocked Out rules (Game setting): Upkeeps passed while Knocked Out; at KO_UPKEEPS they're Dead. */
+  koUpkeeps?: number;
+  /** Knocked Out rules: failed revive attempts on the character this Knock Out; each adds +1 to the next. */
+  koRecoveryFails?: number;
+  /** Knocked Out rules: three Upkeeps passed without a revive. Only the GM setting their Health brings them back. */
+  dead?: boolean;
 }
 
 /** One character in the turn order. */
@@ -407,6 +445,10 @@ export interface CombatState {
   aim?: Aim;
   /** The active character already used Panic recovery this turn (cleared when the next turn's Combat Actions start). */
   panicRecoveryUsed?: boolean;
+  /** The active character already tried to revive someone this turn (Knocked Out rules), cleared like panicRecoveryUsed. */
+  koRecoveryUsed?: boolean;
+  /** The Game setting "Knocked Out rules" was on when this combat started; it holds for the whole combat. */
+  knockOutRules?: boolean;
   /** The latest Page resolutions, die by die, so screens can animate them. Newest last. */
   fx?: ClashFx[];
   /** Id of the newest entry in fx. */
@@ -750,6 +792,10 @@ export type TableAction =
   | { type: "storyRoll"; tokenId: string; stat: string }
   /** On your turn, help a Panicking ally: a Prudence Story Roll, and on PANIC_RECOVERY_ROLL or more they recover. */
   | { type: "panicRecovery"; tokenId: string }
+  /** Knocked Out rules: on your turn, revive a Knocked Out ally with a Temperance Story Roll of KO_RECOVERY_ROLL or more. */
+  | { type: "koRecovery"; tokenId: string }
+  /** GM, out of combat: the players' characters rest this many hours, recovering Health and Sanity (ruleset, "Resting"). */
+  | { type: "rest"; hours: number; tokenIds?: string[] }
   // GM popups (shared/popups.ts).
   /** GM: show players a popup. `to` missing or empty: every player. */
   | { type: "sendPopup"; id?: string; title?: string; text?: string; image?: string; roll?: { stat: string }; to?: string[]; deal?: PopupDeal }
@@ -776,8 +822,9 @@ export type TableAction =
    * `targetDie` picks which of a single target's Speed Dice to clash with (the first by default);
    * `unopposed` slots it as a One-Sided attack that doesn't clash with the Page on that die.
    * `ammo` is the inventory item a player's Ranged Page spends (Game setting "Ranged Pages use Ammo").
+   * `resolveNow`: a Page from an Offensive Weapon that starts a Clash resolves it right away (Game setting "Weapon properties").
    */
-  | { type: "slot"; targets?: string[]; targetDie?: number; unopposed?: boolean; ammo?: string }
+  | { type: "slot"; targets?: string[]; targetDie?: number; unopposed?: boolean; ammo?: string; resolveNow?: boolean }
   /** The GM marks the target of a slotted Ranged Page as in Partial or Full Cover, or out of it. */
   | { type: "setCover"; slotId: string; cover: Cover | null }
   /** A Ranged Page whose target is in Full Cover: fire it now, or hold fire (it's Negated). */

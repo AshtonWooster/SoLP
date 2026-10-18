@@ -17,6 +17,9 @@ import {
   panicByOverride,
   panicRecovery,
   canRecoverFromPanic,
+  canRevive,
+  koRecovery,
+  rest,
   pinnedBy,
   rollSpeed,
   slot,
@@ -53,8 +56,8 @@ import { moveCost } from "./ruleset.ts";
 import { cleanSecrets } from "./secrets.ts";
 import type { Resources, Side, TableAction, TableState, Token, TokenGearInfo } from "./types.ts";
 
-export { activeToken, canRecoverFromPanic, ActionError, newId, type Actor, type EngineContext };
-export { pinnedBy, validTargets } from "./combat.ts";
+export { activeToken, canRecoverFromPanic, canRevive, ActionError, newId, type Actor, type EngineContext };
+export { guardDice, pinnedBy, revivable, validTargets } from "./combat.ts";
 export type { Loadout } from "./combat.ts";
 
 const PLAYER_COLORS = ["#4fb3bf", "#e0b04f", "#9b7ede", "#6cc070", "#e07a9b", "#5c8fe0"];
@@ -263,6 +266,12 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
       const nowStaggered = r.stagger <= 0;
       const upkeeps = nowStaggered && token.status?.staggered ? (token.status.staggerUpkeeps ?? 0) : 0;
       token.status = { ...token.status, knockedOut: r.hp <= 0, staggered: nowStaggered, staggerUpkeeps: upkeeps };
+      // Health above 0 brings back even the Dead (Knocked Out rules); the revive count starts over.
+      if (r.hp > 0) {
+        delete token.status.dead;
+        delete token.status.koUpkeeps;
+        delete token.status.koRecoveryFails;
+      }
       if (applied.length) say(`GM override: ${token.name} ${applied.join(", ")}`);
       panicByOverride(table, token);
       return applied.length > 0;
@@ -484,6 +493,13 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
     case "panicRecovery":
       panicRecovery(table, actor, String(action.tokenId), ctx);
       return true;
+    case "koRecovery":
+      koRecovery(table, actor, String(action.tokenId), ctx);
+      return true;
+    case "rest":
+      gmOnly();
+      rest(table, action.hours, Array.isArray(action.tokenIds) ? action.tokenIds.map(String) : undefined, ctx);
+      return true;
     case "storyRoll":
       // A popup's roll (popupRoll) is the GM asking, so it works either way.
       if (actor.role !== "gm" && ctx?.playersStoryRoll?.() === false) throw new ActionError("Your GM has turned off Story Rolls from players.");
@@ -546,6 +562,7 @@ function apply(table: TableState, action: TableAction, actor: Actor, ctx?: Engin
         targetDie: action.targetDie === undefined ? undefined : clamp(Math.round(Number(action.targetDie) || 0), 0, 20),
         unopposed: !!action.unopposed,
         ...(action.ammo ? { ammo: String(action.ammo).slice(0, 80) } : {}),
+        resolveNow: action.resolveNow === true,
       });
       return true;
     case "setCover":

@@ -54,11 +54,13 @@ test("start combat: everyone chosen rolls 1d6 + Justice, highest first", () => {
   }
 });
 
-test("a turn starts with Movement Points and +1 Light (capped at max)", () => {
+test("a turn starts with 3 + Justice/2 Movement Points; combat starts with full Light and Upkeep adds 1 (capped at max)", () => {
   const t = table();
+  t.tokens.roland.resources.light = 0;
   applyAction(t, { type: "startCombat", tokenIds: ["roland"] }, gm);
-  assert.equal(t.combat!.movementLeft, BASE_MOVEMENT + 2);
-  assert.equal(t.tokens.roland.resources.light, 2);
+  // Justice 2: 3 + 1.
+  assert.equal(t.combat!.movementLeft, BASE_MOVEMENT + 1);
+  assert.equal(t.tokens.roland.resources.light, 3, "full Light at Combat Start");
   for (let i = 0; i < 5; i++) applyAction(t, { type: "endTurn" }, p1);
   assert.equal(t.tokens.roland.resources.light, 3, "Light never goes past max");
   assert.equal(t.combat!.round, 6);

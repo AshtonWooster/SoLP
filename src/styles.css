@@ -631,6 +631,7 @@ button.pv-card:hover { filter: brightness(1.12); }
 .cycle-char { display: flex; flex-direction: column; gap: 10px; }
 .cycle-head { display: flex; gap: 12px; align-items: center; }
 .panic-recovery { display: flex; flex-direction: column; gap: 6px; }
+.ko-note { margin: 4px 0; color: var(--p-light); font-weight: 600; }
 .mini-res { display: flex; flex-wrap: wrap; gap: 4px; }
 .mini-res span { font-size: 0.75rem; font-weight: 700; padding: 1px 6px; border-radius: 6px; color: #120e0a; }
 .mini-res .res-hp { background: var(--hp); color: #fff; }
@@ -818,8 +819,8 @@ button.link .stable-label > span { text-decoration: underline; }
 .equip-rank { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
 .equip-rank select { padding: 0.2rem 0.4rem; }
 .equip-rank-note { margin: 0; }
-.equip-ranges { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
-.equip-ranges .muted { flex-basis: 100%; }
+.equip-props, .equip-ranges { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.equip-props .muted, .equip-ranges .muted { flex-basis: 100%; }
 .equip-card .equip-res h4 { margin: 4px 0; font-size: 0.85rem; }
 .equip-card .passives h4 { margin: 0; }
 .equip-card .passive { background: #0b0f18; }

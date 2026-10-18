@@ -23,6 +23,10 @@ import {
   inventoryChecks,
   maxCopies,
   proficiencyCount,
+  RANKS,
+  rankTable,
+  movementPoints,
+  storyOutcome,
 } from "../shared/ruleset.ts";
 
 function armed() {
@@ -36,8 +40,24 @@ function armed() {
   return { c, basic: sword.pages[0], special: sword.pages[1], armorBasic: suit.pages[0] };
 }
 
-test("proficiencies: 2 at Rank 9, +2 per Rank Up", () => {
-  assert.deepEqual([9, 8, 7, 1].map(proficiencyCount), [2, 4, 6, 18]);
+test("proficiencies: 4 at Rank 9, +2 per Rank Up", () => {
+  assert.deepEqual([9, 8, 7, 1].map(proficiencyCount), [4, 6, 8, 20]);
+});
+
+test("the Stats and Max Costs tables by Rank", () => {
+  const rows = RANKS.map((r) => rankTable(r));
+  assert.deepEqual(rows.map((t) => t.primaryPoints), [4, 6, 8, 10, 12, 14, 16, 18, 20]);
+  assert.deepEqual(rows.map((t) => t.secondaryPoints), [6, 9, 12, 15, 18, 21, 24, 27, 30]);
+  assert.deepEqual(rows.map((t) => t.augmentMaxCost), [4, 6, 8, 10, 12, 14, 16, 18, 20]);
+  assert.deepEqual(rows.map((t) => t.equipmentMaxCost), [2, 3, 4, 5, 6, 7, 8, 9, 10]);
+});
+
+test("Movement Points: 3 + Justice/2 rounded down", () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 9, -2].map(movementPoints), [3, 3, 4, 4, 5, 7, 3]);
+});
+
+test("Story Rolls: 9 or below fails, 12 or higher succeeds, between is the GM's call", () => {
+  assert.deepEqual([1, 9, 10, 11, 12, 30].map(storyOutcome), ["failure", "failure", "mixed", "mixed", "success", "success"]);
 });
 
 test("the Combat Deck draws from every equipped Weapon and the Armor", () => {
