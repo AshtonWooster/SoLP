@@ -22,6 +22,9 @@ import type {
   Passive,
   PrimaryStat,
   Weapon,
+  WeaponCategory,
+  WeaponProperty,
+  WeaponStyle,
 } from "./character.ts";
 import { cleanSecrets } from "./secrets.ts";
 import type { PanicType, Resources, SpawnData, TokenGearInfo } from "./types.ts";
@@ -114,6 +117,29 @@ export const PANIC_TYPES: Record<PanicType, { label: string; effect: string }> =
   4: { label: "Confusion", effect: "no Auxiliary Pages" },
 };
 
+/** Knocked Out (Game setting "Knocked Out rules"): an ally's Temperance Story Roll of at least this revives them. */
+export const KO_RECOVERY_ROLL = 12;
+/** Knocked Out rules: this many Upkeeps without a revive and the character is Dead. */
+export const KO_UPKEEPS = 3;
+
+/** Health a revived character comes back with: "(Max Health/4) Rounded Down" (at least 1). */
+export function reviveHealth(maxHp: number): number {
+  return Math.max(1, Math.floor(maxHp / 4));
+}
+
+/** Sanity recovered on a revive (by both characters) and at End of Combat: `3 + Prudence`. */
+export function recoverySanity(prudence: number): number {
+  return 3 + prudence;
+}
+
+/** Act 7, Resting: Health and Sanity recovered for each hour of rest. */
+export function restPerHour(c: { rank: number; fortitude: number; prudence: number }): { hp: number; sanity: number } {
+  const r = 10 - c.rank;
+  return { hp: 6 + r * 2 + c.fortitude * 2, sanity: r * 2 + c.prudence };
+}
+/** The longest rest the GM can give in one go, in hours. */
+export const MAX_REST_HOURS = 24;
+
 /** You asked for players to start combat with 3 Pages in hand. */
 export const STARTING_HAND = 3;
 /** Upkeep: "characters first draw a Page from their Combat Deck." */
@@ -136,6 +162,27 @@ export const MAX_WEAPON_RANGE = 50;
 /** How far a Page reaches: its Weapon's range when it came with one, otherwise the default for its type. */
 export const pageRange = (page: Pick<Page, "type" | "range">): number => page.range ?? WEAPON_RANGE[page.type];
 
+// ---- Creating a Weapon (Act 4; Game setting "Weapon properties") ----
+
+export const WEAPON_PROPERTIES: Record<WeaponProperty, { label: string; category: WeaponCategory; hands: 1 | 2; range: number; note: string }> = {
+  small: { label: "Small", category: "melee", hands: 1, range: 1, note: "One handed. A new die on a Page costs 2 Page Points instead of 3." },
+  medium: { label: "Medium", category: "melee", hands: 2, range: 1, note: "Two handed. 1 extra Weapon Point per Weapon Rank from 9, plus one." },
+  heavy: { label: "Heavy", category: "melee", hands: 2, range: 1, note: "Two handed. (10 − Weapon Rank)/3 rounded up extra Page Points per Light Cost." },
+  lowCaliber: { label: "Low Caliber", category: "ranged", hands: 1, range: 6, note: "One handed, 6 Range. Cheaper dice on a Page." },
+  highCaliber: { label: "High Caliber", category: "ranged", hands: 2, range: 10, note: "Two handed, 10 Range. Higher Light scaling per Page." },
+};
+
+export const WEAPON_STYLES: Record<WeaponStyle, { label: string; note: string }> = {
+  offensive: { label: "Offensive", note: "When it starts a Clash, it can resolve the Clash right away." },
+  defensive: { label: "Defensive", note: "Can Clash with any attack aimed at an ally within its range." },
+};
+
+/** A Weapon with a property picked: its category, hands and range follow the property (Melee range 1). */
+export function withWeaponProperty(w: Weapon, property: WeaponProperty): Weapon {
+  const p = WEAPON_PROPERTIES[property];
+  return { ...w, property, category: p.category, hands: p.hands, meleeRange: WEAPON_RANGE.melee, ...(p.category === "ranged" ? { rangedRange: p.range } : {}) };
+}
+
 /** A Weapon's range for Melee or Ranged Pages: what the player set, or the default. */
 export function weaponRange(w: Pick<Weapon, "meleeRange" | "rangedRange">, type: "melee" | "ranged"): number {
   const set = type === "melee" ? w.meleeRange : w.rangedRange;
@@ -148,12 +195,17 @@ export function weaponRange(w: Pick<Weapon, "meleeRange" | "rangedRange">, type:
  * when it's fired without Ammo). Pages on Weapons with no range set, on
  * Armor, or of other types are left as they are (the defaults).
  */
-export function withWeaponRanges(c: Pick<Character, "weapons">, pages: Page[]): Page[] {
-  const ranges = new Map<string, Partial<Pick<Page, "range" | "meleeRange">>>();
+export function withWeaponRanges(c: Pick<Character, "weapons">, pages: Page[], opts: { weaponProperties?: boolean } = {}): Page[] {
+  const ranges = new Map<string, Partial<Pick<Page, "range" | "meleeRange" | "weaponStyle">>>();
   for (const w of c.weapons ?? []) {
     for (const p of w.pages) {
-      if (p.type !== "melee" && p.type !== "ranged") continue;
-      const r: Partial<Pick<Page, "range" | "meleeRange">> = {};
+      // With "Weapon properties" on, every Page of an Offensive or Defensive Weapon carries its type.
+      const style = opts.weaponProperties && (w.style === "offensive" || w.style === "defensive") ? { weaponStyle: w.style } : {};
+      if (p.type !== "melee" && p.type !== "ranged") {
+        if (style.weaponStyle) ranges.set(p.id, style);
+        continue;
+      }
+      const r: Partial<Pick<Page, "range" | "meleeRange" | "weaponStyle">> = { ...style };
       if ((p.type === "melee" ? w.meleeRange : w.rangedRange) !== undefined) r.range = weaponRange(w, p.type);
       // A Ranged Page fired without Ammo becomes a Melee Page, reaching the Weapon's Melee range.
       if (p.type === "ranged" && w.meleeRange !== undefined) r.meleeRange = weaponRange(w, "melee");
@@ -662,6 +714,16 @@ export function equipmentMaxCost(e: Equipment, characterRank: number): number {
   return rankTable(e.rank ?? characterRank).equipmentMaxCost;
 }
 
+/** Game setting "Weapon properties": a Weapon picks its property and type, and a Melee Weapon carries no Ranged Pages. */
+export function weaponPropertyChecks(w: Weapon, label: string): Check[] {
+  const name = w.name.trim() || label;
+  const melee = w.property ? WEAPON_PROPERTIES[w.property].category === "melee" : false;
+  return [
+    { step: "Equipment", ok: !!w.property && !!w.style, text: `${name}: Melee or Ranged property and Offensive or Defensive type chosen` },
+    ...(melee && w.pages.some((p) => p.type === "ranged") ? [{ step: "Equipment", ok: false, text: `${name} is a Melee Weapon: it can't have Ranged Pages` }] : []),
+  ];
+}
+
 function equipmentChecks(step: string, label: string, e: Equipment, rank: number): Check[] {
   const name = e.name.trim() || label;
   const pagesOk = e.pages.some((p) => p.kind === "basic") && e.pages.some((p) => p.kind === "special");
@@ -678,7 +740,7 @@ function equipmentChecks(step: string, label: string, e: Equipment, rank: number
 }
 
 /** Everything Act 5 asks for, as a checklist. A character is ready when every check passes. */
-export function characterChecks(c: Character): Check[] {
+export function characterChecks(c: Character, opts: { weaponProperties?: boolean } = {}): Check[] {
   const t = rankTable(c.rank);
   const primarySpent = sum(Object.values(c.primary));
   const secondarySpent = sum(Object.values(c.secondary));
@@ -696,7 +758,7 @@ export function characterChecks(c: Character): Check[] {
     { step: "Equipment", ok: c.weapons.length > 0, text: "At least one Weapon" },
     { step: "Equipment", ok: hands <= 2, text: `Weapons use ${hands} of 2 hands` },
     { step: "Equipment", ok: !!c.armor, text: "One Armor" },
-    ...c.weapons.flatMap((w, i) => equipmentChecks("Equipment", `Weapon ${i + 1}`, w, c.rank)),
+    ...c.weapons.flatMap((w, i) => [...equipmentChecks("Equipment", `Weapon ${i + 1}`, w, c.rank), ...(opts.weaponProperties ? weaponPropertyChecks(w, `Weapon ${i + 1}`) : [])]),
     ...(c.armor ? equipmentChecks("Equipment", "Armor", c.armor, c.rank) : []),
     { step: "Finishing Touches", ok: !!c.name.trim(), text: "Character has a name" },
     ...inventoryChecks(c),

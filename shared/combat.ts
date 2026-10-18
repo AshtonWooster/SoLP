@@ -46,6 +46,12 @@ import {
   PANIC_TYPES,
   PANIC_UPKEEPS,
   PANIC_RECOVERY_ROLL,
+  KO_RECOVERY_ROLL,
+  KO_UPKEEPS,
+  reviveHealth,
+  recoverySanity,
+  restPerHour,
+  MAX_REST_HOURS,
 } from "./ruleset.ts";
 import type {
   Card,
@@ -80,6 +86,8 @@ export interface Loadout {
   ego?: string[];
   /** Stat values by key (primary and secondary), for Story Rolls and effects. */
   stats?: Record<string, number>;
+  /** The character's Rank (9 to 1), for Resting. */
+  rank?: number;
   /** Library ids of the automated effects the character's Passives and Proficiencies link to. */
   passiveEffects?: string[];
   resistances?: ResistanceSet;
@@ -96,6 +104,10 @@ export interface EngineContext {
   clearEffectsAfterCombat?(): boolean;
   /** The Game setting "Ranged Pages use Ammo" (shared/types.ts). */
   rangedAmmo?(): boolean;
+  /** The Game setting "Knocked Out rules" (shared/types.ts), read when combat starts. */
+  knockOutRules?(): boolean;
+  /** The Game setting "Recover when combat ends" (shared/types.ts). */
+  endOfCombatRecovery?(): boolean;
   /** Whether players may make Story Rolls on their own (Game settings). Missing: they may. */
   playersStoryRoll?(): boolean;
   /** Players' Ahn and inventories, for popups that hand out or take away items and Ahn (shared/rewards.ts). */
@@ -175,6 +187,14 @@ const knockedOut = (t: Token | undefined) => !t || !!t.status?.knockedOut;
 const staggered = (t: Token | undefined) => !!t?.status?.staggered;
 /** Out of the fight for now: Knocked Out, or Staggered (can't act or use dice). */
 const down = (t: Token | undefined) => knockedOut(t) || staggered(t);
+/** Knocked Out rules (Game setting, fixed for the combat): they apply to players' characters only. */
+const koRules = (table: TableState, t: Token | undefined) => !!table.combat?.knockOutRules && t?.side === "player";
+/** A Knocked Out player character who isn't Dead yet, under the Knocked Out rules: Pages can still target them, and allies can revive them. */
+export function revivable(table: TableState, t: Token | undefined): boolean {
+  return !!t && koRules(table, t) && !!t.status?.knockedOut && !t.status.dead;
+}
+/** A Stat from the character's sheet (players), or Justice from the token. */
+const statOf = (t: Token, key: string) => engineCtx?.loadout(t.id)?.stats?.[key] ?? (key === "justice" ? (t.justice ?? 0) : 0);
 const distance = (a: Token, b: Token) => moveCost(a, b);
 const diceText = (d: Dice) => `${d.counter ? "Counter " : ""}${d.kind[0].toUpperCase()}${d.kind.slice(1)} 1d${d.sides}${d.basePower >= 0 ? "+" : ""}${d.basePower}`;
 
@@ -299,6 +319,10 @@ function checkKnockedOut(table: TableState, target: Token, by?: Token) {
   if (target.resources.hp === 0 && !target.status?.knockedOut) {
     target.status = { ...target.status, knockedOut: true };
     log(table, `  ${target.name} is Knocked Out!`);
+    if (koRules(table, target)) {
+      target.status = { ...target.status, koUpkeeps: 0 };
+      log(table, `  An ally can revive ${target.name} with a Temperance Story Roll of ${KO_RECOVERY_ROLL} or more; after ${KO_UPKEEPS} Upkeeps they're Dead.`);
+    }
     onKnockedOut(table, target);
     if (by && by !== target) trigger(table, "knockOut", by, { other: target });
     // Everyone else still fighting hears about it (Hook, Remembrance, Corpse Cleanup).
@@ -455,6 +479,89 @@ export function panicByOverride(table: TableState, t: Token) {
   if (t.status?.panic) return;
   t.status = { ...t.status, panic: true };
   rollPanicType(table, t);
+}
+
+// ---- Knocked Out rules (Game setting "Knocked Out rules") ----
+
+/** One step closer to Death: an Upkeep passed while Knocked Out, or a Page with an Offensive Die resolved against them. */
+function koTick(table: TableState, t: Token, why: string) {
+  const passed = (t.status?.koUpkeeps ?? 0) + 1;
+  if (passed >= KO_UPKEEPS) {
+    t.status = { ...t.status, koUpkeeps: passed, dead: true };
+    log(table, `  ${t.name} is Dead.`);
+    return;
+  }
+  t.status = { ...t.status, koUpkeeps: passed };
+  const left = KO_UPKEEPS - passed;
+  log(table, `  ${why}: ${t.name} is Dead in ${left} more Upkeep${left === 1 ? "" : "s"} unless revived.`);
+}
+
+/** Back up from a Knock Out: a quarter of their Health, 3 + Prudence Sanity and full Stagger Resist. */
+function revive(table: TableState, t: Token) {
+  const status = { ...t.status, knockedOut: false, staggered: false, staggerUpkeeps: 0 };
+  delete status.koUpkeeps;
+  delete status.koRecoveryFails;
+  delete status.dead;
+  t.status = status;
+  const r = t.resources;
+  r.hp = Math.max(r.hp, reviveHealth(r.maxHp));
+  r.stagger = r.maxStagger;
+  log(table, `  ${t.name} is back up (${r.hp}/${r.maxHp} Health, full Stagger Resist).`);
+  gainRecoverySanity(table, t);
+}
+
+/** 3 + Prudence Sanity, as a revive and the end of combat give. */
+function gainRecoverySanity(table: TableState, t: Token) {
+  const n = recoverySanity(statOf(t, "prudence"));
+  const r = t.resources;
+  const before = r.sanity;
+  changeSanity(table, t, n);
+  if (r.sanity !== before) log(table, secret(t, "sanity", `  ${t.name} recovers ${r.sanity - before} Sanity (${r.sanity}).`));
+}
+
+/** Allies a character can revive: Knocked Out (not Dead) players' characters on their side, not themselves. */
+export function canRevive(table: TableState, helper: Token | undefined, t: Token | undefined): boolean {
+  return !!helper && !!t && helper.id !== t.id && revivable(table, t) && !opposed(helper.side, t.side) && helper.side !== "neutral";
+}
+
+/**
+ * Knocked Out rules: on their turn, during Combat Actions, a character revives a Knocked Out ally
+ * with a Temperance Story Roll of KO_RECOVERY_ROLL or more. Both recover 3 + Prudence Sanity. Once a
+ * turn; each failed attempt on the ally adds +1 to the next one, whoever makes it.
+ */
+export function koRecovery(table: TableState, actor: Actor, tokenId: string, ctx?: EngineContext) {
+  const c = table.combat!;
+  const helper = actingToken(table, actor);
+  const ally = table.tokens[tokenId];
+  if (!ally) throw new ActionError("Token not found.");
+  if (!c.knockOutRules) throw new ActionError("The Knocked Out rules are off in this game.");
+  if (!ally.status?.knockedOut) throw new ActionError(`${ally.name} isn't Knocked Out.`);
+  if (ally.status.dead) throw new ActionError(`${ally.name} is Dead.`);
+  if (!canRevive(table, helper, ally)) throw new ActionError(`${helper.name} can only revive an ally.`);
+  if (c.koRecoveryUsed) throw new ActionError(`${helper.name} already tried to revive someone this turn.`);
+  c.koRecoveryUsed = true;
+  const fails = ally.status.koRecoveryFails ?? 0;
+  log(table, `${helper.name} tries to revive ${ally.name}${fails ? ` (+${fails} from ${fails} failed attempt${fails === 1 ? "" : "s"})` : ""}.`);
+  const total = storyRoll(table, actor, helper, "temperance", ctx, fails);
+  if (total >= KO_RECOVERY_ROLL) {
+    revive(table, ally);
+    gainRecoverySanity(table, helper);
+    return;
+  }
+  ally.status = { ...ally.status, koRecoveryFails: fails + 1 };
+  log(table, `  Not enough (needs ${KO_RECOVERY_ROLL}): ${ally.name} is still Knocked Out. The next attempt gets +${fails + 1}.`);
+}
+
+/**
+ * A Page resolving against a Knocked Out character (Knocked Out rules): it does nothing to them, but
+ * its dice still go top to bottom (Defensive Dice become Counter Dice), and a Page with an Offensive
+ * Die brings their Death an Upkeep closer.
+ */
+function resolveOnDown(table: TableState, attacker: Token, target: Token, page: Page, dice: Dice[]) {
+  const c = table.combat!;
+  log(table, `${attacker.name} uses ${page.name} on ${target.name}, who is Knocked Out: it does nothing to them.`);
+  for (const d of dice) if (!isOffensive(d.kind)) storeCounter(c, attacker, d, page.id);
+  if (dice.some((d) => isOffensive(d.kind)) && !target.status?.dead) koTick(table, target, `${page.name} lands`);
 }
 
 /** A Knocked Out character's slotted Pages go to the discard pile; Pages clashing with them stop clashing. */
@@ -941,7 +1048,10 @@ function resolveMass(table: TableState, slot: SlottedPage) {
   const page = c.pages[slot.pageId];
   const dice = page.dice.filter((d) => !d.counter);
   const targets = slot.targets.map((t) => ({ ref: t, token: table.tokens[t.tokenId] })).filter((t) => t.token && !knockedOut(t.token));
-  log(table, `${owner.name} unleashes ${page.name} (${page.type === "massSummation" ? "Summation" : "Individual"}) on ${targets.map((t) => t.token.name).join(", ")}.`);
+  const downed = slot.targets.map((x) => table.tokens[x.tokenId]).filter((t): t is Token => revivable(table, t));
+  log(table, `${owner.name} unleashes ${page.name} (${page.type === "massSummation" ? "Summation" : "Individual"}) on ${[...targets.map((t) => t.token), ...downed].map((t) => t.name).join(", ")}.`);
+  // Knocked Out targets (under the Knocked Out rules) take nothing, but an Offensive Die brings their Death closer.
+  if (dice.some((d) => isOffensive(d.kind))) for (const t of downed) koTick(table, t, `${page.name} lands on ${t.name}, who is Knocked Out`);
   const play: PagePlay = { page, nth: slot.nth };
   const tokens = [owner, ...targets.map((t) => t.token)];
   const before = fxState(...tokens);
@@ -1092,7 +1202,8 @@ function resolveSlot(table: TableState, slot: SlottedPage): boolean {
     return true;
   }
   const target = table.tokens[slot.targets[0]?.tokenId];
-  if (!target || knockedOut(target)) {
+  if (revivable(table, target)) resolveOnDown(table, owner, target!, page, page.dice.filter((d) => !d.counter));
+  else if (!target || knockedOut(target)) {
     log(table, `${owner.name}'s ${page.name} has no target left.`);
   } else {
     log(table, `${owner.name} uses ${page.name} on ${target.name}.`);
@@ -1116,7 +1227,11 @@ function runPhases(table: TableState) {
     const token = activeToken(table);
     if (!token) return;
     if (knockedOut(token)) {
-      log(table, `${token.name} is Knocked Out; their turn is skipped.`);
+      if (token.status?.dead) log(table, `${token.name} is Dead; their turn is skipped.`);
+      else {
+        log(table, `${token.name} is Knocked Out; their turn is skipped.`);
+        if (koRules(table, token)) koTick(table, token, "Upkeep");
+      }
       nextTurn(table);
       if (!table.combat) return;
       continue;
@@ -1159,6 +1274,7 @@ function runPhases(table: TableState) {
     c.phase = "actions";
     delete c.aim;
     delete c.panicRecoveryUsed;
+    delete c.koRecoveryUsed;
     return;
   }
   log(table, "No one in the turn order can act.");
@@ -1240,6 +1356,7 @@ export function startCombat(table: TableState, ids: string[], ctx?: EngineContex
   }
   const c: CombatState = { round: 1, order: [], turn: 0, phase: "resolve", movementLeft: 0, pages: {}, decks: {}, slots: [], counters: {} };
   table.combat = c;
+  if (ctx?.knockOutRules?.()) c.knockOutRules = true;
   // Combat Start: "Each character fully recovers their Light and draws 3 Pages" (the draw is in setUpDeck).
   for (const id of ids) fullLight(table.tokens[id]);
   c.order = sortOrder(table, ids.map((id) => rollSpeed(table, table.tokens[id])));
@@ -1253,13 +1370,15 @@ export function startCombat(table: TableState, ids: string[], ctx?: EngineContex
 
 /**
  * The GM ends the Combat Encounter: "When combat ends" rules run, then (when the Game setting
- * says so) every automated status Effect comes off. Effects the GM tracks by hand stay.
+ * says so) every automated status Effect comes off. Effects the GM tracks by hand stay. With the
+ * Game setting "Recover when combat ends", everyone who fought recovers too (endOfCombat).
  */
 export function finishCombat(table: TableState, ctx?: EngineContext) {
   const c = table.combat;
   if (!c) return;
   const tokens = c.order.map((x) => table.tokens[x.tokenId]).filter((t): t is Token => !!t);
   for (const t of tokens) if (!knockedOut(t)) trigger(table, "combatEnd", t);
+  if (ctx?.endOfCombatRecovery?.()) for (const t of tokens) endOfCombat(table, t);
   delete table.combat;
   for (const t of tokens) {
     delete t.effectUses;
@@ -1267,6 +1386,70 @@ export function finishCombat(table: TableState, ctx?: EngineContext) {
     if (!ctx?.clearEffectsAfterCombat?.() || !t.effects?.some((e) => e.defId)) continue;
     t.effects = t.effects.filter((e) => !e.defId);
     log(table, `  ${t.name}'s automated Effects wear off.`);
+  }
+}
+
+/**
+ * Act 8, End of Combat: full Light and Stagger Resist, out of Panic (Sanity 0), Stagger and Knock Out
+ * (with a quarter of their Health, as a revive gives), then 3 + Prudence Sanity. The Dead stay Dead.
+ */
+function endOfCombat(table: TableState, t: Token) {
+  if (t.status?.dead) return;
+  const r = t.resources;
+  if (t.status?.panic) {
+    clearPanic(t);
+    r.sanity = 0;
+  }
+  if (t.status?.knockedOut) {
+    r.hp = Math.max(r.hp, reviveHealth(r.maxHp));
+  }
+  const status = { ...t.status, knockedOut: false, staggered: false, staggerUpkeeps: 0 };
+  delete status.koUpkeeps;
+  delete status.koRecoveryFails;
+  t.status = status;
+  r.light = r.maxLight;
+  r.stagger = r.maxStagger;
+  r.sanity = clamp(r.sanity + recoverySanity(statOf(t, "prudence")), -r.maxSanity, r.maxSanity);
+  log(table, `  ${t.name} recovers: full Light and Stagger Resist${secret(t, "sanity", `, Sanity ${r.sanity}/${r.maxSanity}`)}.`);
+}
+
+/**
+ * Act 7, Resting (the GM, out of combat): each hour restores 6 + (10 − Rank)×2 + Fortitude×2
+ * Health and (10 − Rank)×2 + Prudence Sanity to the players' characters (or the ones picked). A
+ * character brought above 0 Health is no longer Knocked Out; above their minimum Sanity, out of
+ * Panic. The Dead don't recover.
+ */
+export function rest(table: TableState, hours: number, tokenIds: string[] | undefined, ctx?: EngineContext) {
+  if (table.combat) throw new ActionError("Characters can't rest during combat.");
+  const h = Math.round(Number(hours));
+  if (!Number.isFinite(h) || h < 1 || h > MAX_REST_HOURS) throw new ActionError(`Rest for 1 to ${MAX_REST_HOURS} hours.`);
+  const picked = tokenIds?.length ? tokenIds.map((id) => table.tokens[id]).filter((t): t is Token => !!t) : Object.values(table.tokens).filter((t) => t.side === "player");
+  if (!picked.length) throw new ActionError("No one to rest.");
+  log(table, `The party rests for ${h} hour${h === 1 ? "" : "s"}.`);
+  for (const t of picked) {
+    const l = ctx?.loadout(t.id);
+    if (t.status?.dead) {
+      log(table, `  ${t.name} is Dead and doesn't recover.`);
+      continue;
+    }
+    if (!l || l.rank === undefined) {
+      log(table, `  ${t.name} has no character sheet to rest with.`);
+      continue;
+    }
+    const per = restPerHour({ rank: l.rank, fortitude: l.stats?.fortitude ?? 0, prudence: l.stats?.prudence ?? 0 });
+    const r = t.resources;
+    const hp = r.hp;
+    const sanity = r.sanity;
+    r.hp = Math.min(r.maxHp, r.hp + Math.max(0, per.hp) * h);
+    r.sanity = Math.min(r.maxSanity, r.sanity + Math.max(0, per.sanity) * h);
+    if (r.hp > 0 && t.status?.knockedOut) {
+      const status = { ...t.status, knockedOut: false };
+      delete status.koUpkeeps;
+      delete status.koRecoveryFails;
+      t.status = status;
+    }
+    if (t.status?.panic && r.sanity > -r.maxSanity) clearPanic(t);
+    log(table, `  ${t.name} recovers ${r.hp - hp} Health (${r.hp}/${r.maxHp}) and ${r.sanity - sanity} Sanity (${r.sanity}/${r.maxSanity}).`);
   }
 }
 
@@ -1367,11 +1550,39 @@ function freeDie(c: CombatState, token: Token, die: number | undefined): number 
   return Array.from({ length: count }, (_, i) => i).find(free);
 }
 
-/** Characters a Page can target: within Weapon Range and not Knocked Out. Only Instant Pages can target yourself. */
+/**
+ * Characters a Page can target: within Weapon Range and not Knocked Out (under the Knocked Out rules,
+ * a Knocked Out player character who isn't Dead can be targeted). Only Instant Pages can target
+ * yourself. A Page from a Defensive Weapon can also target, from any distance, an enemy whose
+ * Page is aimed at an ally within its range, to Clash with that Page (guardDice).
+ */
 export function validTargets(table: TableState, user: Token, page: Page): Token[] {
   return Object.values(table.tokens).filter(
-    (t) => !knockedOut(t) && (t.id !== user.id || page.type === "instant") && distance(user, t) <= pageRange(page),
+    (t) =>
+      (!knockedOut(t) || revivable(table, t)) &&
+      (t.id !== user.id || page.type === "instant") &&
+      (distance(user, t) <= pageRange(page) || guardDice(table, user, page, t.id).length > 0),
   );
+}
+
+/**
+ * Game setting "Weapon properties": the Speed Dice of `targetId` holding a Page that a Defensive
+ * Weapon's Page can Clash with: one aimed at an ally of `user` within the Page's range.
+ */
+export function guardDice(table: TableState, user: Token, page: Page, targetId: string): number[] {
+  const c = table.combat;
+  const them = table.tokens[targetId];
+  if (!c || !them || page.weaponStyle !== "defensive" || isMassAttack(page.type) || page.type === "instant" || !opposed(user.side, them.side)) return [];
+  return c.slots
+    .filter((s) => {
+      const p = c.pages[s.pageId];
+      if (s.ownerId !== targetId || s.clashWith || !p || p.type === "instant" || isMassAttack(p.type)) return false;
+      return s.targets.some((ref) => {
+        const ally = table.tokens[ref.tokenId];
+        return !!ally && ally.id !== user.id && !knockedOut(ally) && !opposed(user.side, ally.side) && distance(user, ally) <= pageRange(page);
+      });
+    })
+    .map((s) => s.die);
 }
 
 export function aim(table: TableState, actor: Actor, source: PageSource, cardId?: string, die?: number) {
@@ -1409,7 +1620,7 @@ function pageForAim(table: TableState, token: Token): Page {
  * Instant Pages resolve right away and never clash. A single-target Page can aim at any of the
  * target's Speed Dice (`targetDie`), or go in `unopposed`: a One-Sided attack that starts no Clash.
  */
-export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?: EngineContext, opts: { targetDie?: number; unopposed?: boolean; ammo?: string } = {}) {
+export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?: EngineContext, opts: { targetDie?: number; unopposed?: boolean; ammo?: string; resolveNow?: boolean } = {}) {
   const c = table.combat!;
   const token = actingToken(table, actor);
   const a = c.aim;
@@ -1434,6 +1645,16 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
   if (targetDie > 0) {
     const theirs = c.order.find((x) => x.tokenId === ids[0])?.dice ?? 0;
     if (targetDie >= theirs) throw new ActionError(`${table.tokens[ids[0]]?.name ?? "The target"} has no Speed Die ${targetDie + 1}.`);
+  }
+  // A Defensive Weapon's Page aimed past its range can only Clash with a Page aimed at an ally within it.
+  const far = !mass && distance(token, table.tokens[ids[0]]) > pageRange(page);
+  if (far && (opts.unopposed || !guardDice(table, token, page, ids[0]).includes(targetDie))) {
+    throw new ActionError(`${table.tokens[ids[0]].name} is out of range; ${page.name} can only Clash with their Page aimed at an ally within range.`);
+  }
+  if (opts.resolveNow) {
+    if (page.weaponStyle !== "offensive") throw new ActionError("Only a Page from an Offensive Weapon can resolve a Clash right away.");
+    const theirs = mass || opts.unopposed ? undefined : c.slots.find((s) => s.ownerId === ids[0] && s.die === targetDie && !s.clashWith && c.pages[s.pageId]?.type !== "instant");
+    if (!theirs || isMassAttack(c.pages[theirs.pageId]!.type)) throw new ActionError("Only a Clash with a Page that isn't a Mass Attack can be resolved right away.");
   }
 
   const card = aimed;
@@ -1508,10 +1729,18 @@ export function slot(table: TableState, actor: Actor, targetIds?: string[], ctx?
         other.targets = [{ tokenId: token.id, die: entry.die }];
         if (was && was !== token.id) {
           log(table, `${token.name} redirects ${names}'s ${otherPage!.name} (aimed at ${table.tokens[was]?.name ?? "someone"}) with ${page.name}: Clash!`);
+          if (opts.resolveNow) {
+            log(table, `${token.name}'s Offensive Weapon resolves the Clash right away.`);
+            resolveSlot(table, entry);
+          }
           return;
         }
       }
       log(table, `${token.name} slots ${page.name} against ${names}: Clash with ${otherPage!.name}!`);
+      if (opts.resolveNow) {
+        log(table, `${token.name}'s Offensive Weapon resolves the Clash right away.`);
+        resolveSlot(table, entry);
+      }
       return;
     }
   }

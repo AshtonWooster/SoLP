@@ -56,6 +56,8 @@ export interface Page {
   meleeRange?: number;
   /** Set in combat on a Ranged Page fired without Ammo: it's used as a Melee Page and every die rolls with disadvantage. */
   noAmmo?: boolean;
+  /** Set in combat from its Weapon's type (Game setting "Weapon properties"). */
+  weaponStyle?: WeaponStyle;
 }
 
 export interface Equipment {
@@ -68,9 +70,20 @@ export interface Equipment {
   pages: Page[];
 }
 
+/** Act 4, "Creating a Weapon": a Weapon is Melee or Ranged. */
+export type WeaponCategory = "melee" | "ranged";
+/** Melee: Small, Medium or Heavy. Ranged: Low or High Caliber. Each sets the hands it takes and its range. */
+export type WeaponProperty = "small" | "medium" | "heavy" | "lowCaliber" | "highCaliber";
+/** How the Weapon Clashes: Offensive resolves a Clash it starts right away; Defensive Clashes with attacks on allies. */
+export type WeaponStyle = "offensive" | "defensive";
+
 export interface Weapon extends Equipment {
   /** Characters have two hands by default. */
   hands: 1 | 2;
+  /** Game setting "Weapon properties": Melee or Ranged, its property and its type. Missing: not chosen. */
+  category?: WeaponCategory;
+  property?: WeaponProperty;
+  style?: WeaponStyle;
   /** Tiles its Melee Pages reach. Missing: the default (WEAPON_RANGE.melee). */
   meleeRange?: number;
   /** Tiles its Ranged Pages reach; a ranged weapon can have Melee Pages too. Missing: the default (WEAPON_RANGE.ranged). */
