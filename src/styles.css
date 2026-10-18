@@ -819,8 +819,8 @@ button.link .stable-label > span { text-decoration: underline; }
 .equip-rank { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
 .equip-rank select { padding: 0.2rem 0.4rem; }
 .equip-rank-note { margin: 0; }
-.equip-ranges { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
-.equip-ranges .muted { flex-basis: 100%; }
+.equip-props, .equip-ranges { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.equip-props .muted, .equip-ranges .muted { flex-basis: 100%; }
 .equip-card .equip-res h4 { margin: 4px 0; font-size: 0.85rem; }
 .equip-card .passives h4 { margin: 0; }
 .equip-card .passive { background: #0b0f18; }
