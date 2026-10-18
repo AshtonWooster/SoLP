@@ -75,7 +75,7 @@ test("a popup's Story Roll goes in the log, is kept for the GM, and is rolled on
   const t = table();
   applyAction(t, { type: "sendPopup", id: "p", text: "Spot anything?", roll: { stat: "insight" } }, gm);
   applyAction(t, { type: "popupRoll", popupId: "p" }, ann, ctx);
-  const m = t.log.at(-1)!.match(/^annie makes a Insight Story Roll: (\d+)\+3 = (\d+)\.$/);
+  const m = t.log.at(-1)!.match(/^annie makes a Insight Story Roll: (\d+)\+3 = (\d+) \((success|failure|between a failure and a success)\)\.$/);
   assert.ok(m, t.log.at(-1));
   assert.equal(t.popups![0].rolls?.ann, Number(m[2]));
   assert.equal(popupsFor(t, "ann")[0].rolled, Number(m[2]));
@@ -92,7 +92,7 @@ test("a popup that lets players pick the Stat needs a real one", () => {
   assert.throws(() => applyAction(t, { type: "popupRoll", popupId: "p" }, ann, ctx), /Pick a Stat/);
   assert.throws(() => applyAction(t, { type: "popupRoll", popupId: "p", stat: "charm" }, ann, ctx), /Pick a Stat/);
   applyAction(t, { type: "popupRoll", popupId: "p", stat: "justice" }, ann, ctx);
-  assert.match(t.log.at(-1)!, /^annie makes a Justice Story Roll: \d+\+1 = \d+\.$/);
+  assert.match(t.log.at(-1)!, /^annie makes a Justice Story Roll: \d+\+1 = \d+ \((success|failure|between a failure and a success)\)\.$/);
 });
 
 test("only the players a popup is for can roll for it, and it must ask for a roll", () => {

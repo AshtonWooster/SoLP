@@ -138,6 +138,7 @@ test("Panic 2: no drawing Pages at Upkeep or from effects", () => {
 
 test("Panic 3: no gaining Light at Upkeep; spending it still works", () => {
   const s = setup();
+  s.roland().resources.light = 1;
   setSanity(s, -15, 3);
   const light = s.roland().resources.light;
   nextUpkeep(s);
@@ -161,6 +162,7 @@ test("Panic 4: no Auxiliary Pages, but the hand still works", () => {
 test("other Panic types leave Auxiliary Pages, draws and Light alone", () => {
   const s = setup();
   setSanity(s, -15, 1);
+  s.roland().resources.light = 1;
   const hand = s.c().decks.roland.hand.length;
   const light = s.roland().resources.light;
   s.act({ type: "aim", source: "aux", cardId: s.c().decks.roland.aux[0].id });
@@ -216,26 +218,26 @@ function recover(s: ReturnType<typeof recoverySetup>, d20: number, who: Actor = 
   }
 }
 
-test("Panic recovery: an ally's Prudence Story Roll of 10 or more brings them out of Panic right away", () => {
+test("Panic recovery: an ally's Prudence Story Roll of 12 or more brings them out of Panic right away", () => {
   const s = recoverySetup(3);
   assert.equal(s.c().order[s.c().turn].tokenId, "angela");
   assert.equal(s.roland().status?.panic, true);
-  recover(s, 7); // 7 + 3 Prudence = 10.
+  recover(s, 9); // 9 + 3 Prudence = 12.
   assert.equal(s.roland().status?.panic, false);
   assert.equal(s.roland().status?.panicType, undefined);
   assert.equal(s.roland().resources.sanity, 0);
   assert.ok(s.logged("angela tries to bring roland out of Panic."));
-  assert.ok(s.logged("angela makes a Prudence Story Roll: 7"));
+  assert.ok(s.logged("angela makes a Prudence Story Roll: 9"));
   assert.ok(s.logged("roland recovers from Panic"));
-  assert.deepEqual({ ...s.table.storyRoll, id: "" }, { id: "", tokenId: "angela", stat: "prudence", roll: 7, bonus: 3 }, "the roll plays on every screen");
+  assert.deepEqual({ ...s.table.storyRoll, id: "" }, { id: "", tokenId: "angela", stat: "prudence", roll: 9, bonus: 3 }, "the roll plays on every screen");
 });
 
-test("Panic recovery: under 10 they stay Panicking, and it's once per turn", () => {
+test("Panic recovery: under 12 they stay Panicking, and it's once per turn", () => {
   const s = recoverySetup(3);
-  recover(s, 6); // 9.
+  recover(s, 8); // 11.
   assert.equal(s.roland().status?.panic, true);
   assert.equal(s.roland().resources.sanity, -15);
-  assert.ok(s.logged("Not enough (needs 10): roland is still Panicking."));
+  assert.ok(s.logged("Not enough (needs 12): roland is still Panicking."));
   assert.throws(() => recover(s, 20), /already tried Panic recovery this turn/);
   // Angela's next turn: she can try again.
   s.act({ type: "endTurn" }, p2);
@@ -266,14 +268,14 @@ test("Panic recovery: each failed attempt adds +1 to the next, whoever makes it,
   s.act({ type: "endTurn" }, p2);
   s.act({ type: "endTurn" }, p1);
   s.act({ type: "endTurn" }, gm);
-  recover(s, 5); // 5 + 3 + 1 = 9: fails.
+  recover(s, 7); // 7 + 3 + 1 = 11: fails.
   assert.ok(s.logged("angela tries to bring roland out of Panic (+1 from 1 failed attempt)."));
   assert.equal(s.table.storyRoll?.bonus, 4, "the bonus shows in the roll");
   assert.equal(s.roland().status?.panicRecoveryFails, 2);
   s.act({ type: "endTurn" }, p2);
   s.act({ type: "endTurn" }, p1);
   s.act({ type: "endTurn" }, gm);
-  recover(s, 5); // 5 + 3 + 2 = 10: recovers.
+  recover(s, 7); // 7 + 3 + 2 = 12: recovers.
   assert.ok(s.logged("(+2 from 2 failed attempts)"));
   assert.equal(s.roland().status?.panic, false);
   assert.equal(s.roland().status?.panicRecoveryFails, undefined, "a later Panic starts from +0");

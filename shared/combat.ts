@@ -32,6 +32,7 @@ import {
   SPEED_DIE,
   STARTING_HAND,
   STORY_DIE,
+  storyOutcome,
   UPKEEP_DRAW,
   STAGGER_UPKEEPS,
   STAGGERED_RESISTANCE,
@@ -248,7 +249,7 @@ function resistance(t: Token, set: ResistanceSet | undefined, kind: Dice["kind"]
 
 /**
  * Offensive Dice deal (Final Power) × (target's Type Resistance) damage, and the same amount ×
- * their Stagger Resistance as Stagger damage. Both round down.
+ * their Stagger Resistance as Stagger damage. Both round up.
  */
 function dealDamage(table: TableState, target: Token, amount: number, kind: Dice["kind"], attacker?: Token, die?: Dice, play: PagePlay = {}) {
   const page = { page: play.page, nth: play.nth, oneSided: play.oneSided };
@@ -262,9 +263,9 @@ function dealDamage(table: TableState, target: Token, amount: number, kind: Dice
   }
   const source: DamageSource<Token> = { attack: true, by: attacker };
   // Health-only and Stagger-only changes from the one hitting ("Slash damage +1", "Stagger damage +1") come after Resistances.
-  const health = withPct(Math.max(0, Math.floor(amount * resistance(target, target.resistances, kind, false)) + hit.health), hit.healthPct);
+  const health = withPct(Math.max(0, Math.ceil(amount * resistance(target, target.resistances, kind, false)) + hit.health), hit.healthPct);
   const dmg = incoming(table, target, health, "health", source, die);
-  const stagger = withPct(Math.max(0, Math.floor(amount * resistance(target, target.staggerResistances, kind, true)) + hit.stagger), hit.staggerPct);
+  const stagger = withPct(Math.max(0, Math.ceil(amount * resistance(target, target.staggerResistances, kind, true)) + hit.stagger), hit.staggerPct);
   const r = target.resources;
   r.hp = Math.max(0, r.hp - dmg);
   log(table, `  ${target.name} takes ${secret(target, "hp", `${dmg} `)}${kind} damage${secret(target, "hp", ` (${r.hp}/${r.maxHp} Health)`)}.`);
@@ -632,8 +633,9 @@ function trigger(table: TableState, when: When, holder: Token, opts: TriggerOpti
 type RollFx = Pick<TriggerResult, "advantage" | "min" | "rollMax" | "rerollMin">;
 
 /**
- * A die roll from 1 (plus any raised Min) to its size: advantage rolls twice and keeps the higher,
- * disadvantage the lower. Effects can also make it roll its Max, or roll again once on its Min.
+ * A die roll from 1 (plus any raised Min) to its size. Advantage rolls one die more than its count
+ * and keeps the highest; Disadvantage the same, keeping the lowest (they cancel each other out
+ * first). Effects can also make it roll its Max, or roll again once on its Min.
  */
 function rollWith(table: TableState, owner: Token, sides: number, fx: RollFx): number {
   const max = Math.max(1, sides);
@@ -647,11 +649,11 @@ function rollWith(table: TableState, owner: Token, sides: number, fx: RollFx): n
     return max;
   }
   const once = () => {
-    const roll = min + rollDie(max - min + 1) - 1;
-    if (!fx.advantage) return roll;
-    const again = min + rollDie(max - min + 1) - 1;
-    const kept = fx.advantage > 0 ? Math.max(roll, again) : Math.min(roll, again);
-    log(table, `  ${owner.name} rolls with ${fx.advantage > 0 ? "advantage" : "disadvantage"}: ${roll} and ${again}, keeps ${kept}.`);
+    const one = () => min + rollDie(max - min + 1) - 1;
+    if (!fx.advantage) return one();
+    const rolls = Array.from({ length: Math.min(10, Math.abs(fx.advantage)) + 1 }, one);
+    const kept = fx.advantage > 0 ? Math.max(...rolls) : Math.min(...rolls);
+    log(table, `  ${owner.name} rolls with ${fx.advantage > 0 ? "advantage" : "disadvantage"}: ${rolls.slice(0, -1).join(", ")} and ${rolls[rolls.length - 1]}, keeps ${kept}.`);
     return kept;
   };
   const roll = once();
@@ -864,7 +866,7 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
   const rounds: FxRound[] = [];
   const before = fxState(ta, tb);
 
-  /** A Ranged Page with only Defensive Dice left, out of the Melee target's range, Negates the target's Offensive Dice. */
+  /** A Ranged Page with only Defensive Dice left, out of the Melee target's range, turns the target's Offensive Dice into Counter Dice. */
   const rangedEscape = () => {
     for (const [mine, theirs, me, them] of [
       [qa, qb, ta, tb],
@@ -874,10 +876,11 @@ function clashPages(table: TableState, a: SlottedPage, b: SlottedPage) {
       const theirPage = mine === qa ? pb : pa;
       // Only while the Ranged Page still has dice: once it's spent, the Melee Page's leftovers become Counter Dice below.
       if (myType === "ranged" && theirPage.type === "melee" && mine.length && !mine.some((d) => isOffensive(d.die.kind)) && distance(me, them) > meleeReach(theirPage)) {
-        const before = theirs.length;
-        const kept = theirs.filter((d) => !isOffensive(d.die.kind));
-        theirs.splice(0, theirs.length, ...kept);
-        if (kept.length < before) log(table, `  ${me.name} is out of melee range: ${them.name}'s Offensive Dice are Negated.`);
+        const converted = theirs.filter((d) => isOffensive(d.die.kind));
+        if (!converted.length) continue;
+        theirs.splice(0, theirs.length, ...theirs.filter((d) => !isOffensive(d.die.kind)));
+        for (const d of converted) storeCounter(c, them, d.die, theirPage.id);
+        log(table, `  ${me.name} is out of melee range: ${them.name}'s Offensive Dice become Counter Dice.`);
       }
     }
   };
@@ -930,6 +933,7 @@ function defendingPage(c: CombatState, mass: SlottedPage, targetId: string, die:
  * target's Page and the damage it deals. Summation rolls all its dice together and sums them against
  * each target's Page summed; the dice then land one by one with the same numbers. Individual rolls
  * each die in turn and meets each target's next die with it. Every target plays at once in one animation.
+ * Counter Dice aren't rolled against a Mass Attack; the targets keep them for later.
  */
 function resolveMass(table: TableState, slot: SlottedPage) {
   const c = table.combat!;
@@ -943,7 +947,6 @@ function resolveMass(table: TableState, slot: SlottedPage) {
   const before = fxState(...tokens);
   const rounds: FxRound[] = [];
   const pages: Record<string, string> = {};
-  const used = new Map(targets.map(({ token }) => [token.id, new Set<string>()]));
   /** The attacker's side of a step: lands if it hit anyone, otherwise it lost. */
   const push = (round: Omit<FxRound, "result" | "after">) => {
     const sides = Object.values(round.vs ?? {});
@@ -952,12 +955,20 @@ function resolveMass(table: TableState, slot: SlottedPage) {
     const result = landed ? "hit" : sides.every((v) => v.result === "draw") ? "draw" : "b";
     rounds.push({ ...round, result, after: fxState(...tokens) });
   };
-  /** One die, already rolled, landing on these targets at once (their Counter Dice may answer). */
+  /**
+   * One die, already rolled, landing on these targets at once. Counter Dice don't answer a Mass
+   * Attack. An Offensive die hits each of them; a Defensive one has no one to clash with and becomes
+   * one Counter Die on the attacker, not one per target.
+   */
   const land = (die: Dice, fp: number, on: Token[], vs: Record<string, FxMassSide>) => {
-    for (const t of on) {
-      if (knockedOut(t) || down(owner)) continue;
-      const r = oneSidedDie(table, owner, t, page, die, fp, play, used.get(t.id)!);
-      if (r) vs[t.id] = { ...(r.b ? { die: r.b } : {}), result: r.result };
+    const live = on.filter((t) => !knockedOut(t));
+    if (!live.length || down(owner)) return;
+    if (!isOffensive(die.kind)) return storeCounter(c, owner, die, page.id);
+    for (const t of live) {
+      if (down(owner)) break;
+      log(table, ` ${owner.name}'s ${diceText(die)} (${fp}) hits ${t.name}.`);
+      dealDamage(table, t, fp, die.kind, owner, die, { ...play, oneSided: true });
+      vs[t.id] = { result: "hit" };
     }
   };
 
@@ -986,28 +997,18 @@ function resolveMass(table: TableState, slot: SlottedPage) {
         removeSlot(c, defence);
         hit.push(token);
         check[token.id] = { dice: fx, result: "a" };
-      } else if (theirs > total) {
-        log(table, `  ${token.name} is unaffected.`);
-        delete defence.clashWith;
-        check[token.id] = { dice: fx, result: "b" };
       } else {
-        // A tie: the Mass Attack still lands, but the defender's Page is left alone.
-        log(table, `  Tie: ${token.name}'s ${dp.name} is unaffected, but the attack still lands.`);
+        // Equal to or higher: the target isn't affected by the Mass Attack.
+        log(table, `  ${theirs === total ? "Tie: " : ""}${token.name} is unaffected.`);
         delete defence.clashWith;
-        hit.push(token);
-        check[token.id] = { dice: fx, result: "draw" };
+        check[token.id] = { dice: fx, result: theirs === total ? "draw" : "b" };
       }
     }
     push({ aDice: dice.map((d, i) => fxDie(d, powers[i])), vs: check });
     dice.forEach((die, i) => {
       if (down(owner)) return;
       const vs: Record<string, FxMassSide> = {};
-      // A Defensive die has no one to clash with: it becomes one Counter Die, not one per target.
-      if (!isOffensive(die.kind)) {
-        const answered = hit.filter((t) => !knockedOut(t) && (c.counters[t.id] ?? []).length);
-        land(die, powers[i], answered, vs);
-        if (answered.length < hit.length) storeCounter(c, owner, die, page.id);
-      } else land(die, powers[i], hit, vs);
+      land(die, powers[i], hit, vs);
       push({ a: fxDie(die, powers[i]), vs });
     });
   } else {
@@ -1046,17 +1047,12 @@ function resolveMass(table: TableState, slot: SlottedPage) {
           dealDamage(table, token, fp, die.kind, owner, die, { ...play, oneSided: true });
         }
       }
-      // Unopposed, it's One-Sided: their Counter Dice may answer. A Defensive die becomes one Counter Die.
-      if (!isOffensive(die.kind)) {
-        const answered = unopposed.filter((t) => (c.counters[t.id] ?? []).length);
-        land(die, fp, answered, vs);
-        if (answered.length < unopposed.length) storeCounter(c, owner, die, page.id);
-      } else land(die, fp, unopposed, vs);
+      // Unopposed, it lands One-Sided (Counter Dice don't answer a Mass Attack).
+      land(die, fp, unopposed, vs);
       push({ a: fxDie(die, fp), vs });
     }
     for (const q of queues.values()) if (q.defence) removeSlot(c, q.defence);
   }
-  for (const { token } of targets) spendCounters(c, token, used.get(token.id)!);
   if (targets.length) recordFx(c, { a: owner.id, b: targets[0].token.id, pageA: page.name, targets: targets.map((t) => t.token.id), pages, rounds, before });
 }
 
@@ -1230,6 +1226,11 @@ function endstep(table: TableState, token: Token) {
 
 // ---- Starting, joining and leaving combat ----
 
+/** Light back to full, unless Panic (Darkness) stops them gaining any. */
+function fullLight(t: Token | undefined) {
+  if (t && panicType(t) !== 3) t.resources.light = Math.max(t.resources.light, t.resources.maxLight);
+}
+
 export function startCombat(table: TableState, ids: string[], ctx?: EngineContext) {
   // "Once a combat" rules can fire again.
   for (const id of ids) {
@@ -1239,6 +1240,8 @@ export function startCombat(table: TableState, ids: string[], ctx?: EngineContex
   }
   const c: CombatState = { round: 1, order: [], turn: 0, phase: "resolve", movementLeft: 0, pages: {}, decks: {}, slots: [], counters: {} };
   table.combat = c;
+  // Combat Start: "Each character fully recovers their Light and draws 3 Pages" (the draw is in setUpDeck).
+  for (const id of ids) fullLight(table.tokens[id]);
   c.order = sortOrder(table, ids.map((id) => rollSpeed(table, table.tokens[id])));
   markSpeedRoll(c, ids);
   for (const id of ids) setUpDeck(c, table.tokens[id], ctx);
@@ -1269,6 +1272,7 @@ export function finishCombat(table: TableState, ctx?: EngineContext) {
 
 export function addCombatant(table: TableState, token: Token, ctx?: EngineContext) {
   const c = table.combat!;
+  fullLight(token);
   const entry = rollSpeed(table, token);
   const activeId = c.order[c.turn].tokenId;
   c.order = sortOrder(table, [...c.order, entry]);
@@ -1327,7 +1331,12 @@ export function pinnedBy(table: TableState, token: Token): Token | undefined {
   return slot ? table.tokens[slot.ownerId] : undefined;
 }
 
-/** A Story Roll (Act 7): 1d20 (placeholder) + the chosen Stat. Allowed any time, in or out of combat. */
+const STORY_OUTCOME_TEXT = { success: "success", failure: "failure", mixed: "between a failure and a success" } as const;
+
+/**
+ * A Story Roll (Act 7): 1d20 + the chosen Stat. Allowed any time, in or out of combat. The log says
+ * how it reads by default: 9 or below fails, 12 or higher succeeds.
+ */
 /** `extra` is added to the Stat (e.g. Panic recovery's bonus from failed attempts). */
 export function storyRoll(table: TableState, actor: Actor, token: Token, stat: string, ctx?: EngineContext, extra = 0) {
   if (actor.role !== "gm" && token.ownerId !== actor.uid) throw new ActionError("You can only roll for your own character.");
@@ -1336,7 +1345,8 @@ export function storyRoll(table: TableState, actor: Actor, token: Token, stat: s
   const value = Math.round(Number(stats[key] ?? 0)) + extra;
   const roll = panicType(token) === 1 ? 1 : rollDie(STORY_DIE);
   const label = key.charAt(0).toUpperCase() + key.slice(1);
-  log(table, `${token.name} makes a ${label} Story Roll: ${roll}${secret(token, "justice", `${value >= 0 ? "+" : ""}${value} = ${roll + value}`)}.`);
+  const outcome = STORY_OUTCOME_TEXT[storyOutcome(roll + value)];
+  log(table, `${token.name} makes a ${label} Story Roll: ${roll}${secret(token, "justice", `${value >= 0 ? "+" : ""}${value} = ${roll + value}`)}${secret(token, "justice", ` (${outcome})`)}.`);
   table.storyRoll = { id: newId(), tokenId: token.id, stat: key, roll, bonus: value };
   return roll + value;
 }

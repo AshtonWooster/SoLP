@@ -29,6 +29,8 @@ const library: Record<string, EffectDef> = {
   blade: prof("Bladework", { requires: ["drills"], minStats: { justice: 2 } }),
   flurry: prof("Flurry", { requires: ["blade"], page }),
   street: prof("Streetwise"),
+  tactics: prof("Tactics"),
+  lore: prof("City Lore"),
   capstone: prof("Seasoned", { requires: ["blade", "street"], minStats: { insight: 2 } }),
   waiting: prof("New idea", { createdBy: "p1", pending: true }),
   burn: { name: "Burn", kind: "status", decay: "none", rules: [] },
@@ -45,18 +47,15 @@ function sheet(stats: Partial<Record<string, number>> = {}, picks: string[] = []
   return c;
 }
 
-test("picks: 2 at Rank 9 and 2 more at each Rank Up", () => {
-  assert.equal(proficiencyCount(9), 2);
-  assert.equal(proficiencyCount(8), 4);
-  assert.equal(proficiencyCount(7), 6);
-  assert.equal(proficiencyCount(1), 18);
+test("picks: 4 at Rank 9 and 2 more at each Rank Up (the ruleset's Proficiency Counts by Rank)", () => {
+  assert.deepEqual([9, 8, 7, 6, 5, 4, 3, 2, 1].map(proficiencyCount), [4, 6, 8, 10, 12, 14, 16, 18, 20]);
 });
 
 test("the tree: Proficiencies only, in tiers by their prerequisites", () => {
   const tree = proficiencyTree(library);
   const tier = Object.fromEntries(tree.map((n) => [n.id, n.tier]));
   assert.equal(tree.some((n) => n.id === "burn"), false);
-  assert.deepEqual(tier, { drills: 0, street: 0, waiting: 0, blade: 1, flurry: 2, capstone: 2 });
+  assert.deepEqual(tier, { drills: 0, street: 0, tactics: 0, lore: 0, waiting: 0, blade: 1, flurry: 2, capstone: 2 });
 });
 
 test("the tree: prerequisites deleted from the library or making a loop don't break it", () => {
@@ -80,10 +79,10 @@ test("picking: only with a free pick, every requirement met, and not waiting on 
   assert.equal(canPick(sheet(), "drills", library).ok, true);
   assert.deepEqual(canPick(sheet({}, ["drills"]), "blade", library).why, ["Needs Justice 2"]);
   assert.equal(canPick(sheet({ justice: 3 }, ["drills"]), "blade", library).ok, true);
-  // Rank 9: two picks, both used.
-  assert.deepEqual(canPick(sheet({}, ["drills", "street"]), "flurry", library).why[0], "All 2 picks used");
+  // Rank 9: four picks, all used.
+  assert.deepEqual(canPick(sheet({}, ["drills", "street", "tactics", "lore"]), "flurry", library).why[0], "All 4 picks used");
   // A Rank Up gives two more.
-  assert.equal(canPick(sheet({ justice: 3 }, ["drills", "street"], 8), "blade", library).ok, true);
+  assert.equal(canPick(sheet({ justice: 3 }, ["drills", "street", "tactics", "lore"], 8), "blade", library).ok, true);
   assert.equal(canPick(sheet(), "drills", { ...library }).ok, true);
   assert.deepEqual(canPick(sheet({}, ["drills"]), "drills", library).why, ["Already picked"]);
   assert.deepEqual(canPick(sheet(), "waiting", library).why, ["Waiting for the GM's approval"]);

@@ -1,8 +1,7 @@
 // Numbers and checks from the ruleset (github.com/AshtonWooster/LoR_PMTTRPG, Rules.md).
 //
-// The ruleset doesn't have its tables yet ("Stats table", "Max Costs table", and
-// Effects_Passives_Proficiencies.md are empty). Every value marked PLACEHOLDER below stands in
-// for one of those; replace it here when the table is written and the whole app follows.
+// Values marked PLACEHOLDER below stand in for numbers the ruleset doesn't give yet; replace them
+// here when it does and the whole app follows.
 import { newId } from "./id.ts";
 import type {
   Armor,
@@ -36,7 +35,7 @@ export const RANKS = [9, 8, 7, 6, 5, 4, 3, 2, 1];
 export const PRIMARY_STATS: { key: PrimaryStat; label: string; effect: string }[] = [
   { key: "fortitude", label: "Fortitude", effect: "Raises max Health" },
   { key: "prudence", label: "Prudence", effect: "Raises max Sanity" },
-  { key: "justice", label: "Justice", effect: "Added to Speed rolls" },
+  { key: "justice", label: "Justice", effect: "Added to Speed rolls; raises Movement Points" },
   { key: "temperance", label: "Temperance", effect: "Raises max Stagger Resist" },
 ];
 
@@ -56,20 +55,23 @@ export interface RankTable {
   equipmentMaxCost: number;
 }
 
-/** PLACEHOLDER for the "Stats table" and "Max Costs table": grows as rank improves (9 → 1). */
+/**
+ * Act 5's tables: "Character Stats by Rank" (4 Primary and 6 Secondary at Rank 9, then +2 and +3
+ * each Rank Up), the Augment's "Max Costs Table" (4, then +2) and Equipment's (2, then +1).
+ */
 export function rankTable(rank: number): RankTable {
   const step = Math.max(0, STARTING_RANK - rank);
   return {
     primaryPoints: 4 + step * 2,
-    secondaryPoints: 3 + step,
-    augmentMaxCost: 3 + step,
-    equipmentMaxCost: 3 + step,
+    secondaryPoints: 6 + step * 3,
+    augmentMaxCost: 4 + step * 2,
+    equipmentMaxCost: 2 + step,
   };
 }
 
-/** Proficiencies: 2 at Rank 9, then 2 more at each Rank Up (4 at Rank 8, 6 at Rank 7, ...). */
+/** Act 5, "Proficiency Counts by Rank": 4 at Rank 9, then 2 more at each Rank Up (6 at Rank 8, ... 20 at Rank 1). */
 export function proficiencyCount(rank: number): number {
-  return 2 + Math.max(0, STARTING_RANK - rank) * 2;
+  return 4 + Math.max(0, STARTING_RANK - rank) * 2;
 }
 
 /**
@@ -85,14 +87,11 @@ export function maxResources(c: Pick<Character, "rank" | "primary">, formulas: S
 /** Combat Start: every character rolls 1d6 + Justice for Speed. */
 export const SPEED_DIE = 6;
 
-/**
- * PLACEHOLDER: "Every turn a character gets a number of Movement Points, increased by their
- * Justice and Passives." The base number isn't in the ruleset yet.
- */
+/** Act 8, Movement: "Movement Points (`3 + (Justice/2 Rounded Down)`)". */
 export const BASE_MOVEMENT = 3;
 
 export function movementPoints(justice: number): number {
-  return BASE_MOVEMENT + Math.max(0, justice);
+  return BASE_MOVEMENT + Math.floor(Math.max(0, justice) / 2);
 }
 
 /** Upkeep: "characters restore, by default, 1 Light." */
@@ -106,7 +105,7 @@ export const UPKEEP_LIGHT = 1;
 export const PANIC_DIE = 4;
 export const PANIC_UPKEEPS = 3;
 /** Panic recovery: an ally's Prudence Story Roll of at least this brings a Panicking character out of Panic. */
-export const PANIC_RECOVERY_ROLL = 10;
+export const PANIC_RECOVERY_ROLL = 12;
 /** What each Panic type (the d4 rolled) does, for the log and the token popup. */
 export const PANIC_TYPES: Record<PanicType, { label: string; effect: string }> = {
   1: { label: "Despair", effect: "every die rolls its Min" },
@@ -179,11 +178,16 @@ export const PARTIAL_COVER = 2;
 export const isMassAttack = (type: PageType) => type === "massSummation" || type === "massIndividual";
 export const isOffensive = (kind: DiceKind) => kind === "slash" || kind === "pierce" || kind === "blunt";
 
-/**
- * PLACEHOLDER: Story Rolls (Act 7) "roll a specific stat", but the ruleset doesn't name the die.
- * A Story Roll here is 1d20 + the stat.
- */
+/** Act 7, Story Rolls: "By default, a Story Roll is `1d20 + Appropriate Stat`." */
 export const STORY_DIE = 20;
+/** "By default a failure is defined as rolling 9 or below and a success is 12 or higher." */
+export const STORY_FAIL_AT_MOST = 9;
+export const STORY_SUCCESS_AT_LEAST = 12;
+
+/** How a Story Roll total reads by default: a success, a failure, or in between (the GM decides). */
+export function storyOutcome(total: number): "success" | "failure" | "mixed" {
+  return total >= STORY_SUCCESS_AT_LEAST ? "success" : total <= STORY_FAIL_AT_MOST ? "failure" : "mixed";
+}
 
 /** "Characters can move tiles in any direction", so a diagonal step costs 1 like any other. */
 export function moveCost(from: { x: number; y: number }, to: { x: number; y: number }): number {
