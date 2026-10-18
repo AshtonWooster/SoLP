@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import type { Page } from "../../shared/character.ts";
 import { newId } from "../../shared/engine.ts";
 import { isLive } from "../../shared/effects.ts";
-import { NPC_SIDES, PANIC_TYPES } from "../../shared/ruleset.ts";
+import { KO_UPKEEPS, NPC_SIDES, PANIC_TYPES } from "../../shared/ruleset.ts";
 import { isSecret, SHEET_PARTS, withheld, type SheetPart } from "../../shared/secrets.ts";
 import type { TokenGear } from "../../shared/tokenPreview.ts";
 import type { Resources, TableAction, Token } from "../../shared/types.ts";
@@ -65,7 +65,7 @@ export function TokenPopup({ token, gear, gm, onClose }: { token: Token; gear?: 
           </span>
           {(st.knockedOut || st.staggered || st.panic) && (
             <span className="row wrap tp-status">
-              {st.knockedOut && <span className="chip static warn">Knocked out</span>}
+              {st.knockedOut && <span className="chip static warn">{st.dead ? "Dead" : st.koUpkeeps !== undefined ? `Knocked out: Dead in ${KO_UPKEEPS - st.koUpkeeps}` : "Knocked out"}</span>}
               {st.staggered && <span className="chip static warn">Staggered</span>}
               {st.panic && (
                 <span className="chip static warn" title={st.panicType ? PANIC_TYPES[st.panicType].effect : undefined}>

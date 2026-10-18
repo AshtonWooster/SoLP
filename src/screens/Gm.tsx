@@ -9,7 +9,8 @@ import { useSpeedRollPlayback } from "../components/SpeedRollFx.tsx";
 import { useStoryRollPlayback } from "../components/StoryRollFx.tsx";
 import type { SpeedStep } from "../components/speedRoll.ts";
 import { ActionPanel, PHASE_LABELS } from "../components/ActionPanel.tsx";
-import { isMassAttack, normalizeNpc, NPC_SIDES, npcSpawnData } from "../../shared/ruleset.ts";
+import { isMassAttack, MAX_REST_HOURS, normalizeNpc, NPC_SIDES, npcSpawnData, restPerHour } from "../../shared/ruleset.ts";
+import { NumberInput } from "../components/Fields.tsx";
 import type { Character, NpcTemplate } from "../../shared/character.ts";
 import { playerList } from "../../shared/players.ts";
 import { tokenGear } from "../../shared/tokenPreview.ts";
@@ -283,6 +284,9 @@ export function Gm() {
             >
               {(close) => <CombatStart table={table} act={act} onStarted={close} />}
             </ToolbarMenu>
+            <ToolbarMenu title="Rest" label="Rest" disabled={!!table.combat} disabledTitle="Characters can't rest during combat">
+              {(close) => <RestMenu table={table} characters={characters} act={act} onDone={close} />}
+            </ToolbarMenu>
             <FogTools mode={fogMode} setMode={setFogMode} onAll={(hidden) => act({ type: "fogAll", mapId: table.map.id!, hidden })} />
             <span className="muted small gm-hint">
               {fogMode
@@ -476,6 +480,53 @@ function CombatStart({ table, act, onStarted }: { table: TableState; act: (actio
       </ul>
       <button className="big-button" disabled={picked.size === 0} onClick={() => act({ type: "startCombat", tokenIds: [...picked] }) && onStarted()}>
         Roll Speed and start
+      </button>
+    </div>
+  );
+}
+
+/** Act 7, Resting: the players' characters rest for some hours, recovering Health and Sanity. */
+function RestMenu({ table, characters, act, onDone }: { table: TableState; characters?: Record<string, Character>; act: (action: TableAction) => boolean; onDone: () => void }) {
+  const players = Object.values(table.tokens).filter((t) => t.side === "player");
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(players.map((t) => t.id)));
+  const [hours, setHours] = useState(8);
+  return (
+    <div className="combat-start rest-menu">
+      <h3>Rest</h3>
+      <p className="muted small">Out of combat and in shelter. Each hour restores 6 + (10 − Rank)×2 + Fortitude×2 Health and (10 − Rank)×2 + Prudence Sanity.</p>
+      <label className="inline">
+        Hours
+        <NumberInput label="Hours" value={hours} min={1} max={MAX_REST_HOURS} onChange={(n) => setHours(Math.max(1, Math.min(MAX_REST_HOURS, Math.round(n))))} />
+      </label>
+      {players.length === 0 && <p className="muted small">No players' characters on this map.</p>}
+      <ul className="pick-list">
+        {players.map((t) => {
+          const c = t.ownerId ? characters?.[t.ownerId] : undefined;
+          const per = c ? restPerHour({ rank: c.rank, fortitude: c.primary?.fortitude ?? 0, prudence: c.primary?.prudence ?? 0 }) : undefined;
+          return (
+            <li key={t.id}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={picked.has(t.id)}
+                  onChange={(e) => {
+                    const next = new Set(picked);
+                    if (e.target.checked) next.add(t.id);
+                    else next.delete(t.id);
+                    setPicked(next);
+                  }}
+                />
+                <span className="swatch" style={{ background: t.color }} /> {t.name}
+                <span className="muted small">
+                  {t.status?.dead ? "(Dead)" : per ? `(+${per.hp * hours} Health, +${per.sanity * hours} Sanity)` : "(no sheet)"}
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      <button className="big-button" disabled={picked.size === 0} onClick={() => act({ type: "rest", hours, tokenIds: [...picked] }) && onDone()}>
+        Rest {hours} hour{hours === 1 ? "" : "s"}
       </button>
     </div>
   );

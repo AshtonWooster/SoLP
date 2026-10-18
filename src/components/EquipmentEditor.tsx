@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { Armor, Dice, DiceKind, Equipment, Page, PageType, Passive, Weapon } from "../../shared/character.ts";
-import { blankArmor, blankPage, blankPassive, blankWeapon, clonePage, equipmentMaxCost, MAX_WEAPON_RANGE, RANKS, weaponRange } from "../../shared/ruleset.ts";
+import type { Armor, Dice, DiceKind, Equipment, Page, PageType, Passive, Weapon, WeaponProperty, WeaponStyle } from "../../shared/character.ts";
+import { blankArmor, blankPage, blankPassive, blankWeapon, clonePage, equipmentMaxCost, MAX_WEAPON_RANGE, RANKS, WEAPON_PROPERTIES, WEAPON_STYLES, weaponRange, withWeaponProperty } from "../../shared/ruleset.ts";
 import { PassiveSlots } from "./effects/library.tsx";
 import { NumberInput, Stepper, TextField } from "./Fields.tsx";
 import { ResistanceGrid } from "./LorIcons.tsx";
@@ -48,11 +48,14 @@ export function PageEditor(props: { page: Page; onChange: (p: Page) => void; onR
 function EquipmentCardEditor<T extends Weapon | Armor>({
   item,
   characterRank,
+  weaponProperties,
   onChange,
   onRemove,
 }: {
   item: T;
   characterRank: number;
+  /** Game setting "Weapon properties": pick Melee or Ranged property and Offensive or Defensive type. */
+  weaponProperties?: boolean;
   onChange: (item: T) => void;
   onRemove: () => void;
 }) {
@@ -80,10 +83,17 @@ function EquipmentCardEditor<T extends Weapon | Armor>({
       <p className="muted small equip-rank-note">
         Rank {rank}: Passives up to {max} Passive Cost, plus Negative Passives up to {max}.
       </p>
+      {isWeapon && weaponProperties && <WeaponPropertyFields weapon={item as Weapon} onChange={(w) => onChange(w as T)} />}
       {isWeapon && (
         <label className="inline">
           Hands
-          <select aria-label="Hands" value={(item as Weapon).hands} onChange={(e) => onChange({ ...item, hands: Number(e.target.value) as 1 | 2 })}>
+          <select
+            aria-label="Hands"
+            value={(item as Weapon).hands}
+            disabled={weaponProperties && !!(item as Weapon).property}
+            title={weaponProperties && (item as Weapon).property ? "Set by the property" : undefined}
+            onChange={(e) => onChange({ ...item, hands: Number(e.target.value) as 1 | 2 })}
+          >
             <option value={1}>One-handed</option>
             <option value={2}>Two-handed</option>
           </select>
@@ -135,6 +145,53 @@ function EquipmentCardEditor<T extends Weapon | Armor>({
           Remove {label.toLowerCase()}
         </ConfirmButton>
       </div>
+    </div>
+  );
+}
+
+/** Act 4, "Creating a Weapon": Melee or Ranged property (which sets hands and range) and Offensive or Defensive type. */
+function WeaponPropertyFields({ weapon, onChange }: { weapon: Weapon; onChange: (w: Weapon) => void }) {
+  const prop = weapon.property ? WEAPON_PROPERTIES[weapon.property] : undefined;
+  const group = (category: "melee" | "ranged") =>
+    (Object.keys(WEAPON_PROPERTIES) as WeaponProperty[])
+      .filter((k) => WEAPON_PROPERTIES[k].category === category)
+      .map((k) => (
+        <option key={k} value={k}>
+          {WEAPON_PROPERTIES[k].label}
+        </option>
+      ));
+  return (
+    <div className="equip-props" role="group" aria-label="Weapon property and type">
+      <label className="inline">
+        Property
+        <select aria-label="Weapon property" value={weapon.property ?? ""} onChange={(e) => e.target.value && onChange(withWeaponProperty(weapon, e.target.value as WeaponProperty))}>
+          <option value="" disabled>
+            Pick one
+          </option>
+          <optgroup label="Melee">{group("melee")}</optgroup>
+          <optgroup label="Ranged">{group("ranged")}</optgroup>
+        </select>
+      </label>
+      <label className="inline">
+        Type
+        <select aria-label="Weapon type" value={weapon.style ?? ""} onChange={(e) => e.target.value && onChange({ ...weapon, style: e.target.value as WeaponStyle })}>
+          <option value="" disabled>
+            Pick one
+          </option>
+          {(Object.keys(WEAPON_STYLES) as WeaponStyle[]).map((k) => (
+            <option key={k} value={k}>
+              {WEAPON_STYLES[k].label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {(prop || weapon.style) && (
+        <span className="muted small">
+          {prop && `${prop.category === "melee" ? "Melee" : "Ranged"}: ${prop.note}${prop.category === "melee" ? " Can't carry Ranged Pages." : ""}`}
+          {prop && weapon.style && " "}
+          {weapon.style && `${WEAPON_STYLES[weapon.style].label}: ${WEAPON_STYLES[weapon.style].note}`}
+        </span>
+      )}
     </div>
   );
 }
@@ -209,6 +266,8 @@ function EquipmentBox<T extends Weapon | Armor>({
         <strong>Passives</strong>{" "}
         <span className="muted small">
           {item.passives.length ? item.passives.map((p) => p.name || "Unnamed").join(", ") : "none"} · cost {passiveCost}/{max}
+          {isWeapon && (item as Weapon).property ? ` · ${WEAPON_PROPERTIES[(item as Weapon).property!].label}` : ""}
+          {isWeapon && (item as Weapon).style ? ` · ${WEAPON_STYLES[(item as Weapon).style!].label}` : ""}
           {isWeapon ? ` · ${(item as Weapon).hands === 2 ? "two" : "one"}-handed · range ${weaponRange(item as Weapon, "melee")} melee, ${weaponRange(item as Weapon, "ranged")} ranged` : ""}
         </span>
       </button>
@@ -265,9 +324,12 @@ export function EquipmentStudio({
   onWeapons,
   onArmor,
   deck,
+  weaponProperties,
 }: {
   /** With these, Pages can be added to the Combat Deck right from the studio. */
   deck?: DeckHooks;
+  /** Game setting "Weapon properties". */
+  weaponProperties?: boolean;
   weapons: Weapon[];
   armor: Armor | null;
   /** Equipment without its own Rank uses this. */
@@ -343,7 +405,7 @@ export function EquipmentStudio({
             )}
           </>
         ) : owner ? (
-          <EquipmentCardEditor key={owner.id} item={owner} characterRank={characterRank} onChange={change} onRemove={() => remove(owner)} />
+          <EquipmentCardEditor key={owner.id} item={owner} characterRank={characterRank} weaponProperties={weaponProperties} onChange={change} onRemove={() => remove(owner)} />
         ) : (
           <p className="muted equip-empty">Tap the + below to add a weapon or armor.</p>
         )}

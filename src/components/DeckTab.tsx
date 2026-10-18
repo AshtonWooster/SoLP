@@ -87,9 +87,12 @@ export function DeckTab({
   gameId,
   uid,
   decksLocked,
+  weaponProperties,
 }: {
   /** With inventory details linked from the item library. */
   c: Character;
+  /** Game setting "Weapon properties". */
+  weaponProperties?: boolean;
   update: (fn: (d: Character) => void) => void;
   gameId: string;
   uid: string;
@@ -225,6 +228,7 @@ export function DeckTab({
             onWeapons={(w) => update((d) => void (d.weapons = w))}
             onArmor={(a) => update((d) => void (d.armor = a))}
             deck={{ copies: copiesOf, max: maxFor, set: setCopies, locked: decksLocked }}
+            weaponProperties={weaponProperties}
           />
         </Section>
 

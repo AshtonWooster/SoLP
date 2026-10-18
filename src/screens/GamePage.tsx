@@ -3,7 +3,7 @@ import type { Character } from "../../shared/character.ts";
 import { characterChecks } from "../../shared/ruleset.ts";
 import { pendingCount } from "../../shared/permissions.ts";
 import { playerList } from "../../shared/players.ts";
-import { type GameDoc, type GmMeta, playersCanCreateEffects, playersCanCreateItems } from "../../shared/types.ts";
+import { type GameDoc, type GmMeta, playersCanCreateEffects, playersCanCreateItems, weaponPropertiesOn } from "../../shared/types.ts";
 import { useAuth, useCollection, useDoc } from "../api.ts";
 import { CopyButton } from "../components/CopyButton.tsx";
 import { PlayerPreview } from "../components/PlayerPreview.tsx";
@@ -98,7 +98,7 @@ export function GamePage() {
                 {characters?.[user!.id] ? "My character" : "Create my character"}
                 <small>
                   {characters?.[user!.id]
-                    ? `${characters[user!.id].name || "Unnamed"} · ${characterStatus(characters[user!.id])}`
+                    ? `${characters[user!.id].name || "Unnamed"} · ${characterStatus(characters[user!.id], weaponPropertiesOn(game.data))}`
                     : "Follow the rulebook's six steps"}
                 </small>
               </Link>
@@ -132,7 +132,7 @@ export function GamePage() {
                       isGm &&
                       c && (
                         <>
-                          <span className="muted small">{characterStatus(c)}</span>
+                          <span className="muted small">{characterStatus(c, weaponPropertiesOn(game.data))}</span>
                           {pendingCount(c) > 0 && <span className="chip static warn">Changes to approve</span>}
                         </>
                       )
@@ -148,7 +148,7 @@ export function GamePage() {
   );
 }
 
-function characterStatus(c: Character): string {
-  const left = characterChecks(c).filter((ch) => !ch.ok).length;
+function characterStatus(c: Character, weaponProperties: boolean): string {
+  const left = characterChecks(c, { weaponProperties }).filter((ch) => !ch.ok).length;
   return left === 0 ? "ready" : `${left} to finish`;
 }
